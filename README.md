@@ -1,1 +1,1 @@
-# Eckart-Young-based-ML-Inference-framework
+# MINI-ML-Inference-framework
