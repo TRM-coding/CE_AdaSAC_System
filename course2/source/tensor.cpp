@@ -165,6 +165,29 @@ void Tensor<float>::Padding(const std::vector<uint32_t>& pads,
   uint32_t pad_cols1 = pads.at(2);  // left
   uint32_t pad_cols2 = pads.at(3);  // right
 
+  const uint32_t data_col = this->data_.n_cols;
+  const uint32_t data_row = this->data_.n_rows;
+  
+  const uint32_t new_row = data_row + pad_rows1 + pad_rows2;
+  const uint32_t new_col = data_col + pad_cols1 + pad_cols2;
+  const uint32_t new_cha = this->data_.n_slices;
+ 
+  arma::fcube new_data = arma::fcube(new_row,new_col,new_cha);
+  new_data.fill(padding_value);
+
+  new_data.subcube(pad_rows1,
+                   pad_cols1,
+                   0,
+                   pad_rows1+data_row-1,
+                   pad_cols1+data_col-1,
+                   new_cha-1) = this->data_;
+  
+  this->data_.reshape(new_row,new_col,new_cha);
+  this->data_ = new_data;
+
+  this->raw_shapes_={new_cha,new_row,new_col};
+
+  return;
   // 请补充代码
 }
 
@@ -204,6 +227,38 @@ void Tensor<float>::Show() {
 void Tensor<float>::Flatten(bool row_major) {
   CHECK(!this->data_.empty());
   // 请补充代码
+  std::vector<float> data_one_dim;
+  if(row_major)
+  {
+    for(size_t i = 0 ; i < this->data_.n_slices ;i++)
+    {
+      auto slice_i = this->data_.slice(i);
+      arma::fmat slice_i_t  = slice_i.t();
+      std::copy(
+        slice_i_t.begin(),
+        slice_i_t.end(),
+        std::back_inserter(data_one_dim)
+      );
+    }
+  }
+  else
+  {
+    std::copy(
+      this->data_.begin(),
+      this->data_.end(),
+      std::back_inserter(data_one_dim)
+    );
+
+    // std::copy(
+    //   this->data_.mem,
+    //   this->data_.mem+this->data_.size(),
+    //   data_one_dim.begin()
+    // );
+  }
+  const uint32_t n_column = data_one_dim.size();
+  this->data_.reshape(1,n_column,1);
+  this->raw_shapes_ = {n_column};
+  return;
 }
 
 void Tensor<float>::Rand() {
