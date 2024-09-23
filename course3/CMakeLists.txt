@@ -26,3 +26,15 @@ target_include_directories(kuiper_datawhale_course3 PUBLIC ${Armadillo_INCLUDE_D
 target_include_directories(kuiper_datawhale_course3 PUBLIC ./include)
 
 enable_testing()
+
+
+# set(SOURCE_FILE "${CMAKE_SOURCE_DIR}/data/file.txt")
+# set(TARGET_DIR "${CMAKE_BINARY_DIR}/data")
+
+# # 创建目标目录
+# file(MAKE_DIRECTORY ${TARGET_DIR})
+
+# # 复制文件到目标目录
+# file(COPY ${SOURCE_FILE} DESTINATION ${TARGET_DIR})
+
+#这哥cmake写的不行啊，编译后要用的源文件都没去build里，相对路径直接挂了

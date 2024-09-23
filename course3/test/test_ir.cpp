@@ -8,8 +8,8 @@
 #include <gtest/gtest.h>
 #include <string>
 
-const std::string bin_dir  ="/home/kuiperdatawhale/course3/model_file/test_linear.pnnx.bin";
-const std::string param_dir="/home/kuiperdatawhale/course3/model_file/test_linear.pnnx.param";
+const std::string bin_dir  ="../../course3/model_file/test_linear.pnnx.bin";
+const std::string param_dir="../../course3/model_file/test_linear.pnnx.param";
 
 static std::string ShapeStr(const std::vector<int> &shapes) {
   std::ostringstream ss;

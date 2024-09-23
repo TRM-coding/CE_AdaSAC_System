@@ -1,0 +1,84 @@
+Log file created at: 2024/09/23 15:22:02
+Running on machine: 40a179d6d315
+Running duration (h:mm:ss): 0:00:00
+Log line format: [IWEF]yyyymmdd hh:mm:ss.uuuuuu threadid file:line] msg
+I20240923 15:22:02.462599 24223 main.cpp:15] Start test...
+I20240923 15:22:02.464109 24223 test_ir.cpp:38] pnnx_input_0
+I20240923 15:22:02.464151 24223 test_ir.cpp:38] linear
+I20240923 15:22:02.464175 24223 test_ir.cpp:38] F.sigmoid_0
+I20240923 15:22:02.464187 24223 test_ir.cpp:38] pnnx_output_0
+I20240923 15:22:02.464314 24223 test_ir.cpp:57] OP Name: pnnx_input_0
+I20240923 15:22:02.464344 24223 test_ir.cpp:58] OP Inputs
+I20240923 15:22:02.464365 24223 test_ir.cpp:64] OP Output
+I20240923 15:22:02.464385 24223 test_ir.cpp:66] Output name: 0 shape: 1 x 32
+I20240923 15:22:02.464395 24223 test_ir.cpp:69] ---------------------------------------------
+I20240923 15:22:02.464414 24223 test_ir.cpp:57] OP Name: linear
+I20240923 15:22:02.464434 24223 test_ir.cpp:58] OP Inputs
+I20240923 15:22:02.464453 24223 test_ir.cpp:60] Input name: 0 shape: 1 x 32
+I20240923 15:22:02.464474 24223 test_ir.cpp:64] OP Output
+I20240923 15:22:02.464493 24223 test_ir.cpp:66] Output name: 1 shape: 1 x 128
+I20240923 15:22:02.464514 24223 test_ir.cpp:69] ---------------------------------------------
+I20240923 15:22:02.464534 24223 test_ir.cpp:57] OP Name: F.sigmoid_0
+I20240923 15:22:02.464553 24223 test_ir.cpp:58] OP Inputs
+I20240923 15:22:02.464573 24223 test_ir.cpp:60] Input name: 1 shape: 1 x 128
+I20240923 15:22:02.464593 24223 test_ir.cpp:64] OP Output
+I20240923 15:22:02.464613 24223 test_ir.cpp:66] Output name: 2 shape: 1 x 128
+I20240923 15:22:02.464625 24223 test_ir.cpp:69] ---------------------------------------------
+I20240923 15:22:02.464643 24223 test_ir.cpp:57] OP Name: pnnx_output_0
+I20240923 15:22:02.464663 24223 test_ir.cpp:58] OP Inputs
+I20240923 15:22:02.464672 24223 test_ir.cpp:60] Input name: 2 shape: 1 x 128
+I20240923 15:22:02.464691 24223 test_ir.cpp:64] OP Output
+I20240923 15:22:02.464711 24223 test_ir.cpp:69] ---------------------------------------------
+I20240923 15:22:02.464830 24223 test_ir.cpp:91] OP Name: linear
+I20240923 15:22:02.464859 24223 test_ir.cpp:92] OP Inputs
+I20240923 15:22:02.464869 24223 test_ir.cpp:94] Input name: 0 shape: 1 x 32
+I20240923 15:22:02.464900 24223 test_ir.cpp:98] OP Output
+I20240923 15:22:02.464918 24223 test_ir.cpp:100] Output name: 1 shape: 1 x 128
+I20240923 15:22:02.464939 24223 test_ir.cpp:104] Params
+I20240923 15:22:02.464949 24223 test_ir.cpp:106] bias type 1
+I20240923 15:22:02.464967 24223 test_ir.cpp:106] in_features type 2
+I20240923 15:22:02.464987 24223 test_ir.cpp:106] out_features type 2
+I20240923 15:22:02.465008 24223 test_ir.cpp:109] Weight: 
+I20240923 15:22:02.465026 24223 test_ir.cpp:111] bias : 128 type 1
+I20240923 15:22:02.465047 24223 test_ir.cpp:111] weight : 128 x 32 type 1
+I20240923 15:22:02.465067 24223 test_ir.cpp:114] ---------------------------------------------
+I20240923 15:22:02.465178 24223 test_ir.cpp:132] Operand Name: #0
+I20240923 15:22:02.465205 24223 test_ir.cpp:133] Customers: 
+I20240923 15:22:02.465226 24223 test_ir.cpp:135] linear
+I20240923 15:22:02.465246 24223 test_ir.cpp:138] Producer: pnnx_input_0
+I20240923 15:22:02.465266 24223 test_ir.cpp:132] Operand Name: #1
+I20240923 15:22:02.465286 24223 test_ir.cpp:133] Customers: 
+I20240923 15:22:02.465306 24223 test_ir.cpp:135] F.sigmoid_0
+I20240923 15:22:02.465327 24223 test_ir.cpp:138] Producer: linear
+I20240923 15:22:02.465345 24223 test_ir.cpp:132] Operand Name: #2
+I20240923 15:22:02.465364 24223 test_ir.cpp:133] Customers: 
+I20240923 15:22:02.465384 24223 test_ir.cpp:135] pnnx_output_0
+I20240923 15:22:02.465404 24223 test_ir.cpp:138] Producer: F.sigmoid_0
+I20240923 15:22:02.465559 24223 test_ir.cpp:154] op name: pnnx_input_0 type: pnnx.Input
+I20240923 15:22:02.465590 24223 test_ir.cpp:155] attribute:
+I20240923 15:22:02.465621 24223 test_ir.cpp:162] inputs: 
+I20240923 15:22:02.465641 24223 test_ir.cpp:168] outputs: 
+I20240923 15:22:02.465651 24223 test_ir.cpp:170] name: linear
+I20240923 15:22:02.465658 24223 test_ir.cpp:172] --------------------------------------
+I20240923 15:22:02.465677 24223 test_ir.cpp:154] op name: linear type: nn.Linear
+I20240923 15:22:02.465696 24223 test_ir.cpp:155] attribute:
+I20240923 15:22:02.465715 24223 test_ir.cpp:157] bias type: 1 shape: 128
+I20240923 15:22:02.465775 24223 test_ir.cpp:157] weight type: 1 shape: 128 x 32
+I20240923 15:22:02.465798 24223 test_ir.cpp:162] inputs: 
+I20240923 15:22:02.465818 24223 test_ir.cpp:164] name: pnnx_input_0 shape: 1 x 32
+I20240923 15:22:02.465828 24223 test_ir.cpp:168] outputs: 
+I20240923 15:22:02.465837 24223 test_ir.cpp:170] name: F.sigmoid_0
+I20240923 15:22:02.465854 24223 test_ir.cpp:172] --------------------------------------
+I20240923 15:22:02.465874 24223 test_ir.cpp:154] op name: F.sigmoid_0 type: F.sigmoid
+I20240923 15:22:02.465894 24223 test_ir.cpp:155] attribute:
+I20240923 15:22:02.465914 24223 test_ir.cpp:162] inputs: 
+I20240923 15:22:02.465932 24223 test_ir.cpp:164] name: linear shape: 1 x 128
+I20240923 15:22:02.465953 24223 test_ir.cpp:168] outputs: 
+I20240923 15:22:02.465972 24223 test_ir.cpp:170] name: pnnx_output_0
+I20240923 15:22:02.465992 24223 test_ir.cpp:172] --------------------------------------
+I20240923 15:22:02.466012 24223 test_ir.cpp:154] op name: pnnx_output_0 type: pnnx.Output
+I20240923 15:22:02.466032 24223 test_ir.cpp:155] attribute:
+I20240923 15:22:02.466050 24223 test_ir.cpp:162] inputs: 
+I20240923 15:22:02.466070 24223 test_ir.cpp:164] name: F.sigmoid_0 shape: 1 x 128
+I20240923 15:22:02.466090 24223 test_ir.cpp:168] outputs: 
+I20240923 15:22:02.466110 24223 test_ir.cpp:172] --------------------------------------

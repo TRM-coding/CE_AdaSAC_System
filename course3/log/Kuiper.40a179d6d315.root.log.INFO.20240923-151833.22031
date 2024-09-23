@@ -1,0 +1,7 @@
+Log file created at: 2024/09/23 15:18:33
+Running on machine: 40a179d6d315
+Running duration (h:mm:ss): 0:00:00
+Log line format: [IWEF]yyyymmdd hh:mm:ss.uuuuuu threadid file:line] msg
+I20240923 15:18:33.689066 22031 main.cpp:15] Start test...
+E20240923 15:18:33.690061 22031 runtime_ir.cpp:36] Can not find the param path or bin path: home/kuiperdatawhale/course3/model_file/test_linear.pnnx.param home/kuiperdatawhale/course3/model_file/test_linear.pnnx.bin
+E20240923 15:18:33.690398 22031 runtime_ir.cpp:36] Can not find the param path or bin path: home/kuiperdatawhale/course3/model_file/test_linear.pnnx.param home/kuiperdatawhale/course3/model_file/test_linear.pnnx.bin
