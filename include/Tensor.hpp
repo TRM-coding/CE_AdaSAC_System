@@ -6,6 +6,9 @@
 namespace MINI_MLsys
 {
   template <typename T>
+  /**
+   * Tensor constructors are filled with default value 0
+   */
   class Tensor
   {
     public:
@@ -50,29 +53,29 @@ namespace MINI_MLsys
        * @param tensor a T-type cube tensor
        */
 
-      Tensor<T> (const arma::cube<T> tensor);
+      explicit Tensor (const arma::Cube<T> tensor);
 
       /**
        * return the Tensor's row number
        */
-      void row_n() const;
+      uint64_t row_n() const;
 
       /**
        * return the Tensor's column number
        */
 
-      void col_n() const;
+      uint64_t col_n() const;
 
       /**
        * return the Tensor's channel number
        */
-      void channel_n() const;
+      uint64_t channel_n() const;
 
       /**
        * return the Tensor's shape in format:std::vector<uint32_t>{row,column,channel}
        */
 
-      void shape() const;
+      std::vector<uint32_t> shape() const;
 
       /**
        * return the Tensor's total elements number 
@@ -82,13 +85,13 @@ namespace MINI_MLsys
       /**
        * return whether the Tensor is empty
        */
-      bool empty() const;
 
-
+      void reshape();
 
     private:
       arma:: cube data_;
-      std :: vector<uint32_t> shape;
+      std :: vector<uint64_t> shape;
+      //shape{row,col,cha}
   };
 }
 
