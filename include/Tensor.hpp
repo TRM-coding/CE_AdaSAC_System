@@ -3,7 +3,7 @@
 
 #include<armadillo>
 #include<vector>
-namespace Tensor
+namespace MINI_MLsys
 {
   template <typename T>
   class Tensor
