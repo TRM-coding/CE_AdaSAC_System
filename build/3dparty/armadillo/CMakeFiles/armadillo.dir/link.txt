@@ -1,0 +1,1 @@
+/usr/bin/g++ -fPIC  -O2 -g  -Wl,--no-as-needed -shared -Wl,-soname,libarmadillo.so.14 -o libarmadillo.so.14.0.2 CMakeFiles/armadillo.dir/src/wrapper1.cpp.o CMakeFiles/armadillo.dir/src/wrapper2.cpp.o  /usr/lib/x86_64-linux-gnu/libblas.so /usr/lib/x86_64-linux-gnu/liblapack.so /usr/lib/x86_64-linux-gnu/libarpack.so /usr/lib/x86_64-linux-gnu/libsuperlu.so

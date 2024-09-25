@@ -1,0 +1,9 @@
+libdir=/home/Science_research/Eckart-Young-based-ML-Inference-framework/out/install/gcc 11.3.0/lib
+includedir=/home/Science_research/Eckart-Young-based-ML-Inference-framework/out/install/gcc 11.3.0/include
+
+Name: armadillo
+Description: C++ library for linear algebra and scientific computing with MATLAB-like syntax
+URL: http://arma.sourceforge.net
+Version: 14.0.2
+Cflags: -I${includedir}
+Libs: -L${libdir} -larmadillo

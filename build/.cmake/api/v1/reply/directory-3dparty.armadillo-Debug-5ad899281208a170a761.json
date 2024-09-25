@@ -1,0 +1,136 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"3dparty/armadillo/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 604,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 611,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 641,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 672,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 695,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "include",
+			"paths" : 
+			[
+				{
+					"from" : "build/3dparty/armadillo/tmp/include",
+					"to" : "."
+				}
+			],
+			"type" : "directory"
+		},
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"3dparty/armadillo/libarmadillo.so.14.0.2",
+				"3dparty/armadillo/libarmadillo.so.14"
+			],
+			"targetId" : "armadillo::@7deac39521434673d856",
+			"targetIndex" : 0,
+			"targetInstallNamelink" : "skip",
+			"type" : "target"
+		},
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"3dparty/armadillo/libarmadillo.so"
+			],
+			"targetId" : "armadillo::@7deac39521434673d856",
+			"targetIndex" : 0,
+			"targetInstallNamelink" : "only",
+			"type" : "target"
+		},
+		{
+			"backtrace" : 3,
+			"component" : "Unspecified",
+			"destination" : "lib/pkgconfig",
+			"paths" : 
+			[
+				"build/3dparty/armadillo/tmp/misc/armadillo.pc"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 4,
+			"component" : "dev",
+			"destination" : "share/Armadillo/CMake",
+			"exportName" : "ArmadilloLibraryDepends",
+			"exportTargets" : 
+			[
+				{
+					"id" : "armadillo::@7deac39521434673d856",
+					"index" : 0
+				}
+			],
+			"paths" : 
+			[
+				"3dparty/armadillo/CMakeFiles/Export/d5f1c8e7a348faccefbb4ca918240c99/ArmadilloLibraryDepends.cmake"
+			],
+			"type" : "export"
+		},
+		{
+			"backtrace" : 5,
+			"component" : "dev",
+			"destination" : "/home/Science_research/Eckart-Young-based-ML-Inference-framework/out/install/gcc 11.3.0/share/Armadillo/CMake",
+			"paths" : 
+			[
+				"build/3dparty/armadillo/InstallFiles/ArmadilloConfig.cmake",
+				"build/3dparty/armadillo/InstallFiles/ArmadilloConfigVersion.cmake"
+			],
+			"type" : "file"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "3dparty/armadillo",
+		"source" : "3dparty/armadillo"
+	}
+}

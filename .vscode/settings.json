@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "*.json": "jsonc",
+        "climits": "cpp"
+    },
+    "cmake.sourceDirectory": "/home/Science_research/Eckart-Young-based-ML-Inference-framework",
+    "cmake.buildDirectory": "${workspaceFolder}/build"
+}
