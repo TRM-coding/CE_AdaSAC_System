@@ -136,6 +136,11 @@ namespace MINI_MLsys
       return this->shape_;
     }
 
+    arma::Mat<T> channel(size_t i)const
+    {
+      return this->data_.slice(i);
+    }
+
     /**
      * return the Tensor's total elements number
      */
@@ -166,9 +171,54 @@ namespace MINI_MLsys
       return new_tensor;
     }
 
-    // Tensor<T> operator+(const Tensor<T> &B) const;
-    // Tensor<T> operator-(const Tensor<T> &B) const;
-    // Tensor<T> operator/(const Tensor<T> &B) const;
+    Tensor<T> operator+(const Tensor<T> &B) const
+    {
+      assert(this->channel_n() == B.channel_n());
+      assert(this->col_n() == B.col_n());
+      assert(this->row_n() == B.row_n());
+      const uint32_t new_row = this->row_n();
+      const uint32_t new_col = this->row_n();
+      const uint32_t new_cha = this->channel_n();
+      arma::cube new_tensor_data = arma::cube(new_row, new_col, channel_n);
+      new_tensor_data = this->data_ + B.data_;
+      Tensor<T> new_tensor(new_tensor_data);
+      return new_tensor;
+    }
+    Tensor<T> operator-(const Tensor<T> &B) const
+    {
+      assert(this->channel_n() == B.channel_n());
+      assert(this->col_n() == B.col_n());
+      assert(this->row_n() == B.row_n());
+      const uint32_t new_row = this->row_n();
+      const uint32_t new_col = this->row_n();
+      const uint32_t new_cha = this->channel_n();
+      arma::cube new_tensor_data = arma::cube(new_row, new_col, channel_n);
+      new_tensor_data = this->data_ - B.data_;
+      Tensor<T> new_tensor(new_tensor_data);
+      return new_tensor;
+    }
+    Tensor<T> operator/(const Tensor<T> &B) const
+    {
+      assert(this->channel_n == B.channel_n());
+      assert(this->col_n == B.col_n());
+      assert(this->row_n() == B.row_n());
+      arma::cube new_tensor_data = this->data_ / B.data_;
+      Tensor<T> new_tensor(new_tensor_data);
+      return new_tensor;
+    }
+
+    void randu()
+    {
+      this->data_.randu();
+    }
+    void randn()
+    {
+      this->data_.randn();
+    }
+    void randi(int l, int r)
+    {
+      this->data_ = arma::randi<arma::cube>(this->shape_[0], this->shape_[1], this->shape_[2], arma::distr_param(l, r));
+    }
 
     /**
      * tensor Schur product
@@ -194,11 +244,11 @@ namespace MINI_MLsys
         for (uint32_t i_col = 0; i_col < tensor.data_.n_cols; i_col++)
         {
           auto x_i = tensor.data_.at(i_row, i_col, i_slice);
-          os<<x_i<<" ";
+          os << x_i << " ";
         }
-        os<<std::endl;
+        os << std::endl;
       }
-      os<<std::endl;
+      os << std::endl;
     }
     return os;
   }
