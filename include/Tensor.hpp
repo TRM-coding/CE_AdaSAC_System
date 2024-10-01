@@ -89,8 +89,8 @@ namespace MINI_MLsys
     // Tensor(const Tensor tensor);
 
     /**
-     * construct a new Tensor by an arma::cube
-     * @param tensor a T-type cube tensor
+     * construct a new Tensor by an arma::Cube<T>
+     * @param tensor a T-type Cube<T> tensor
      */
 
     explicit Tensor(const arma::Cube<T> tensor)
@@ -162,11 +162,18 @@ namespace MINI_MLsys
       const uint32_t new_row = this->row_n();
       const uint32_t new_col = B.col_n();
       const uint32_t channel_n = B.channel_n();
-      arma::cube new_tensor_data = arma::cube(new_row, new_col, channel_n);
+      arma::Cube<T> new_tensor_data = arma::Cube<T>(new_row, new_col, channel_n);
       for (uint32_t i = 0; i < channel_n; i++)
       {
         new_tensor_data.slice(i) = this->data_.slice(i) * B.data_.slice(i);
       }
+      Tensor<T> new_tensor(new_tensor_data);
+      return new_tensor;
+    }
+
+    Tensor<T> operator*(const T& B)const
+    {
+      arma::Cube<T> new_tensor_data=this->data_*B;
       Tensor<T> new_tensor(new_tensor_data);
       return new_tensor;
     }
@@ -179,11 +186,18 @@ namespace MINI_MLsys
       const uint32_t new_row = this->row_n();
       const uint32_t new_col = this->row_n();
       const uint32_t new_cha = this->channel_n();
-      arma::cube new_tensor_data = arma::cube(new_row, new_col, channel_n);
+      arma::Cube<T> new_tensor_data = arma::Cube<T>(new_row, new_col, new_cha);
       new_tensor_data = this->data_ + B.data_;
       Tensor<T> new_tensor(new_tensor_data);
       return new_tensor;
     }
+
+    Tensor<T>operator+(const T& B)const{
+      arma::Cube<T> new_tensor_data=this->data_+B;
+      Tensor<T> new_tensor(new_tensor_data);
+      return new_tensor;
+    }
+
     Tensor<T> operator-(const Tensor<T> &B) const
     {
       assert(this->channel_n() == B.channel_n());
@@ -192,17 +206,31 @@ namespace MINI_MLsys
       const uint32_t new_row = this->row_n();
       const uint32_t new_col = this->row_n();
       const uint32_t new_cha = this->channel_n();
-      arma::cube new_tensor_data = arma::cube(new_row, new_col, channel_n);
+      arma::Cube<T> new_tensor_data = arma::Cube<T>(new_row, new_col, channel_n);
       new_tensor_data = this->data_ - B.data_;
       Tensor<T> new_tensor(new_tensor_data);
       return new_tensor;
     }
+
+    Tensor<T>operator-(const T& B)const{
+      arma::Cube<T> new_tensor_data=this->data_-B;
+      Tensor<T> new_tensor(new_tensor_data);
+      return new_tensor;
+    }
+
     Tensor<T> operator/(const Tensor<T> &B) const
     {
-      assert(this->channel_n == B.channel_n());
-      assert(this->col_n == B.col_n());
+      assert(this->channel_n() == B.channel_n());
+      assert(this->col_n() == B.col_n());
       assert(this->row_n() == B.row_n());
-      arma::cube new_tensor_data = this->data_ / B.data_;
+      arma::Cube<T> new_tensor_data = this->data_ / B.data_;
+      Tensor<T> new_tensor(new_tensor_data);
+      return new_tensor;
+    }
+
+    Tensor<T>operator/(const T& B)const{
+      assert(B!=0);
+      arma::Cube<T> new_tensor_data=this->data_/B;
       Tensor<T> new_tensor(new_tensor_data);
       return new_tensor;
     }
@@ -217,7 +245,7 @@ namespace MINI_MLsys
     }
     void randi(int l, int r)
     {
-      this->data_ = arma::randi<arma::cube>(this->shape_[0], this->shape_[1], this->shape_[2], arma::distr_param(l, r));
+      this->data_ = arma::randi<arma::Cube<T>>(this->shape_[0], this->shape_[1], this->shape_[2], arma::distr_param(l, r));
     }
 
     /**
