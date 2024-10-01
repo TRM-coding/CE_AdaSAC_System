@@ -1,9 +1,9 @@
-#include<iostream>
-#include<gtest/gtest.h>
-TEST(test_arma,add){
-    std::cout<<"succeed"<<std::endl;
-}
-int main(){
-    std::cout<<"hello world";
+#include <gtest/gtest.h>
+// #include <glog/logging.h>
+
+int main(int argc , char * argv[]){
+    testing::InitGoogleTest(&argc, argv);
+    std::cout<<"Start test...\n";
     return RUN_ALL_TESTS();
 }
+
