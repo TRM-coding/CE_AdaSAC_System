@@ -136,7 +136,7 @@ namespace MINI_MLsys
       return this->shape_;
     }
 
-    arma::Mat<T> channel(size_t i)const
+    arma::Mat<T> channel(size_t i) const
     {
       return this->data_.slice(i);
     }
@@ -171,9 +171,9 @@ namespace MINI_MLsys
       return new_tensor;
     }
 
-    Tensor<T> operator*(const T& B)const
+    Tensor<T> operator*(const T &B) const
     {
-      arma::Cube<T> new_tensor_data=this->data_*B;
+      arma::Cube<T> new_tensor_data = this->data_ * B;
       Tensor<T> new_tensor(new_tensor_data);
       return new_tensor;
     }
@@ -192,8 +192,9 @@ namespace MINI_MLsys
       return new_tensor;
     }
 
-    Tensor<T>operator+(const T& B)const{
-      arma::Cube<T> new_tensor_data=this->data_+B;
+    Tensor<T> operator+(const T &B) const
+    {
+      arma::Cube<T> new_tensor_data = this->data_ + B;
       Tensor<T> new_tensor(new_tensor_data);
       return new_tensor;
     }
@@ -212,8 +213,9 @@ namespace MINI_MLsys
       return new_tensor;
     }
 
-    Tensor<T>operator-(const T& B)const{
-      arma::Cube<T> new_tensor_data=this->data_-B;
+    Tensor<T> operator-(const T &B) const
+    {
+      arma::Cube<T> new_tensor_data = this->data_ - B;
       Tensor<T> new_tensor(new_tensor_data);
       return new_tensor;
     }
@@ -228,9 +230,10 @@ namespace MINI_MLsys
       return new_tensor;
     }
 
-    Tensor<T>operator/(const T& B)const{
-      assert(B!=0);
-      arma::Cube<T> new_tensor_data=this->data_/B;
+    Tensor<T> operator/(const T &B) const
+    {
+      assert(B != 0);
+      arma::Cube<T> new_tensor_data = this->data_ / B;
       Tensor<T> new_tensor(new_tensor_data);
       return new_tensor;
     }
@@ -280,6 +283,6 @@ namespace MINI_MLsys
     }
     return os;
   }
-}
+}//namespace MINI_MLsys
 
 #endif

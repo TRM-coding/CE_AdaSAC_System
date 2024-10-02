@@ -74,7 +74,10 @@
         "cfenv": "cpp",
         "cinttypes": "cpp",
         "typeinfo": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "codecvt": "cpp",
+        "typeindex": "cpp",
+        "valarray": "cpp"
     },
     "cmake.sourceDirectory": "/home/Science_research/Eckart-Young-based-ML-Inference-framework",
     "cmake.buildDirectory": "${workspaceFolder}/build",
