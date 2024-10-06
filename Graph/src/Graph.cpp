@@ -64,6 +64,7 @@ std::vector<std::shared_ptr<MINI_MLsys::Operator>> MINI_MLsys::Graph::
       res.push_back(front);
       for(const auto net :front->next_op)Q.push(net);
    }
+   res.erase(res.begin());
    return res;
 }
 
