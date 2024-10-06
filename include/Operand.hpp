@@ -1,13 +1,18 @@
-#include<string>
-#include<vector>
-#include<memory>
-#include<Tensor.hpp>
+#include <string>
+#include <vector>
+#include <memory>
+#include <Tensor.hpp>
+#include <ir.h>
 namespace MINI_MLsys
 {
-    struct Operand
+    class Operand
     {
-        std::string name;
-        std::vector<uint32_t>shape;
-        std::vector<std::shared_ptr<Tensor<float>>>datas;
+    public:
+        int type;//
+        std::vector<int> shape;//
+        std::string name;//
+        std::map<std::string, pnnx::Parameter> params;
+        std::shared_ptr<Tensor<float>> data;
+        Operand(pnnx::Operand* pnn_op);
     };
-}
+}//namespace MINI_MLsys

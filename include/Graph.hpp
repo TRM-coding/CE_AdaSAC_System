@@ -1,3 +1,6 @@
+#ifndef GRAPH_HPP
+#define GRAPH_HPP
+
 #include<string>
 #include<vector>
 #include<memory>
@@ -10,15 +13,19 @@ namespace MINI_MLsys
       Graph(std::string param_path,std::string bin_path);
 
       bool init();
+      std::vector<std::shared_ptr<Operator>> Topo(std::shared_ptr<MINI_MLsys::Operator> root);
+      std::shared_ptr<Operator> build();
 
     private:
-      std::string input_name_;
-      std::string output_name_;
-      std::string param_name_;
-      std::string bin_path_;
-      std::string param_path_;
+      std::string bin_path_;//
+      std::string param_path_;//
 
+      std::shared_ptr<MINI_MLsys::Operator> root;
       std::vector<std::shared_ptr<Operator>> operators_;
-      std::unique_ptr<pnnx::Graph> graph_;
+      std::vector<std::shared_ptr<Operator>> topo_operators_;
+      std::unique_ptr<pnnx::Graph> graph_;//
+      std::map<std::string,std::shared_ptr<Operator>> operator_map_;
   };
 }//namespace MINI_MLsys
+
+#endif
