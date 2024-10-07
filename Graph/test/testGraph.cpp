@@ -71,3 +71,20 @@ TEST(test_graph, resnet_all)
               << std::endl;
 }
 
+TEST(test_graph,show_attrs)
+{
+    using namespace MINI_MLsys;
+    std::string param_pth = "../../model/simple_ops2.pnnx.param";
+    std::string bin_pth = "../../model/simple_ops2.pnnx.bin";
+    Graph G(param_pth, bin_pth);
+    auto res=G.init();
+    ASSERT_EQ(res,0);
+    for(const auto& op:G.graph_->ops)
+    {
+        std::cout<<op->name<<":"<<op->params.size()<<std::endl;
+        for(const auto& [name,attr]:op->params)
+        {
+            std::cout<<name<<std::endl;
+        }
+    }
+}
