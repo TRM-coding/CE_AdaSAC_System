@@ -1,0 +1,5 @@
+project(pnnx_mini_mlSys)
+cmake_minimum_required(VERSION 3.16)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src DIR_SRC_FILE)
+add_library(pnnx_mini_mlSys ${DIR_SRC_FILE})

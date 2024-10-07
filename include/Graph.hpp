@@ -12,11 +12,13 @@ namespace MINI_MLsys
     public:
       Graph(std::string param_path,std::string bin_path);
 
-      bool init();
+      int init();
       std::vector<std::shared_ptr<Operator>> Topo(std::shared_ptr<MINI_MLsys::Operator> root);
       std::shared_ptr<Operator> build();
+      std::string get_param_path();
+      std::string get_bin_path();
 
-    private:
+    // private:
       std::string bin_path_;//
       std::string param_path_;//
 

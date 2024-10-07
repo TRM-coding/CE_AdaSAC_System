@@ -82,6 +82,29 @@ namespace MINI_MLsys
       }
     }
 
+    explicit Tensor(const std::vector<int>& shape)
+    {
+      assert(shape.size() > 0 && shape.size() < 4);
+      if (shape.size() == 1)
+      {
+        this->data_.reshape(1, shape[0], 1);
+        this->data_.zeros();
+        this->shape_ = {1, shape[0], 1};
+      }
+      else if (shape.size() == 2)
+      {
+        this->data_.reshape(shape[0], shape[1], 1);
+        this->data_.zeros();
+        this->shape_ = {shape[0], shape[1], 1};
+      }
+      else
+      {
+        this->data_.reshape(shape[0], shape[1], shape[2]);
+        this->data_.zeros();
+        this->shape_ = {shape[0], shape[1], shape[2]};
+      }
+    }
+
     /**
      * construct a new Tensor by an existed Tensor,it will return a same shape tensor but empty one
      */
@@ -131,7 +154,7 @@ namespace MINI_MLsys
      * return the Tensor's shape in format:std::vector<uint32_t>{row,column,channel}
      */
 
-    std::vector<uint64_t> get_shape() const
+    std::vector<int64_t> get_shape() const
     {
       return this->shape_;
     }
@@ -144,7 +167,7 @@ namespace MINI_MLsys
     /**
      * return the Tensor's total elements number
      */
-    uint64_t size() const
+    int64_t size() const
     {
       return this->shape_[0] * this->shape_[1] * this->shape_[2];
     }
@@ -260,7 +283,7 @@ namespace MINI_MLsys
 
   private:
     arma::Cube<T> data_;
-    std ::vector<uint64_t> shape_;
+    std ::vector<int64_t> shape_;
     // shape{row,col,cha}
   };
 
