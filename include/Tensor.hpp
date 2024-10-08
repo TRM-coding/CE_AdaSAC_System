@@ -27,6 +27,7 @@ namespace MINI_MLsys
       this->data_.zeros();
       this->shape_ = {1, size, 1};
     }
+    
 
     /**
      * Construct a 2-dim Tensor by {row,column}
