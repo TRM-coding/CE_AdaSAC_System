@@ -18,6 +18,8 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/Attribute)
 add_subdirectory(${CMAKE_SOURCE_DIR}/Operand)
 add_subdirectory(${CMAKE_SOURCE_DIR}/Operators)
 add_subdirectory(${CMAKE_SOURCE_DIR}/Graph)
+add_subdirectory(${CMAKE_SOURCE_DIR}/testblock)
+add_subdirectory(${CMAKE_SOURCE_DIR}/Layer)
 
 
 message(

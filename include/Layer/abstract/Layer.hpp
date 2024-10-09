@@ -1,16 +1,18 @@
 #ifndef MINI_ML_LAYER_HPP
 #define MINI_ML_LAYER_HPP
+
 #include <Operator.hpp>
 #include <Tensor.hpp>
 #include <memory>
 #include <string>
 #include <vector>
 namespace MINI_MLsys {
+class Operator;
 class Layer // 默认实现为无权重Layer
 {
 public:
   std::string layer_name_;
-  std::weak_ptr<Operator> op_;
+  std::weak_ptr<MINI_MLsys::Operator> op_;
 
   virtual ~Layer() = default;
   explicit Layer(std::string layer_name) : layer_name_(layer_name) {}
@@ -26,7 +28,7 @@ public:
   virtual const std::shared_ptr<Tensor<float>> get_bias();
   virtual const std::shared_ptr<Tensor<float>> get_weight();
 
-  virtual bool deploy(std::shared_ptr<Operator> &op) = 0;
+  // virtual bool deploy(std::shared_ptr<Operator> &op) = 0;
 
   std::string get_layer_name() const { return layer_name_; }
 };
