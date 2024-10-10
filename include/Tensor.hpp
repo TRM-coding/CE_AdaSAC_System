@@ -92,6 +92,8 @@ public:
     }
   }
 
+  explicit Tensor(const std::vector<uint64_t>& shape,const std::vector<T>& data_);
+
   /**
    * construct a new Tensor by an existed Tensor,it will return a same shape
    * tensor but empty one
@@ -274,7 +276,7 @@ private:
 };
 
 template <typename U>
-std::ostream &operator<<(std::ostream &os, const Tensor<U> &tensor) {
+inline std::ostream &operator<<(std::ostream &os, const Tensor<U> &tensor) {
   os << "The Tensor is:\n";
   for (uint32_t i_slice = 0; i_slice < tensor.data_.n_slices; i_slice++) {
     for (uint32_t i_row = 0; i_row < tensor.data_.n_rows; i_row++) {

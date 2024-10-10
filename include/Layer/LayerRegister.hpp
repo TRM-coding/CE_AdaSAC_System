@@ -8,11 +8,13 @@ class LayerRegister {
 
 public:
   typedef bool (*LayerCreator)(const std::shared_ptr<Operator> &op);
-  static std::map<std::string, LayerCreator>* registry;
+  
 
   static void Register(const std::string &type, LayerCreator creator);
 
   static const std::map<std::string, LayerCreator>* get_registry();
+  // private:
+  static std::map<std::string, LayerCreator>* registry;
 };
 
 class LayerRegisterAssistant {

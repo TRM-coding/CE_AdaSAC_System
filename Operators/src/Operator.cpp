@@ -1,5 +1,3 @@
-#include <Attribute.hpp>
-#include <Operand.hpp>
 #include <Operator.hpp>
 
 bool MINI_MLsys::Operator::initAttribute(

@@ -33,12 +33,12 @@ int MINI_MLsys::Graph::init() {
   if (!this->root)
     this->root = build();
   auto init_res = initOperator_param();
-  if (init_res != 0) {
+  if (init_res == 0) {
     std::cout << "initOperator_param failed" << std::endl;
     return -1;
   }
   init_res = initOperator_attr();
-  if (init_res != 0) {
+  if (init_res == 0) {
     std::cout << "initOperator_attr failed" << std::endl;
     return -1;
   }
@@ -219,7 +219,7 @@ bool MINI_MLsys::Graph::initOperator_attr() {
     auto attr_name = op->name;
     auto attr_pnnx = op->attrs;
     auto init_res = this_op->initAttribute(attr_pnnx);
-    if (init_res != 0) {
+    if (init_res == 0) {
       std::cout << "initAttribute failed" << std::endl;
       return false;
     }
@@ -230,6 +230,7 @@ bool MINI_MLsys::Graph::initOperator_attr() {
 bool MINI_MLsys::Graph::deploy_layers() {
   for (const auto &op : this->topo_operators_) {
     auto type = op->type;
+    auto rg=LayerRegister();
     auto layer_creator_find = LayerRegister::registry->find(type);
     if (layer_creator_find == LayerRegister::registry->end()) {
       std::cout << "Can not find the layer creator for type: " << type

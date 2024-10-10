@@ -13,6 +13,8 @@ class Layer // 默认实现为无权重Layer
 public:
   std::string layer_name_;
   std::weak_ptr<MINI_MLsys::Operator> op_;
+  std::map<std::string,pnnx::Parameter> params;
+  std::map<std::string,std::shared_ptr<Attribute>>attrs;
 
   virtual ~Layer() = default;
   explicit Layer(std::string layer_name) : layer_name_(layer_name) {}
@@ -20,13 +22,9 @@ public:
   virtual void forward(const std::vector<std::shared_ptr<Tensor<float>>> &input,
                        std::vector<std::shared_ptr<Tensor<float>>> &output) = 0;
 
-  virtual void set_bias(const std::shared_ptr<Tensor<float>> &bias);
-  virtual void set_bias(const std::vector<float> &bias);
-  virtual void set_weight(const std::vector<float> &weight);
-  virtual void set_weight(const std::shared_ptr<Tensor<float>> &weight);
+  //virtual set_attr and params;
 
-  virtual const std::shared_ptr<Tensor<float>> get_bias();
-  virtual const std::shared_ptr<Tensor<float>> get_weight();
+  
 
   // virtual bool deploy(std::shared_ptr<Operator> &op) = 0;
 

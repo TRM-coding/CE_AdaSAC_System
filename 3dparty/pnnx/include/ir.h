@@ -12,6 +12,8 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
+#include <iostream>
+
 #ifndef PNNX_IR_H
 #define PNNX_IR_H
 
@@ -20,6 +22,7 @@
 #include <set>
 #include <string>
 #include <vector>
+
 
 #if BUILD_PNNX
 namespace torch {
@@ -137,7 +140,87 @@ public:
     // keep std::string typed member the last for cross cxxabi compatibility
     std::string s;
     std::vector<std::string> as;
+
+    friend std::ostream& operator <<(std::ostream& os, const Parameter& p);
+
 };
+
+inline std::ostream& operator <<(std::ostream& os,const Parameter& p)
+{
+    if (p.type == 0)
+    {
+        os << "null";
+    }
+    if (p.type == 1)
+    {
+        if (p.b)
+            os << "True";
+        else
+            os << "False";
+    }
+    if (p.type == 2)
+    {
+        os << p.i;
+    }
+    if (p.type == 3)
+    {
+        os << p.f;
+    }
+    if (p.type == 4)
+    {
+        if (p.s.substr(0, 6) == "torch.")
+        {
+            os << p.s;
+        }
+        else
+        {
+            os << "\'" << p.s << "\'";
+        }
+    }
+    if (p.type == 5)
+    {
+        os << "(";
+        for (size_t i = 0; i < p.ai.size(); i++)
+        {
+            os << p.ai[i];
+            if (i + 1 != p.ai.size() || p.ai.size() == 1)
+                os << ",";
+        }
+        os << ")";
+    }
+    if (p.type == 6)
+    {
+        os << "(";
+        for (size_t i = 0; i < p.af.size(); i++)
+        {
+            os << p.af[i];
+            if (i + 1 != p.af.size() || p.af.size() == 1)
+                os << ",";
+        }
+        os << ")";
+    }
+    if (p.type == 7)
+    {
+        os << "(";
+        for (size_t i = 0; i < p.as.size(); i++)
+        {
+            if (p.as[i].substr(0, 6) == "torch.")
+            {
+                os << p.as[i];
+            }
+            else
+            {
+                os << "\'" << p.as[i] << "\'";
+            }
+            if (i + 1 != p.as.size() || p.as.size() == 1)
+                os << ",";
+        }
+        os << ")";
+    }
+    os<<std::endl;
+
+    return os;
+}
 
 bool operator==(const Parameter& lhs, const Parameter& rhs);
 
