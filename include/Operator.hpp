@@ -14,9 +14,10 @@ namespace MINI_MLsys
   class Operator
   {
   public:
-    void initAttribute(std::map<std::string, pnnx::Attribute> attrs);
+    bool initAttribute(std::map<std::string, pnnx::Attribute> attrs);
     Operator(pnnx::Operator *);
     Operator() = default;
+
 
     std::shared_ptr<Layer> layer;
 
@@ -28,7 +29,7 @@ namespace MINI_MLsys
     std::string name;                               //
     // std::vector<std::string> inputsnames;
     std::map<std::string, pnnx::Parameter> params; //
-    std::map<std::string, Attribute> attrs;        //
+    std::map<std::string, std::shared_ptr<Attribute>> attrs;        //
   };
 } // namespace MINI_MLsys
 
