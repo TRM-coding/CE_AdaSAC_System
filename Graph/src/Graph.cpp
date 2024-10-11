@@ -257,9 +257,16 @@ std::vector<MINI_MLsys::Tensor<float>> MINI_MLsys::Graph::RUN(const std::vector<
 {
   std::string name="input";
   auto ip=Operand(inputs,name);
-
-
+  for(auto& op:this->topo_operators_)
+  {
+    auto out=Operand();
+    op->forward(ip,out);
+    ip=out;
+  }
   std::vector<Tensor<float>> outputs;
-  
+  for(auto di:ip.data)
+  {
+    outputs.push_back(*di);
+  }
   return outputs;
 }

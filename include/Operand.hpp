@@ -18,6 +18,7 @@ namespace MINI_MLsys
         Operand(pnnx::Operand* pnn_op);
         Operand(const std::vector<Tensor<float>>& data,std::string name);
         Operand(std::vector<std::shared_ptr<Tensor<float>>> data,std::string name);
+        Operand()=default;
         bool set_data(std::vector<Tensor<float>> data);
     };
 }//namespace MINI_MLsys

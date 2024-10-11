@@ -29,3 +29,14 @@ MINI_MLsys::Operator::Operator(pnnx::Operator *op) {
   this->pre_op.clear();
   this->next_op.clear();
 }
+
+void MINI_MLsys::Operator::forward(const Operand& input,Operand& output)
+{
+  if(this->layer==nullptr)
+  {
+    std::cout<<"Operator: Layer is nullptr."<<std::endl;
+    return;
+  }
+  this->layer->forward(input,output);
+  return;
+}
