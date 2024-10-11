@@ -7,12 +7,13 @@
 #include<Operator.hpp>
 #include<ir.h>
 #include<Layer/LayerRegister.hpp>
+#include<Operand.hpp>
 namespace MINI_MLsys
 {
   class Graph{
     public:
       Graph(std::string param_path,std::string bin_path);
-      std::vector<Tensor<float>> RUN(std::vector<Tensor<float>> inputs);
+      std::vector<Tensor<float>> RUN(const std::vector<Tensor<float>>& inputs);
       int init();
       std::vector<std::shared_ptr<Operator>> Topo(std::shared_ptr<MINI_MLsys::Operator> root);
       std::shared_ptr<Operator> build();

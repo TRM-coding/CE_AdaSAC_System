@@ -11,8 +11,7 @@ namespace MINI_MLsys {
 class Linear : public Layer {
 public:
   Linear(std::string layer_name) : Layer(layer_name) {}
-  void forward(const std::vector<std::shared_ptr<Tensor<float>>> &input,
-               std::vector<std::shared_ptr<Tensor<float>>> &output) override ;
+  void forward(const Operand &input,Operand &output) override ;
   static bool deploy(const std::shared_ptr<Operator> &op);
 
 private:

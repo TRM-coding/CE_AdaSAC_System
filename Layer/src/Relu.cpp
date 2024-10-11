@@ -4,12 +4,16 @@
 #include <string>
 namespace MINI_MLsys {
 
-void Relu::forward(const std::vector<std::shared_ptr<Tensor<float>>> &input,
-                   std::vector<std::shared_ptr<Tensor<float>>> &output) {
-  for (const auto &x : input) {
+void Relu::forward(const Operand &input,Operand &output) {
+  auto inputs=input.data;
+  auto outputs=std::vector<std::shared_ptr<Tensor<float>>>();
+  for (const auto &x : inputs) {
     auto out = x->func(relu);
-    output.push_back(std::make_shared<Tensor<float>>(out));
+    outputs.push_back(std::make_shared<Tensor<float>>(out));
   }
+  auto name=this->layer_name_+"_output";
+  output=Operand(outputs,name);
+  return;
 }
 
 bool Relu::deploy(const std::shared_ptr<Operator> &op) {

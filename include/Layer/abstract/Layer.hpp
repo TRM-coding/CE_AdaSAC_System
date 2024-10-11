@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include<Operand.hpp>
 namespace MINI_MLsys {
 class Operator;
 class Layer // 默认实现为无权重Layer
@@ -19,8 +20,7 @@ public:
   virtual ~Layer() = default;
   explicit Layer(std::string layer_name) : layer_name_(layer_name) {}
 
-  virtual void forward(const std::vector<std::shared_ptr<Tensor<float>>> &input,
-                       std::vector<std::shared_ptr<Tensor<float>>> &output) = 0;
+  virtual void forward(const Operand &input,Operand &output) = 0;
 
   //virtual set_attr and params;
 

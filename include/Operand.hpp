@@ -14,9 +14,11 @@ namespace MINI_MLsys
         std::vector<int> shape;//
         std::string name;//
         std::map<std::string, pnnx::Parameter> params;//
-        std::shared_ptr<Tensor<float>> data;
+        std::vector<std::shared_ptr<Tensor<float>>> data;
         Operand(pnnx::Operand* pnn_op);
-        bool set_data(std::shared_ptr<Tensor<float>> data);
+        Operand(const std::vector<Tensor<float>>& data,std::string name);
+        Operand(std::vector<std::shared_ptr<Tensor<float>>> data,std::string name);
+        bool set_data(std::vector<Tensor<float>> data);
     };
 }//namespace MINI_MLsys
 

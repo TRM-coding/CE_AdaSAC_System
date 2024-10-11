@@ -20,6 +20,8 @@ namespace MINI_MLsys
 
 
     std::shared_ptr<Layer> layer;
+    void forward(const std::vector<std::shared_ptr<Operand>> &input,
+                 std::vector<std::shared_ptr<Operand>> &output);
 
     std::vector<std::shared_ptr<Operator>> pre_op;  //
     std::vector<std::shared_ptr<Operator>> next_op; //

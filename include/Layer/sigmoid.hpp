@@ -7,8 +7,8 @@ public:
   Sigmoid(std::string layer_name_) : Layer(layer_name_) {}
   static float sigmoid(const float &x) { return 1 / (1 + exp(-x)); }
   static bool deploy(const std::shared_ptr<Operator> &op);
-  void forward(const std::vector<std::shared_ptr<Tensor<float>>> &input,
-               std::vector<std::shared_ptr<Tensor<float>>> &output) override;
+  void forward(const Operand &input,
+               Operand &output) override;
 };
 } // namespace MINI_MLsys
 #endif

@@ -6,6 +6,7 @@
 #include <queue>
 #include <set>
 #include <vector>
+#include<Tensor.hpp>
 
 MINI_MLsys::Graph::Graph(std::string param_path, std::string bin_path) {
   this->param_path_ = param_path;
@@ -250,4 +251,15 @@ bool MINI_MLsys::Graph::deploy_layers() {
   }
 
   return true;
+}
+
+std::vector<MINI_MLsys::Tensor<float>> MINI_MLsys::Graph::RUN(const std::vector<MINI_MLsys::Tensor<float>>& inputs)
+{
+  std::string name="input";
+  auto ip=Operand(inputs,name);
+
+
+  std::vector<Tensor<float>> outputs;
+  
+  return outputs;
 }

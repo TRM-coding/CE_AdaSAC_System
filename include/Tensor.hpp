@@ -92,7 +92,42 @@ public:
     }
   }
 
-  explicit Tensor(const std::vector<uint64_t>& shape,const std::vector<T>& data_);
+  explicit Tensor(const std::vector<uint64_t>& shape,const std::vector<T>& data_)
+  {
+    
+    assert(shape.size() > 0 && shape.size() < 4);
+    if (shape.size() == 1) {
+      this->data_.reshape(1, shape[0], 1);
+      this->data_.zeros();
+      this->shape_ = {1, shape[0], 1};
+    } else if (shape.size() == 2) {
+      this->data_.reshape(shape[0], shape[1], 1);
+      this->data_.zeros();
+      this->shape_ = {shape[0], shape[1], 1};
+    } else {
+      this->data_.reshape(shape[0], shape[1], shape[2]);
+      this->data_.zeros();
+      this->shape_ = {shape[0], shape[1], shape[2]};
+    }
+
+    if(data_.size()==0)
+    {
+      this->data_.zeros();
+    }
+    if(data_.size()!=shape[0]*shape[1]*shape[2])
+    {
+      std::cout<<"data size not match shape size"<<std::endl;
+      assert(1==0);
+    }
+
+    for (uint32_t i = 0; i < shape[0]; i++) {
+      for (uint32_t j = 0; j < shape[1]; j++) {
+        for (uint32_t k = 0; k < shape[2]; k++) {
+          this->data_.at(i, j, k) = data_[i * shape[1] * shape[2] + j * shape[2] + k];
+        }
+      }
+    }
+  }
 
   /**
    * construct a new Tensor by an existed Tensor,it will return a same shape
@@ -135,9 +170,12 @@ public:
    * format:std::vector<uint32_t>{row,column,channel}
    */
 
-  std::vector<uint64_t> get_shape() const { return this->shape_; }
+  std::vector<int> get_shape() const { return this->shape_; }
 
   arma::Mat<T> channel(size_t i) const { return this->data_.slice(i); }
+
+
+  arma::Cube<T> get_data() const { return this->data_; }
 
   /**
    * return the Tensor's total elements number
