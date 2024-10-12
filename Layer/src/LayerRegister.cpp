@@ -24,6 +24,10 @@ void LayerRegister::Register(const std::string &type, LayerCreator creator) {
 
 const std::map<std::string, LayerRegister::LayerCreator> *
 LayerRegister::get_registry() {
+  if(registry==nullptr)
+  {
+    registry=new std::map<std::string, LayerCreator>();
+  }
   return LayerRegister::registry;
 }
 } // namespace MINI_MLsys

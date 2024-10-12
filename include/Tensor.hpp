@@ -1,5 +1,4 @@
-#ifndef Tensor_hpp
-#define Tensor_hpp
+#pragma once
 
 #include <armadillo>
 #include <functional>
@@ -19,7 +18,7 @@ public:
    *Construct a 1-dim Tensor by {size}
    *@param size total elements number in the new tensor
    */
-  explicit Tensor(int64_t size) {
+  explicit Tensor(int size) {
     assert(size > 0);
     this->data_.reshape(1, size, 1);
     this->data_.zeros();
@@ -31,7 +30,7 @@ public:
    * @param row    the number of rows in the new tensor
    * @param column the number of column in the new tensor
    */
-  explicit Tensor(uint32_t row, uint32_t column) {
+  explicit Tensor(int row, int column) {
     assert(row > 0 && column > 0);
     this->data_.reshape(row, column);
     this->data_.zeros();
@@ -44,8 +43,8 @@ public:
    *@param column  the number of column in the new tensor
    *@param channel the number of channel in the new tensor
    **/
-  explicit Tensor(const uint32_t &row, const uint32_t &column,
-                  const uint32_t &channel) {
+  explicit Tensor(const uint64_t &row, const uint64_t &column,
+                  const uint64_t &channel) {
     assert(row > 0 && column > 0 && channel > 0);
     this->data_.reshape(row, column, channel);
     this->data_.zeros();
@@ -58,23 +57,6 @@ public:
    @param shape std::vector if 1 elements then construct a 1-dim tensor.The same
    apply to 2,3
   */
-  explicit Tensor(const std::vector<uint32_t> &shape) {
-    assert(shape.size() > 0 && shape.size() < 4);
-    if (shape.size() == 1) {
-      this->data_.reshape(1, shape[0], 1);
-      this->data_.zeros();
-      this->shape_ = {1, shape[0], 1};
-    } else if (shape.size() == 2) {
-      this->data_.reshape(shape[0], shape[1], 1);
-      this->data_.zeros();
-      this->shape_ = {shape[0], shape[1], 1};
-    } else {
-      this->data_.reshape(shape[0], shape[1], shape[2]);
-      this->data_.zeros();
-      this->shape_ = {shape[0], shape[1], shape[2]};
-    }
-  }
-
   explicit Tensor(const std::vector<uint64_t> &shape) {
     assert(shape.size() > 0 && shape.size() < 4);
     if (shape.size() == 1) {
@@ -170,7 +152,7 @@ public:
    * format:std::vector<uint32_t>{row,column,channel}
    */
 
-  std::vector<int> get_shape() const { return this->shape_; }
+  std::vector<uint64_t> get_shape() const { return this->shape_; }
 
   arma::Mat<T> channel(size_t i) const { return this->data_.slice(i); }
 
@@ -200,7 +182,7 @@ public:
     for (uint32_t i = 0; i < channel_n; i++) {
       new_tensor_data.slice(i) = this->data_.slice(i) * B.data_.slice(i);
     }
-    Tensor<T> new_tensor(new_tensor_data);
+    Tensor<T> new_tensor=Tensor<T>(new_tensor_data);
     return new_tensor;
   }
 
@@ -282,14 +264,14 @@ public:
 
   typedef T (*F)(const T &);
 
-  Tensor<T> func(F funci) {
-    Tensor<T> tensor(this->shape_);
+  std::shared_ptr<Tensor<T>> func(F funci) {
+    std::shared_ptr<Tensor<T>> tensor = std::make_shared<Tensor<T>>(this->shape_);
     for (auto i = 0; i < data_.n_rows; i++) {
       for (auto j = 0; j < data_.n_cols; j++) {
         for (auto k = 0; k < data_.n_slices; k++) {
           // tensor.at(k,i,j) = funci(this->data_.at(i, j, k));
           
-          tensor.at(k,i,j)=funci(this->data_.at(i, j, k));
+          tensor->at(k,i,j)=funci(this->data_.at(i, j, k));
         }
       }
     }
@@ -330,5 +312,3 @@ inline std::ostream &operator<<(std::ostream &os, const Tensor<U> &tensor) {
 }
 
 } // namespace MINI_MLsys
-
-#endif

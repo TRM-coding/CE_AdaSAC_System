@@ -1,4 +1,4 @@
-#include "Operand.hpp"
+#include <Operand.hpp>
 
 MINI_MLsys::Operand::Operand(pnnx::Operand* pnn_op)
 {
@@ -14,13 +14,13 @@ MINI_MLsys::Operand::Operand(pnnx::Operand* pnn_op)
     
 }
 
-MINI_MLsys::Operand::Operand(std::vector<std::shared_ptr<MINI_MLsys::Tensor<float>>>data,std::string name)
+MINI_MLsys::Operand::Operand(const std::vector<std::shared_ptr<MINI_MLsys::Tensor<float>>>&data,std::string name)
 {
     this->data=data;
     this->name=name;
 }
 
-MINI_MLsys::Operand::Operand(const std::vector<Tensor<float>>& data,std::string name)
+MINI_MLsys::Operand::Operand(const std::vector<MINI_MLsys::Tensor<float>>& data,std::string name)
 {
     if(data.size()==0)
     {

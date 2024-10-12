@@ -6,4 +6,4 @@ aux_source_directory(./test DIR_TEST_FILE)
 add_library(MINI_MLsys_Layer ${DIR_SRCS_FILE})
 
 add_executable(MINI_MLsys_Layer_test main.cpp ${DIR_TEST_FILE})
-target_link_libraries(MINI_MLsys_Layer_test MINI_MLsys_Layer armadillo gtest Operators Tensor)
+target_link_libraries(MINI_MLsys_Layer_test Operand MINI_MLsys_Layer armadillo gtest Operators Tensor)

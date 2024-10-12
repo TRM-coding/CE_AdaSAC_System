@@ -1,24 +1,22 @@
-#ifndef MINI_ML_Linear_HPP
-#define MINI_ML_Linear_HPP
-#include <Layer/Linear.hpp>
+#pragma once
+#include <Layer/LayerRegister.hpp>
 #include <Layer/abstract/Layer.hpp>
-#include <Operator.hpp>
 #include <Tensor.hpp>
 #include <memory>
 #include <string>
 #include <vector>
 namespace MINI_MLsys {
-class Linear : public Layer {
+class Operator;
+class Linear : Layer {
 public:
   Linear(std::string layer_name) : Layer(layer_name) {}
   void forward(const Operand &input,Operand &output) override ;
-  static bool deploy(const std::shared_ptr<Operator> &op);
+  static bool deploy(std::shared_ptr<Operator> &op);
 
-private:
-  std::shared_ptr<Tensor<float>> weight_;
-  std::shared_ptr<Tensor<float>> bias_;
-  void set_bias();
-  void set_weight();
+
+  // std::shared_ptr<Tensor<float>> weight_;
+  // std::shared_ptr<Tensor<float>> bias_;
+  // void set_bias()override;
+  // void set_weight()override;
 };
 } // namespace MINI_MLsys
-#endif

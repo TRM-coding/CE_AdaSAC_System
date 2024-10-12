@@ -1,12 +1,12 @@
 #include <Graph.hpp>
-#include <Operator.hpp>
+// #include <Operator.hpp>
 #include <iostream>
-#include <ir.h>
+// #include <ir.h>
 #include <memory>
 #include <queue>
 #include <set>
 #include <vector>
-#include<Tensor.hpp>
+// #include<Tensor.hpp>
 
 MINI_MLsys::Graph::Graph(std::string param_path, std::string bin_path) {
   this->param_path_ = param_path;
@@ -44,9 +44,19 @@ int MINI_MLsys::Graph::init() {
     return -1;
   }
 
+  
+
   this->topo_operators_ = Topo(this->root);
   if (this->topo_operators_.empty()) {
     std::cout << "topo_operators_ is empty" << std::endl;
+    return -1;
+  }
+
+  auto dep_res= this->deploy_layers();
+
+  if(dep_res==0)
+  {
+    std::cout<<"deploy_layers failed"<<std::endl;
     return -1;
   }
 
@@ -229,11 +239,11 @@ bool MINI_MLsys::Graph::initOperator_attr() {
 }
 
 bool MINI_MLsys::Graph::deploy_layers() {
-  for (const auto &op : this->topo_operators_) {
+  auto rg=LayerRegister();
+  for (auto &op : this->topo_operators_) {
     auto type = op->type;
-    auto rg=LayerRegister();
-    auto layer_creator_find = LayerRegister::registry->find(type);
-    if (layer_creator_find == LayerRegister::registry->end()) {
+    auto layer_creator_find = LayerRegister::get_registry()->find(type);
+    if (layer_creator_find == LayerRegister::get_registry()->end()) {
       std::cout << "Can not find the layer creator for type: " << type
                 << std::endl;
       return false;

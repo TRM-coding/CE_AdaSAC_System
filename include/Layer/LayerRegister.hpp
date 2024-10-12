@@ -1,20 +1,22 @@
-#ifndef MINI_ML_LAYER_REGISTER_HPP
-#define MINI_ML_LAYER_REGISTER_HPP
+#pragma once
+// #include <Layer/Linear.hpp>
+// #include <Layer/Relu.hpp>
+// #include <Layer/sigmoid.hpp>
 #include <Operator.hpp>
 #include <map>
 #include <string>
 namespace MINI_MLsys {
+class Operator;
 class LayerRegister {
 
 public:
-  typedef bool (*LayerCreator)(const std::shared_ptr<Operator> &op);
-  
+  typedef bool (*LayerCreator)(std::shared_ptr<Operator> &op);
 
   static void Register(const std::string &type, LayerCreator creator);
 
-  static const std::map<std::string, LayerCreator>* get_registry();
+  static const std::map<std::string, LayerCreator> *get_registry();
   // private:
-  static std::map<std::string, LayerCreator>* registry;
+  static std::map<std::string, LayerCreator> *registry;
 };
 
 class LayerRegisterAssistant {
@@ -25,4 +27,4 @@ public:
   }
 };
 } // namespace MINI_MLsys
-#endif // MINI_ML_LAYER_REGISTER_HPP
+ // MINI_ML_LAYER_REGISTER_HPP

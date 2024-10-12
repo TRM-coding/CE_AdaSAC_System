@@ -1,29 +1,31 @@
-#include <Layer/LayerRegister.hpp>
+
 #include <Layer/Relu.hpp>
-#include <Layer/abstract/Layer.hpp>
-#include <string>
+
 namespace MINI_MLsys {
 
-void Relu::forward(const Operand &input,Operand &output) {
-  auto inputs=input.data;
-  auto outputs=std::vector<std::shared_ptr<Tensor<float>>>();
-  for (const auto &x : inputs) {
-    auto out = x->func(relu);
-    outputs.push_back(std::make_shared<Tensor<float>>(out));
+void Relu::forward(const Operand &input, Operand &output) {
+  auto inputs = input.data;
+  std::vector<std::shared_ptr<Tensor<float>>>outputs;
+  for (auto x : inputs) {
+    auto op=x->func(relu);
+    outputs.push_back(op);
   }
-  auto name=this->layer_name_+"_output";
-  output=Operand(outputs,name);
+  std::string name = std::string(this->layer_name_ + "_output");
+  auto ot=new Operand(outputs, name);
+  output=*ot;
   return;
 }
 
-bool Relu::deploy(const std::shared_ptr<Operator> &op) {
+bool Relu::deploy(std::shared_ptr<Operator> &op) {
   if (op == nullptr) {
     std::cout << "Relu: Operator is nullptr." << std::endl;
     return false;
   }
   op->layer = std::make_shared<Relu>("Relu");
   op->layer->op_ = op;
-
+  auto linear = std::dynamic_pointer_cast<Relu>(op->layer);
+  linear->set_bias();
+  linear->set_weight();
   // no params and attrs
 
   return true;

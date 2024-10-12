@@ -40,3 +40,31 @@ void MINI_MLsys::Operator::forward(const Operand& input,Operand& output)
   this->layer->forward(input,output);
   return;
 }
+
+
+// void MINI_MLsys::Operator::deploy()
+// {
+//   if(this->layer==nullptr)
+//   {
+//     std::cout<<"Operator: Layer is nullptr."<<std::endl;
+//     return;
+//   }
+//   else{
+//     auto registry=LayerRegister::get_registry();
+//     auto type=this->type;
+//     auto layer_creator_find=registry->find(type);
+//     if(layer_creator_find==registry->end())
+//     {
+//       std::cout<<"Can not find the layer creator for type: "<<type<<std::endl;
+//       return;
+//     }
+//     auto layer_creator=layer_creator_find->second;
+//     if(!layer_creator)
+//     {
+//       std::cout<<"layer_creator is nullptr"<<std::endl;
+//       return;
+//     }
+//     auto deploy_res=layer_creator(this->shared_from_this());
+//   }
+//   return;
+// }
