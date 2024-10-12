@@ -1,8 +1,11 @@
 #include<gtest/gtest.h>
 #include<Graph.hpp>
+#include<Layer/sigmoid.hpp>
 TEST(test_Graph,RUN)
 {
     using namespace MINI_MLsys;
+    extern LayerRegisterAssistant reg_sig;
+    std::cout<<reg_sig.type<<std::endl;
     std::string param_pth = "../../model/test_linear.pnnx.param";
     std::string bin_pth = "../../model/test_linear.pnnx.bin";
     MINI_MLsys::Graph G(param_pth,bin_pth);

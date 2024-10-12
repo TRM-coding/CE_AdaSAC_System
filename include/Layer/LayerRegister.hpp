@@ -21,9 +21,13 @@ public:
 
 class LayerRegisterAssistant {
 public:
+std::string type;
   LayerRegisterAssistant(const std::string &type,
                          LayerRegister::LayerCreator creator) {
     LayerRegister::Register(type, creator);
+    
+      this->type=type;
+    
   }
 };
 } // namespace MINI_MLsys

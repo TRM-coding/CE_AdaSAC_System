@@ -9,7 +9,9 @@ namespace MINI_MLsys {
 class Operator;
 class Linear : Layer {
 public:
-  Linear(std::string layer_name) : Layer(layer_name) {}
+  Linear(std::string layer_name) : Layer(layer_name) {
+    
+  }
   void forward(const Operand &input,Operand &output) override ;
   static bool deploy(std::shared_ptr<Operator> &op);
 

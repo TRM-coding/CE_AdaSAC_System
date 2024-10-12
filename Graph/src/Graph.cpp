@@ -240,13 +240,18 @@ bool MINI_MLsys::Graph::initOperator_attr() {
 
 bool MINI_MLsys::Graph::deploy_layers() {
   auto rg=LayerRegister();
+  auto rgs=LayerRegister::get_registry();
   for (auto &op : this->topo_operators_) {
     auto type = op->type;
     auto layer_creator_find = LayerRegister::get_registry()->find(type);
     if (layer_creator_find == LayerRegister::get_registry()->end()) {
       std::cout << "Can not find the layer creator for type: " << type
                 << std::endl;
-      return false;
+                continue;
+    }
+    else
+    {
+      std::cout<<"find layer creator for type: "<<type<<std::endl;
     }
     auto layer_creator = layer_creator_find->second;
     if (!layer_creator) {
@@ -263,8 +268,11 @@ bool MINI_MLsys::Graph::deploy_layers() {
   return true;
 }
 
+// extern MINI_MLsys::LayerRegisterAssistant reg_sig;
+
 std::vector<MINI_MLsys::Tensor<float>> MINI_MLsys::Graph::RUN(const std::vector<MINI_MLsys::Tensor<float>>& inputs)
 {
+  // std::cout<<reg_sig.type<<std::endl;
   std::string name="input";
   auto ip=Operand(inputs,name);
   for(auto& op:this->topo_operators_)

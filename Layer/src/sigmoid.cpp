@@ -24,5 +24,5 @@ bool Sigmoid::deploy(std::shared_ptr<Operator> &op) {
   // no params and attrs
   return true;
 }
-LayerRegisterAssistant reg_relu("nn.Sigmoid", Sigmoid::deploy);
+LayerRegisterAssistant reg_sig("F.sigmoid", Sigmoid::deploy);
 } // namespace MINI_MLsys

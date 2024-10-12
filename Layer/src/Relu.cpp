@@ -31,6 +31,6 @@ bool Relu::deploy(std::shared_ptr<Operator> &op) {
   return true;
 }
 
-LayerRegisterAssistant reg_relu("nn.ReLU", Relu::deploy);
+static LayerRegisterAssistant reg_relu("nn.ReLU", Relu::deploy);
 
 } // namespace MINI_MLsys

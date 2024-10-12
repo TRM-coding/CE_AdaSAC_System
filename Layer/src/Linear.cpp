@@ -88,6 +88,6 @@ bool Linear::deploy(std::shared_ptr<Operator> &op) {
 //   return;
 // }
 
-LayerRegisterAssistant reg_relu("nn.Linear", Linear::deploy);
+static LayerRegisterAssistant reg_relu("nn.Linear", Linear::deploy);
 
 } // namespace MINI_MLsys

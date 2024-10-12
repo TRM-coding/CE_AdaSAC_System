@@ -17,7 +17,6 @@ include_directories(${CMAKE_SOURCE_DIR}/3dparty/pnnx/include)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/Tensor)
 add_subdirectory(${CMAKE_SOURCE_DIR}/Attribute)
-
 add_subdirectory(${CMAKE_SOURCE_DIR}/Operand)
 add_subdirectory(${CMAKE_SOURCE_DIR}/Operators)
 add_subdirectory(${CMAKE_SOURCE_DIR}/Layer)
