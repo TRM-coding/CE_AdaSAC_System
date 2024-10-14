@@ -14,11 +14,12 @@ int main(int argc,char* argv[])
 // #include<gtest/gtest.h>
 // #include<Graph.hpp>
 // #include<Layer/sigmoid.hpp>
+
 // int main()
 // {
 //     using namespace MINI_MLsys;
-//     extern LayerRegisterAssistant reg_sig;
-//     std::cout<<reg_sig.type<<std::endl;
+    
+//     // std::cout<<reg_sig.type<<std::endl;
 //     std::string param_pth = "../../model/test_linear.pnnx.param";
 //     std::string bin_pth = "../../model/test_linear.pnnx.bin";
 //     MINI_MLsys::Graph G(param_pth,bin_pth);
@@ -43,3 +44,7 @@ int main(int argc,char* argv[])
 //         std::cout<<oi<<std::endl;
 //     }
 // }
+
+
+
+

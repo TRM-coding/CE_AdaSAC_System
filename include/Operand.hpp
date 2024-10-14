@@ -11,7 +11,7 @@ namespace MINI_MLsys
     {
     public:
         int type;//
-        std::vector<int> shape;//
+        std::vector<uint64_t> shape;//
         std::string name;//
         std::map<std::string, pnnx::Parameter> params;//
         std::vector<std::shared_ptr<Tensor<float>>> data;

@@ -7,7 +7,12 @@ MINI_MLsys::Operand::Operand(pnnx::Operand* pnn_op)
         std::cout<<"<Operand_constructor>::pnn_op is nullptr"<<std::endl;
         throw std::runtime_error("pnn_op is nullptr");
     }
-    this->shape=pnn_op->shape;
+    for(auto x:pnn_op->shape)
+    {
+        long long n = x;
+        this->shape.push_back(n);
+    }
+    // this->shape=pnn_op->shape;
     this->type=pnn_op->type;
     this->name=pnn_op->name;
     this->params=pnn_op->params;

@@ -16,16 +16,13 @@ void Relu::forward(const Operand &input, Operand &output) {
   return;
 }
 
-bool Relu::deploy(std::shared_ptr<Operator> &op) {
+bool Relu::deploy(std::shared_ptr<Operator> op) {
   if (op == nullptr) {
     std::cout << "Relu: Operator is nullptr." << std::endl;
     return false;
   }
   op->layer = std::make_shared<Relu>("Relu");
   op->layer->op_ = op;
-  auto linear = std::dynamic_pointer_cast<Relu>(op->layer);
-  linear->set_bias();
-  linear->set_weight();
   // no params and attrs
 
   return true;

@@ -33,6 +33,7 @@ int MINI_MLsys::Graph::init() {
   }
   if (!this->root)
     this->root = build();
+
   auto init_res = initOperator_param();
   if (init_res == 0) {
     std::cout << "initOperator_param failed" << std::endl;
@@ -241,7 +242,7 @@ bool MINI_MLsys::Graph::initOperator_attr() {
 bool MINI_MLsys::Graph::deploy_layers() {
   auto rg=LayerRegister();
   auto rgs=LayerRegister::get_registry();
-  for (auto &op : this->topo_operators_) {
+  for (auto op : this->topo_operators_) {
     auto type = op->type;
     auto layer_creator_find = LayerRegister::get_registry()->find(type);
     if (layer_creator_find == LayerRegister::get_registry()->end()) {
@@ -277,6 +278,7 @@ std::vector<MINI_MLsys::Tensor<float>> MINI_MLsys::Graph::RUN(const std::vector<
   auto ip=Operand(inputs,name);
   for(auto& op:this->topo_operators_)
   {
+    if(op->type=="pnnx.Input"||op->type=="pnnx.Output")continue;
     auto out=Operand();
     op->forward(ip,out);
     ip=out;

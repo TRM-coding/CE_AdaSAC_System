@@ -14,7 +14,7 @@ void Sigmoid::forward(const Operand &input, Operand &output) {
   return;
 }
 
-bool Sigmoid::deploy(std::shared_ptr<Operator> &op) {
+bool Sigmoid::deploy(std::shared_ptr<Operator> op) {
   if (op == nullptr) {
     std::cout << "Sigmoid: Operator is nullptr." << std::endl;
     return false;
@@ -24,5 +24,7 @@ bool Sigmoid::deploy(std::shared_ptr<Operator> &op) {
   // no params and attrs
   return true;
 }
+
+
 LayerRegisterAssistant reg_sig("F.sigmoid", Sigmoid::deploy);
 } // namespace MINI_MLsys

@@ -30,10 +30,10 @@ public:
 
   std::string get_layer_name() const { return layer_name_; }
 
-  std::shared_ptr<Tensor<float>> weight_;
-  std::shared_ptr<Tensor<float>> bias_;
-  virtual void set_bias();
-  virtual void set_weight();
+  // std::shared_ptr<Tensor<float>> weight_;
+  // std::shared_ptr<Tensor<float>> bias_;
+  // virtual void set_bias();
+  // virtual void set_weight();
 };
 } // namespace MINI_MLsys
   // MINI_ML_LAYER_HPP
