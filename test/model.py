@@ -36,3 +36,11 @@ class MLP(nn.Module):
             x_flat=layer(x_flat)
 
         return x_flat
+
+class Bias(nn.Module):
+    def __init__(self,b):
+        super().__init__()
+        self.bias=nn.Parameter(b)
+    
+    def forward(self,x):
+        return x+self.bias
