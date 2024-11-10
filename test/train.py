@@ -2,7 +2,8 @@ import torch
 from torchvision import datasets,transforms
 from torch.utils.data import DataLoader
 from argparse import Namespace
-from model import MLP
+# from model import MLP
+from model2 import MLP
 from torch import nn
 from dataloader import load_data
 from tqdm import tqdm
