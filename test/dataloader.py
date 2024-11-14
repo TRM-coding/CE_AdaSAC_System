@@ -15,8 +15,12 @@ def load_data(train_batch_size,test_batch_size,device):
         transforms.Normalize((0.5,), (0.5,))
     ])
     print('load data set')
-    train_dataset = datasets.MNIST(root='/home/tianruiming/Eckart-young-based-mlsys/data',train=True,download=False,transform=transform)
-    test_dataset  = datasets.MNIST(root='/home/tianruiming/Eckart-young-based-mlsys/data',train=False,download=False,transform=transform)
+    train_dataset = datasets.EMNIST(root='/home/tianruiming/Eckart-young-based-mlsys/data',train=True,download=False,split='digits',transform=transform)
+    test_dataset  = datasets.EMNIST(root='/home/tianruiming/Eckart-young-based-mlsys/data',train=False,download=False,split='digits',transform=transform)
+
+
+    # train_dataset = datasets.MNIST(root='/home/tianruiming/Eckart-young-based-mlsys/data',train=True,download=False,transform=transform)
+    # test_dataset  = datasets.MNIST(root='/home/tianruiming/Eckart-young-based-mlsys/data',train=False,download=False,transform=transform)
 
     print('create loader')
     train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=False)

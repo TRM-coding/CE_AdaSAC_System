@@ -5,24 +5,8 @@ class MLP(nn.Module):
     def __init__(self):
         super(MLP,self).__init__()
         self.layers=nn.ModuleList([
-            nn.Linear(28*28,1024),
-            nn.LeakyReLU(negative_slope=0.1),
-            nn.Linear(1024,128),
-            # nn.ReLU(),
-            # nn.Linear(1024,512),
-            # nn.ReLU(),
-            # nn.Linear(512,1024),
-            # nn.ReLU(),
-            # nn.Linear(1024,1024),
-            # nn.ReLU(),
-            # nn.Linear(1024,512),
-            # nn.ReLU(),
-            # nn.Linear(512,128),
-            nn.LeakyReLU(negative_slope=0.1),
-            nn.Linear(128,64),
-            nn.LeakyReLU(negative_slope=0.1),
-            nn.Linear(64,32),
-            nn.LeakyReLU(negative_slope=0.1),
+            nn.Linear(28*28,32),
+            nn.ReLU(),
             nn.Linear(32,10)
         ])
         self.init_param()
