@@ -11,9 +11,7 @@ class Bias(nn.Module):
         return x+self.bias
 
 class SVD():
-    def __init__(self,model_path,detection_input,detection_label,device):
-        self.detection_input=detection_input
-        self.detection_label=detection_label
+    def __init__(self,model_path,device):
         self.model=torch.load(model_path)
         self.device=device
 
@@ -32,7 +30,10 @@ class SVD():
                     U=U[:,sort_index]
                     S=S[sort_index]
                     V=V[sort_index,:]
-                r=len(S)*reduce_rate
+                else:
+                    U=U[:,:len(S)]
+                    V=V[:len(S),]
+                r=int(len(S)*reduce_rate)
                 U=U[:,r:]
                 V=V[r:,:]
                 S=torch.diag(S[r:])
@@ -54,7 +55,7 @@ class SVD():
         model.eval()
         model_output=model(inputs)
         loss_function=nn.CrossEntropyLoss()
-        evaled_loss=loss_function(model_output,outputs_label).item()
+        evaled_loss=loss_function(model_output,outputs_label.softmax(dim=1)).item()
         return evaled_loss
 
     def acc_evaluation(self,model,inputs,labels):
