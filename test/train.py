@@ -5,7 +5,7 @@ from argparse import Namespace
 # from model import MLP
 from ..model.model2 import MLP
 from torch import nn
-from dataloader import load_data
+from model.dataloader import load_data
 from tqdm import tqdm
 param=Namespace(
     batch_size    = 60000,

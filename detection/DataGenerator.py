@@ -9,7 +9,7 @@ class train_based_self_detection():
             epoch=epoch
         )
         self.model_path=model_path
-        self.model=torch.load(model_path)
+        self.model=torch.jit.load(model_path)
         self.device=device
         self.model.to(device)
         self.model.eval()

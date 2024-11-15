@@ -9,19 +9,58 @@ class Bias(nn.Module):
     
     def forward(self,x):
         return x+self.bias
+    
+class NewModel(nn.Module):
+    def __init__(self):
+        super(NewModel,self).__init__()
+        self.layer_list=[]
+    def create_module_from_name(module_name, *args, **kwargs):
+  
+        if hasattr(nn, module_name):
+            module_class = getattr(nn, module_name)
+            return module_class(*args, **kwargs)
+        
+        else:
+            raise ValueError(f"No such module: {module_name}")
+    
+    def forward(self,x):
+        output=copy.deepcopy(x)
+        output=output.view(-1,28*28)
+        for layer in self.layer_list:
+            output=layer.forward(output)
+        return output
+
+class model_transfer():
+    def __init__(self):
+        self.transfer_res=[]
+        return    
+    def jit_transfer(self,jit_model):
+        x=0
+        for i in jit_model.named_children():
+            x=x+1
+        if(x==0):
+            self.transfer_res.append(jit_model)
+        for name,child in jit_model.named_children():
+            self.jit_transfer(child)
+
 
 class SVD():
     def __init__(self,model_path,device):
-        self.model=torch.load(model_path)
+        self.model=torch.jit.load(model_path)
+        self.MT=model_transfer()
+        self.MT.jit_transfer(self.model)
+        self.model_list=self.MT.transfer_res
         self.device=device
 
     def based_on_reduce_rate(self,reduce_rate=0,reduce_bound_of_layer=1,sorted=True):
-        model=copy.deepcopy(self.model)
-        
-        for k , layer in enumerate(model.layers):
-            if(k>reduce_bound_of_layer):
-                break
-            if(isinstance(layer,torch.nn.Linear)):
+        SVD_model=NewModel()
+        cnt=0
+        for k , layer in enumerate(self.model_list):
+            if(cnt>reduce_bound_of_layer):
+                SVD_model.layer_list.append(layer)
+                continue
+            if(layer.original_name=='Linear'):
+                cnt=cnt+1
                 w=layer.weight
                 b=layer.bias
                 U,S,V=torch.linalg.svd(w.t())
@@ -45,11 +84,16 @@ class SVD():
                 newlinear2.weight=nn.Parameter(S.t())
                 newlinear3.weight=nn.Parameter(V.t())
                 newbias=Bias(b).to(self.device)
+                SVD_model.layer_list.append(newlinear1)
+                SVD_model.layer_list.append(newlinear2)
+                SVD_model.layer_list.append(newlinear3)
+                # svded=nn.Sequential(newlinear1,newlinear2,newlinear3,newbias)
+                # model.layers[k]=svded
 
-                svded=nn.Sequential(newlinear1,newlinear2,newlinear3,newbias)
-                model.layers[k]=svded
+            else:
+                SVD_model.layer_list.append(layer)
 
-        return model
+        return SVD_model
     
     def loss_evaluation(self,model,inputs,outputs_label):
         model.eval()
