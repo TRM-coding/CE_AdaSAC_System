@@ -23,8 +23,8 @@ def load_data(train_batch_size,test_batch_size,device):
     # test_dataset  = datasets.MNIST(root='/home/tianruiming/Eckart-young-based-mlsys/data',train=False,download=False,transform=transform)
 
     print('create loader')
-    train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=False)
-    test_loader  = DataLoader(test_dataset, batch_size=test_batch_size, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=False,num_workers=20)
+    test_loader  = DataLoader(test_dataset, batch_size=test_batch_size, shuffle=False,num_workers=20)
     
 
 

@@ -1,6 +1,7 @@
 from argparse import Namespace
 import torch
 from torch import nn
+# from . import model3
 
 class train_based_self_detection():
     def __init__(self,model_path,learning_rate,epoch,device):
@@ -9,7 +10,7 @@ class train_based_self_detection():
             epoch=epoch
         )
         self.model_path=model_path
-        self.model=torch.jit.load(model_path)
+        self.model=torch.load(model_path)
         self.device=device
         self.model.to(device)
         self.model.eval()

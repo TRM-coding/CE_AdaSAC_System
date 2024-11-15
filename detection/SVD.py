@@ -13,7 +13,7 @@ class Bias(nn.Module):
 class NewModel(nn.Module):
     def __init__(self):
         super(NewModel,self).__init__()
-        self.layer_list=[]
+        self.layer_list=nn.ModuleList([])
     def create_module_from_name(module_name, *args, **kwargs):
   
         if hasattr(nn, module_name):
@@ -46,20 +46,21 @@ class model_transfer():
 
 class SVD():
     def __init__(self,model_path,device):
-        self.model=torch.jit.load(model_path)
-        self.MT=model_transfer()
-        self.MT.jit_transfer(self.model)
-        self.model_list=self.MT.transfer_res
+        # self.model=torch.jit.load(model_path)
+        # self.MT=model_transfer()
+        # self.MT.jit_transfer(self.model)
+        # self.model_list=self.MT.transfer_res
+        self.model=torch.load(model_path)
         self.device=device
 
     def based_on_reduce_rate(self,reduce_rate=0,reduce_bound_of_layer=1,sorted=True):
-        SVD_model=NewModel()
+        SVD_model=copy.deepcopy(self.model)
         cnt=0
-        for k , layer in enumerate(self.model_list):
+        for k,layer in enumerate(SVD_model.layers):
             if(cnt>reduce_bound_of_layer):
-                SVD_model.layer_list.append(layer)
+                # SVD_model.layer_list.append(layer)
                 continue
-            if(layer.original_name=='Linear'):
+            if(isinstance(layer,nn.Linear)):
                 cnt=cnt+1
                 w=layer.weight
                 b=layer.bias
@@ -84,15 +85,15 @@ class SVD():
                 newlinear2.weight=nn.Parameter(S.t())
                 newlinear3.weight=nn.Parameter(V.t())
                 newbias=Bias(b).to(self.device)
-                SVD_model.layer_list.append(newlinear1)
-                SVD_model.layer_list.append(newlinear2)
-                SVD_model.layer_list.append(newlinear3)
-                # svded=nn.Sequential(newlinear1,newlinear2,newlinear3,newbias)
-                # model.layers[k]=svded
+                # SVD_model.layer_list.append(newlinear1)
+                # SVD_model.layer_list.append(newlinear2)
+                # SVD_model.layer_list.append(newlinear3)
+                svded=nn.Sequential(newlinear1,newlinear2,newlinear3,newbias)
+                # jis_svded=torch.jit.script(svded)
+                SVD_model.layers[k]=svded
+                # setattr(layer,"Linear",jis_svded)
 
-            else:
-                SVD_model.layer_list.append(layer)
-
+        
         return SVD_model
     
     def loss_evaluation(self,model,inputs,outputs_label):
