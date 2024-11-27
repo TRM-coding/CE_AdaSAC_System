@@ -1,4 +1,4 @@
-from mymodel_file.alex import AlexNet
+from detection.Loader.mymodel_file.Alexnet import AlexNet
 from torchvision import models
 import torch
 class AlexnetLoader:

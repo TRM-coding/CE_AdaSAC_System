@@ -90,8 +90,8 @@ class SVDED_Conv(nn.Module):
 
         output_permute=output3.permute(0,2,1)
 
-        output_H=int((x.shape[2]+2*self.conv_layer.padding[0]-self.conv_layer.kernel_size[0])/self.conv_layer.stride[0]+1)
-        output_W=int((x.shape[3]+2*self.conv_layer.padding[1]-self.conv_layer.kernel_size[1])/self.conv_layer.stride[1]+1)
+        output_H=(x.shape[2]+2*self.conv_layer.padding[0]-self.conv_layer.kernel_size[0])//self.conv_layer.stride[0]+1
+        output_W=(x.shape[3]+2*self.conv_layer.padding[1]-self.conv_layer.kernel_size[1])//self.conv_layer.stride[1]+1
         output_res=output_permute.view(output_permute.shape[0],output_permute.shape[1],output_H,output_W)
         return output_res
 
