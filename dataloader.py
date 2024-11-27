@@ -1,0 +1,56 @@
+from torchvision import datasets,transforms
+from torch.utils.data import DataLoader,TensorDataset
+from PIL import Image
+import numpy as np
+import torch
+from tqdm import tqdm
+
+# transform = transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.5,),(0.5))])
+
+
+
+def load_data(train_batch_size,test_batch_size,device): 
+    transform = transforms.Compose([
+        # transforms.Resize((224,224)),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,),(0.5))
+    ])
+    print('load data set')
+    # train_dataset = datasets.EMNIST(root='/home/tianruiming/Eckart-Young-based-ML-Inference-framework/data',train=True,download=False,split='digits',transform=transform)
+    # test_dataset  = datasets.EMNIST(root='/home/tianruiming/Eckart-Young-based-ML-Inference-framework/data',train=False,download=False,split='digits',transform=transform)
+    train_dataset = datasets.CIFAR100(root='/home/tianruiming/Eckart-Young-based-ML-Inference-framework/data',train=True,download=False,transform=transform)
+    test_dataset = datasets.CIFAR100(root='/home/tianruiming/Eckart-Young-based-ML-Inference-framework/data',train=False,download=False,transform=transform)
+
+    # train_dataset = datasets.MNIST(root='/home/tianruiming/Eckart-young-based-mlsys/data',train=True,download=False,transform=transform)
+    # test_dataset  = datasets.MNIST(root='/home/tianruiming/Eckart-young-based-mlsys/data',train=False,download=False,transform=transform)
+
+    print('create loader')
+    train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=False,num_workers=20)
+    test_loader  = DataLoader(test_dataset, batch_size=test_batch_size, shuffle=False,num_workers=20)
+    
+
+
+    train_input = []
+    train_lable = []
+    test_input  = []
+    test_lable  = []
+
+    print('construct data')
+    for images,labels in tqdm(train_loader):
+        train_input.append
+        train_lable.append
+
+    for images,labels in tqdm(test_loader):
+        test_input.append(images.to(device))
+        test_lable.append(labels.to(device))
+    
+    return train_input,train_lable,test_input,test_lable
+
+    
+
+
+        
+    
+
+        
+    
