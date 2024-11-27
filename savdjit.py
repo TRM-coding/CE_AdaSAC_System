@@ -19,11 +19,11 @@ example=torch.rand(1,3,32,32).to('cpu')
 
 
 traced_script_module = torch.jit.trace(edge_A, example)
-traced_script_module_optimized = optimize_for_mobile(traced_script_module)
-traced_script_module_optimized._save_for_lite_interpreter("./p_model/edge_A.ptl")
+#traced_script_module_optimized = optimize_for_mobile(traced_script_module)
+traced_script_module._save_for_lite_interpreter("./p_model/edge_A.ptl")
 
 example=cloud(edge_A(example))
 
 traced_script_module = torch.jit.trace(edge_B, example)
-traced_script_module_optimized = optimize_for_mobile(traced_script_module)
-traced_script_module_optimized._save_for_lite_interpreter("./p_model/edge_B.ptl")
+#traced_script_module_optimized = optimize_for_mobile(traced_script_module)
+traced_script_module._save_for_lite_interpreter("./p_model/edge_B.ptl")

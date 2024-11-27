@@ -3,8 +3,8 @@ import numpy as np
 # import SVD
 import gc
 # from detection.SVD import SVD
-from detection.Model_transfer import Model_transfer
-from detection.SVD_model import SVDED_Conv,SVDED_Linear
+from .Model_transfer import Model_transfer
+from .SVD_model import SVDED_Conv,SVDED_Linear
 import copy
 from torch import nn
 
@@ -14,15 +14,21 @@ from tqdm import tqdm
 import sys
 import time
 
+from .Loader.mymodel_file.MobileNetv3 import *
+from .Loader.mymodel_file.Alexnet import *
+from .Loader.mymodel_file.Resnet50 import *
+from .Loader.mymodel_file.VGG16Net import *
+
 
 
 
 class Recrusively_reduce_search:
-    def __init__(self,model,model_path,input_data,output_label,label,
+    def __init__(self,model,input_data,output_label,label,
                  highest_loss,lowest_loss,network_speed,device,
-                 local_speed,cloud_speed,acc_cut_point):
+                 local_speed,cloud_speed,acc_cut_point,no_weight=True,model_path=None):
         self.model=model.to(device)
-        self.model.load_state_dict(torch.load(model_path))
+        if(not no_weight):
+            self.model.load_state_dict(torch.load(model_path))
         self.used_for_search=copy.deepcopy(self.model)
         self.device=device
         self.svder=Model_transfer(model,model_path,device)
@@ -77,27 +83,42 @@ class Recrusively_reduce_search:
             x=self.input_data
             sys.stdout=f
             for name,layer in tqdm(self.model.named_children()):
-                if(not (isinstance(layer,nn.Linear) or isinstance(layer,nn.Conv2d)) or isinstance(layer,nn.Sequential)):
+                if(not (isinstance(layer,nn.Linear) or 
+                        isinstance(layer,nn.Conv2d) or 
+                        isinstance(layer,Conv2dNormActivation)or
+                        isinstance(layer,SqueezeExcitation)or
+                        isinstance(layer,MyBot)
+                    )
+                ):
                     flops,_=profile(layer,inputs=(x,))
                     setattr(layer,'flops',flops)
                     x=layer(x)
                     net_Bytes=x.numel()*x.element_size()
                     setattr(layer,'netBytes',net_Bytes)
                     continue
-                if(isinstance(layer,nn.Sequential)):
+                if(
+                    isinstance(layer,Conv2dNormActivation) or 
+                    isinstance(layer,SqueezeExcitation) or
+                    isinstance(layer,MyBot)
+                ):
+                    ip=x
+                    output=layer(x)
+                    net_Bytes=output.numel()*output.element_size()
+                    setattr(layer,'netBytes',net_Bytes)
                     for name_c,layer_c in tqdm(layer.named_children()):
+                        if(not(isinstance(layer_c,nn.Conv2d) or isinstance(layer_c,nn.Linear))):
+                            continue
                         self.svded_layers.append([])
                         self.is_child[len(self.svded_layers)-1]=name
-                        output=layer_c(x)
-                        net_Bytes=output.numel()*output.element_size()
-                        setattr(layer_c,'netBytes',net_Bytes)
                         for reduce_rate in np.arange(0,1,reduce_step):
                             c_svd=self.svder.layer_svd(layer_c,reduce_rate)
                             self.svded_layers[-1].append((name_c,c_svd))
-                            flops,_=profile(c_svd,inputs=(x,))
+                            flops,_=profile(c_svd,inputs=(x if (isinstance(c_svd,SVDED_Conv) and c_svd.conv_layer.in_channels==x.shape[1]) else ip,))
                             setattr(c_svd,'flops',flops)
-                            setattr(c_svd,'netBytes',net_Bytes)
-                        x=output
+                            # setattr(c_svd,'netBytes',net_Bytes)
+                        x=layer_c(x if (isinstance(c_svd,SVDED_Conv) and c_svd.conv_layer.in_channels==x.shape[1]) else ip)
+                    
+                    x=output
                         
                 else:
                     self.svded_layers.append([])
@@ -287,7 +308,11 @@ class Recrusively_reduce_search:
         Tot=split_scheme_list
         i=0    
         while(i<Tot):
-            if(not (isinstance(model_list[i],SVDED_Conv) or isinstance(model_list[i],SVDED_Linear) or isinstance(model_list[i],nn.Sequential))):
+            if(not (isinstance(model_list[i],SVDED_Conv) or 
+                    isinstance(model_list[i],SVDED_Linear) or 
+                    isinstance(model_list[i],SqueezeExcitation) or
+                    isinstance(model_list[i],Conv2dNormActivation)or
+                    isinstance(model_list[i],MyBot))):
                 Tot=Tot+1
             edge_model_A.model_list.append(model_list[i])
             i=i+1

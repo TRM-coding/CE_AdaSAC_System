@@ -4,9 +4,10 @@ import copy
 from torch import nn
 
 class Model_transfer():
-    def __init__(self,model,model_path,device):
+    def __init__(self,model,model_path,device,no_wight=True):
         self.model=model.to(device)
-        self.model.load_state_dict(torch.load(model_path))
+        if(not no_wight):
+            self.model.load_state_dict(torch.load(model_path))
         # self.model=torch.load(model_path)
         self.device=device
         return

@@ -40,6 +40,8 @@ class SVDED_Linear(nn.Module):
         V=V[sort_index,:]
 
         r=int(len(S)*self.reduce_rate)
+        if(r<=0):
+            r=len(S)
         U=U[:,r:]
         V=V[r:,:]
         S=torch.diag(S[r:])

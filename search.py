@@ -4,25 +4,46 @@ device='cuda:5'
 from detection.DataGenerator import train_based_self_detection
 from alex import AlexNet
 from detection.Loader.mymodel_file.VGG16Net import VGG16
+from detection.Loader.ResNet50Loader import Resnet50Loader
+from detection.Loader.AlexnetLoader import AlexnetLoader
+model_ld=Resnet50Loader()
+model=model_ld.pre_trained
 
-model=VGG16()
+print(model)
+# input()
 
 maker=train_based_self_detection(
     model_path=model_path,
     device=device,
-    model=model
+    model=model,
+    no_weight=True
 )
+# input_data,output_label,label,highest_loss,lowest_loss= maker.make_data_less_than_acc(
+#     batch_size=50,
+#     learning_rate=1,
+#     channel=3,
+#     dim1=224,
+#     dim2=224,
+#     output_size=1000,
+#     randn_magnification=100,
+#     confidence=1000000,
+#     target_acc=0.7
+
+# )
+
+# print(input_data.shape)
+
 input_data,output_label,label,highest_loss,lowest_loss= maker.make_data_pid(
-    batch_size=50,
+    batch_size=64,
     learning_rate=1,
     channel=3,
-    dim1=32,
-    dim2=32,
-    output_size=100,
-    randn_magnification=10,
-    confidence=1000
-)
+    dim1=224,
+    dim2=224,
+    output_size=1000,
+    randn_magnification=100,
+    confidence=1000000,
 
+)
 
 import torch
 from torchvision import datasets,transforms
@@ -44,12 +65,11 @@ plt.savefig('./tables/pic2.png')
 import detection.Model_transfer
 import detection.Spliter
 import importlib
-importlib.reload(detection.Spliter)
-importlib.reload(detection.Model_transfer)
 import torch
 
 searcher=detection.Spliter.Recrusively_reduce_search(
     model=model,
+    no_weight=True,
     model_path=model_path,
     input_data=input_data,
     output_label=output_label,

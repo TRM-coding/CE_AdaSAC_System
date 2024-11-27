@@ -17,14 +17,16 @@ class MyBot(nn.Module):
 
     def forward(self,x):
         ip=x
-        x=self.bn1(self.conv1(x))
-        x=self.bn2(self.conv2(x))
-        x=self.bn3(self.conv3(x))
+        
+        out=self.bn1(self.conv1(x))
+        out=self.bn2(self.conv2(out))
+        out=self.bn3(self.conv3(out))
+        
         if(self.downsample):
-            ip=self.bn4(self.conv4(ip))
-        x=x+ip
-        x=self.relu(x)
-        return x
+            ip=self.bn4(self.conv4(x))
+        out=out+ip
+        out=self.relu(out)
+        return out
     
 
 class Resnet50(nn.Module):
@@ -185,8 +187,9 @@ class Resnet50(nn.Module):
             nn.Conv2d(512, 2048, kernel_size=(1, 1), stride=(1, 1), bias=False),
             nn.BatchNorm2d(2048, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
         ],False)
-
+        
         self.avgpool=nn.AdaptiveAvgPool2d(output_size=(1, 1))
+        self.flatten=nn.Flatten()
         self.linear= nn.Linear(in_features=2048, out_features=1000, bias=True)
         # nn.Unfold()
 
@@ -209,6 +212,8 @@ class Resnet50(nn.Module):
         x=self.bt14(x)
         x=self.bt15(x)
         x=self.bt16(x)
+        
         x=self.avgpool(x)
+        x=self.flatten(x)
         x=self.linear(x)
         return x
