@@ -55,6 +55,7 @@ class VGG16(nn.Module):
         self.relu5_3 = nn.ReLU(inplace=True)
         self.pool5 = nn.MaxPool2d(kernel_size=2, stride=2)
 
+        self.avgpool=nn.AdaptiveAvgPool2d(output_size=(7,7))
         self.flatten = nn.Flatten()
 
         self.fc1 = nn.Linear(512 * 1 * 1, 4096)
@@ -90,6 +91,7 @@ class VGG16(nn.Module):
         x = self.relu5_3(self.bn5_3(self.conv5_3(x)))
         x = self.pool5(x)
 
+        x=self.avgpool(x)
         x = self.flatten(x)
 
         x = self.dropout1(self.relu_fc1(self.fc1(x)))

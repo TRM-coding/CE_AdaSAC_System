@@ -7,19 +7,18 @@ from torch.optim import Optimizer
 # from . import model3
 
 class train_based_self_detection():
-    def __init__(self,model_path,model,device,no_weight=True):
+    def __init__(self,model,device,no_weight=True):
         # self.Param=Namespace(
         #     lr=learning_rate,
         #     epoch=epoch
         # )
-        self.model_path=model_path
+        
         self.model=model
         self.device=device
         self.model.to(device)
         self.model.eval()
         self.loss_list=[]
-        if(not no_weight):
-            self.model.load_state_dict(torch.load(model_path))
+        
     
     def make_data(self,batch_size,epochs,learning_rate,channel,dim1,dim2,output_size,randn_magnification,confidence):
         data=torch.randn(batch_size,channel,dim1,dim2,requires_grad=True).to(self.device)
@@ -60,7 +59,7 @@ class train_based_self_detection():
         def __init__(self, optimizer: Optimizer, last_epoch: int = -1, warm_epoch=10,verbose: bool = False):
             self.last_loss = 0
             self.loss = 0
-            self.warm_param=1e-3/int(warm_epoch)
+            self.warm_param=1/int(warm_epoch)
             self.warm_epoch=warm_epoch
             self.current_lr=0
             super().__init__(optimizer, last_epoch, verbose)
@@ -71,7 +70,7 @@ class train_based_self_detection():
 
             # //print("current_lr",self.current_lr)
             # //print("loss_des:",abs(self.last_loss-self.loss) if abs(self.last_loss-self.loss)<1 else 1/abs(self.last_loss-self.loss))
-            print("lr_update:",min(self.current_lr,self.base_lrs[0]* abs(self.last_loss-self.loss) if abs(self.last_loss-self.loss)<1 else 1/abs(self.last_loss-self.loss)))
+            # print("lr_update:",min(self.current_lr,self.base_lrs[0]* abs(self.last_loss-self.loss) if abs(self.last_loss-self.loss)<1 else 1/abs(self.last_loss-self.loss)))
             # //self.current_lr=min(self.current_lr,self.base_lrs[0]* abs(self.last_loss-self.loss) if abs(self.last_loss-self.loss)<1 else 1/abs(self.last_loss-self.loss))
             return [min(self.current_lr,base_lr* abs(self.last_loss-self.loss) if abs(self.last_loss-self.loss)<1 else 1/abs(self.last_loss-self.loss))  for base_lr in self.base_lrs]
             
@@ -87,39 +86,67 @@ class train_based_self_detection():
                 self.loss=loss
             super().step(epoch)
 
-    def make_data_pid(self,batch_size,learning_rate,channel,dim1,dim2,output_size,randn_magnification,confidence):
-        data=torch.rand(batch_size,channel,dim1,dim2,requires_grad=True).to(self.device)
-        output_lable=(torch.rand(batch_size,output_size)*randn_magnification).to(self.device)
+    def make_data_pid(self,total_number,batch_size,learning_rate,channel,dim1,dim2,output_size,randn_magnification,confidence,target_acc=1):
+        data=torch.rand(total_number,channel,dim1,dim2,requires_grad=True)
+        output_lable=(torch.rand(total_number,output_size)*randn_magnification)
         max_index=output_lable.argmax(dim=1)
         lable=max_index
-        output_lable[torch.arange(batch_size),max_index]=confidence
+        output_lable[torch.arange(total_number),max_index]=confidence
         
         data=data.clone().detach().requires_grad_(True)
+
+        ipx=0
+        input_loader=[]
+        output_loader=[]
+        label_loader=[]
+        while(ipx<total_number):
+            input_loader.append(data[ipx:ipx+batch_size])
+            output_loader.append(output_lable[ipx:ipx+batch_size])
+            label_loader.append(lable[ipx:ipx+batch_size])
+            ipx+=batch_size
+
         loss_function=nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam([data], lr=learning_rate)
         scheduler = self.CustomLRScheduler(optimizer)
+        scheduler.warm_epoch=total_number/batch_size
 
         loss_list=[]
         last_loss=0
         # for epoch in tqdm(range(self.Param.epoch)):
         epoch=0
         while(1):
-            optimizer.zero_grad()
-            output=self.model(data)
-            loss=loss_function(output,output_lable.softmax(dim=1))
-            loss.backward()
-            scheduler.step(epoch,last_loss,loss.item())
-            optimizer.step()
-            
-            current_lr = optimizer.param_groups[0]['lr']
-            # //print("current_lr:",current_lr)
-            # //print()
-            if(last_loss==loss.item() and epoch!=0):
+            flag=0
+            acc=0
+            for idx,batchi in enumerate(input_loader):
+                batchii=batchi.to(self.device)
+                output_i=output_loader[idx].to(self.device)
+                label_i=label_loader[idx].to(self.device)
+
+                optimizer.zero_grad()
+                output=self.model(batchii)
+                max_index=output.argmax(dim=1)
+                loss=loss_function(output,output_i.softmax(dim=1))
+                loss.backward()
+                scheduler.step(epoch,last_loss,loss.item())  
+                optimizer.step()
+                
+                if(last_loss==loss.item() and epoch!=0):
+                    break
+                last_loss=loss.item()
+                loss_list.append(loss.item())
+
+                acc+=(max_index==label_i).sum().item()
+            acc=acc/lable.shape[0]
+            print("acc:",acc/len(input_loader))
+            print("loss:",loss.item()/len(input_loader))
+            if(acc>target_acc):
+                flag=1
                 break
-            last_loss=loss.item()
-            loss_list.append(loss.item())
+              
+
+            
             epoch+=1
-            if(epoch>=100):
+            if(flag):
                 break
             # if(current_lr<1e-5):
             #     break
@@ -129,37 +156,58 @@ class train_based_self_detection():
 
         return data,output_lable,lable,self.loss_list[0],self.loss_list[-1]
     
-    def make_data_less_than_acc(self,batch_size,learning_rate,channel,dim1,dim2,output_size,randn_magnification,confidence,target_acc):
-        data=torch.randn(batch_size,channel,dim1,dim2,requires_grad=True).to(self.device)
-        output_lable=(torch.randn(batch_size,output_size)*randn_magnification).to(self.device)
+    def make_data_less_than_acc(self,total_number,batch_size,learning_rate,channel,dim1,dim2,output_size,randn_magnification,confidence,target_acc):
+        data=torch.randn(total_number,channel,dim1,dim2,requires_grad=True)
+        output_lable=(torch.randn(total_number,output_size)*randn_magnification)
         max_index=output_lable.argmax(dim=1)
         lable=max_index
-        output_lable[torch.arange(batch_size),max_index]=confidence
+        output_lable[torch.arange(total_number),max_index]=confidence
+        
         
         data=data.clone().detach().requires_grad_(True)
         loss_function=nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam([data], lr=learning_rate)
         # scheduler = self.CustomLRScheduler(optimizer)
 
+        ipx=0
+        input_loader=[]
+        output_loader=[]
+        label_loader=[]
+        while(ipx<total_number):
+            input_loader.append(data[ipx:ipx+batch_size])
+            output_loader.append(output_lable[ipx:ipx+batch_size])
+            label_loader.append(lable[ipx:ipx+batch_size])
+            ipx+=batch_size
+
         loss_list=[]
         last_loss=0
         # for epoch in tqdm(range(self.Param.epoch)):
         epoch=0
         while(1):
-            optimizer.zero_grad()
-            output=self.model(data)
-            loss=loss_function(output,output_lable.softmax(dim=1))
-            loss.backward()
-            optimizer.step()
+            flag=0
+            for idx,batchi in enumerate(input_loader):
+                batchii=batchi.to(self.device)
+                output_i=output_loader[idx].to(self.device)
+                label_i=label_loader[idx].to(self.device)
 
-            loss_list.append(loss.item())
-            epoch+=1
-            max_index=output.argmax(dim=1)
-            acc=(max_index==lable).sum().item()/lable.shape[0]
-            if(acc>target_acc):
+                optimizer.zero_grad()
+                output=self.model(batchii)
+                max_index=output.argmax(dim=1)
+                loss=loss_function(output,output_i.softmax(dim=1))
+                loss.backward()
+                optimizer.step()
+
+                loss_list.append(loss.item())
+                epoch+=1
+                max_index=output.argmax(dim=1)
+                acc=(max_index==label_i).sum().item()/label_i.shape[0]
+                if(acc>target_acc):
+                    flag=1
+                    break
+                print("acc:",acc)
+                print("loss:",loss.item())
+            if(flag):
                 break
-            print("acc:",acc)
-            print("loss:",loss.item()/batch_size)
 
             
         self.loss_list=loss_list

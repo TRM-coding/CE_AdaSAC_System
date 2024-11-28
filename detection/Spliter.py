@@ -18,6 +18,20 @@ from .Loader.mymodel_file.MobileNetv3 import *
 from .Loader.mymodel_file.Alexnet import *
 from .Loader.mymodel_file.Resnet50 import *
 from .Loader.mymodel_file.VGG16Net import *
+# import multiprocessing as mp
+import torch.multiprocessing as mp
+import multiprocessing
+
+import concurrent.futures
+import functools
+
+import random
+import threading
+import queue
+
+from splited_model import Splited_Model
+
+from multiprocessing import Process, Queue,Manager
 
 
 
@@ -31,7 +45,7 @@ class Recrusively_reduce_search:
             self.model.load_state_dict(torch.load(model_path))
         self.used_for_search=copy.deepcopy(self.model)
         self.device=device
-        self.svder=Model_transfer(model,model_path,device)
+        self.svder=Model_transfer(model,device)
         self.input_data=input_data.to(device)
         self.output_label=output_label.to(device)
         self.label=label.to(device)
@@ -59,8 +73,24 @@ class Recrusively_reduce_search:
         self.inference_time=0
         self.flops_time=0
         self.acc_cut_point=acc_cut_point
+        self.init_size=50
+        self.GA_show=[]
         # self.flops_map={}
+        self.GA_worker_results=[]
+        # self.q=q
         return
+    
+    def acc_loss_evaluate(self,optimized_model):
+        # start_time=time.time()
+        output=optimized_model(self.input_data)
+        max_index=output.argmax(dim=1)
+        acc=(max_index==self.label).sum().item()/self.label.shape[0]
+        
+        loss_function=torch.nn.CrossEntropyLoss()
+        loss=loss_function(output,self.output_label.softmax(dim=1))
+        # end_time=time.time()
+        # self.inference_time+=end_time-start_time
+        return acc,loss.item()
     
     def init(self,reduce_step):
         x=self.input_data
@@ -147,32 +177,18 @@ class Recrusively_reduce_search:
 
 
     def acc_loss_evaluate(self,optimized_model):
+        with torch.no_grad():
         # start_time=time.time()
-        output=optimized_model(self.input_data)
-        max_index=output.argmax(dim=1)
-        acc=(max_index==self.label).sum().item()/self.label.shape[0]
-        
-        loss_function=torch.nn.CrossEntropyLoss()
-        loss=loss_function(output,self.output_label.softmax(dim=1))
-        # end_time=time.time()
-        # self.inference_time+=end_time-start_time
+            output=optimized_model(self.input_data)
+            max_index=output.argmax(dim=1)
+            acc=(max_index==self.label).sum().item()/self.label.shape[0]
+            
+            loss_function=torch.nn.CrossEntropyLoss()
+            loss=loss_function(output,self.output_label.softmax(dim=1))
+            # end_time=time.time()
+            # self.inference_time+=end_time-start_time
         return acc,loss.item()
 
-
-    # def acc_evaluate(self,optimized_model):
-    #     # test_input=self.input_data.to(self.device)
-    #     # test_label=self.label.to(self.device)
-    #     output=optimized_model(self.input_data)
-    #     max_index=output.argmax(dim=1)
-    #     acc=(max_index==self.label).sum().item()/self.label.shape[0]
-    #     return acc
-    
-    # def loss_evaluate(self,optimized_model):
-        
-    #     output=optimized_model(self.input_data)
-    #     loss_function=torch.nn.CrossEntropyLoss()
-    #     loss=loss_function(output,self.output_label.softmax(dim=1))
-    #     return loss.item()
     
     def flops_evaluate(self,model_edge_A,model_cloud,model_edge_B):
         
@@ -199,17 +215,11 @@ class Recrusively_reduce_search:
         return flops_local/self.local_speed+flops_cloud/self.cloud_speed
     
     def network_evaluate(self,model_edge_A):
-        # data_number=0
-        # test_input=self.input_data
-
-        # edge_A_output=model_edge_A(test_input)
-        # data_number=edge_A_output.numel()*edge_A_output.element_size()
-        # return data_number/self.network_speed
         return model_edge_A.model_list[-1].netBytes/self.network_speed
         
     
     def Total_F(self,model,alpha,model_edge_A,model_cloud,model_edge_B):
-        
+        model.eval()
         acc,loss=self.acc_loss_evaluate(model)
         normaled_loss=(loss-self.lowest_loss)/(self.highest_loss-self.lowest_loss)
 
@@ -227,7 +237,190 @@ class Recrusively_reduce_search:
         self.F_latency.append(np.exp(1-normaled_time))
         self.F_list.append(F)
         return F,compute_latency+network,loss,acc
+    
+
+    def taski(self,tasks,q):
+        torch.cuda.empty_cache()
+        print("子进程任务量:",len(tasks))
+        F_score_list=[0 for _ in tasks]
+        schemes=[]
+        for idx,ti in enumerate(tasks):
+            speciesi,alpha=ti
+            schemes.append(speciesi)
+            model,layer_map=self.model_reduce(speciesi)
+            eA,c,eB=self.split(model,len(layer_map))
+            F_i,latency,loss,acc=self.Total_F(model,alpha,eA,c,eB)
+            F_score_list[idx]=F_i
+            torch.cuda.empty_cache()
         
+        q.put(
+            (
+                copy.deepcopy(schemes),
+                copy.deepcopy(F_score_list),
+                (
+                    latency,
+                    loss,
+                    acc,
+                )
+            )
+        )
+        torch.cuda.empty_cache()
+        
+    
+    def search_GA(self,number_of_layer_to_reduce,alpha,step=0.1):
+        upper_bound=self.GA_init(number_of_layer_to_reduce,step)
+        init_species=[]
+        for i in range(self.init_size):
+            listi=[random.randint(0,upper_bound[j]) for j,_ in enumerate(range(number_of_layer_to_reduce))]
+            init_species.append(listi)
+        lass_F=0
+        generate_epoch=5
+        # F_score_list=[0 for _ in range(len(init_species))]
+        scnt=0
+        numworker=7
+        pool = multiprocessing.Pool(processes=numworker)
+        manager=Manager()
+        q=manager.Queue()
+        while(generate_epoch):
+            F_score_list=[]
+            st=time.time()
+            results = []
+            threads=[]
+            task_list=[]
+            # partial_task = functools.partial(self.taski)
+            for idx,speciesi in enumerate(init_species):
+                task_list.append((speciesi,alpha))
+            
+            i=0
+            torch.cuda.empty_cache()
+            
+        # 将任务分配给进程池中的进程
+            print("开始分配进程,总任务量:",len(task_list))
+            pool.starmap(self.taski, [ 
+                (task_list[i:min(len(task_list), i + len(task_list) // numworker)],q) 
+                                  for i in range(0, len(init_species), len(init_species) // numworker)])
+            
+            
+            print("All tasks are completed.")
+            ed=time.time()
+            print("time:",ed-st)
+            # with mp.Pool(processes=3) as pool:
+            #     results = list(pool.starmap(self.taski, task_list))
+            F_score_list.clear()
+            init_species.clear()
+            while not q.empty():
+                results.append(q.get())
+            for ki in results:
+                schemes = ki[0]
+                init_species+=schemes
+                f_list=ki[1]
+                F_score_list+=f_list
+                f_i=max(f_list)
+                max_idx=f_list.index(f_i)
+                latency,loss,acc=ki[2]
+                # TODO:splited_after_finished
+
+                if(f_i>lass_F):
+                    self.best_scheme=schemes[max_idx]
+                    # self.best_partition.clear()
+                    # self.best_partition.append(eA)
+                    # self.best_partition.append(c)
+                    # self.best_partition.append(eB)
+                    self.best_acc=acc
+                    self.best_loss=loss
+                    self.best_latency=latency
+                    lass_F=f_i    
+                    print("a new one")
+            
+            
+
+            cb=list(zip(init_species,F_score_list))
+            cbsorted=sorted(cb,key=lambda x:x[1],reverse=True)
+            cbsorted=cbsorted[:self.init_size]
+            init_species=[x[0] for x in cbsorted]
+            F_score_list=[x[1] for x in cbsorted]
+
+            sums=sum(F_score_list)
+            for i,_ in enumerate(F_score_list):
+                F_score_list[i]/=sums
+            F_Integral=[]
+            for i in range(len(F_score_list)):
+                F_Integral.append(0)
+                for j in range(i+1):
+                    F_Integral[i]+=F_score_list[j]
+
+            maxx=len(init_species)
+
+            
+            for _ in range(maxx):
+                r=random.random()
+                father=[]
+                for i,p in enumerate(F_Integral):
+                    if len(father)>1:
+                        break
+                    if r<p:
+                        father.append(init_species[i])
+                
+                if(len(father)<=1):
+                    continue
+                
+                r=random.random()
+                son1=father[0][:int(len(father[0])*r)]+father[1][int(len(father[0])*r):]
+                son2=father[1][:int(len(father[0])*r)]+father[0][int(len(father[0])*r):]
+                init_species.append(son1)
+                init_species.append(son2)
+                # print("vvnt:",vvnt,end='\r')
+            
+
+
+
+            self.GA_show.append(lass_F)
+            print("lass_f:",lass_F)
+            print()
+            scnt+=1
+            generate_epoch-=1
+            print("solutions:",scnt,end='\r')
+        
+        # eA,c,eB=self.split(self.model,self.best_scheme)
+        # self.best_partition.append(eA)
+        # self.best_partition.append(c)
+        # self.best_partition.append(eB)
+        pool.close()
+        pool.join()
+        manager.shutdown()
+
+
+    def GA_init(self,number_of_layer_to_reduce,step):
+        upper_bound=[]
+        for i in range(0,number_of_layer_to_reduce):
+            reduce_rate=[0 for _ in range(i)]
+            for reduce_rate_j in np.arange(0,1/step):
+                reduce_rate.append(int(reduce_rate_j))
+                model,_=self.model_reduce(reduce_rate)
+                acc,loss=self.acc_loss_evaluate(model)
+                if(acc<self.acc_cut_point):
+                    break
+                else:
+                    upper_bound.append(reduce_rate_j)
+        return upper_bound
+        
+    def model_reduce(self,reduce_rate:list):
+        # model=copy.deepcopy(self.model)
+        model=self.model
+        edge_layer_map={}
+        for i,reduce_index in enumerate(reduce_rate):
+            name=self.svded_layers[i][reduce_index][0]
+            svded_layer=self.svded_layers[i][reduce_index][1]
+            if(i in self.is_child):
+                father_name=self.is_child[i]
+                father=getattr(model,father_name)
+                svded_layer=self.svded_layers[i][reduce_index][1]
+                setattr(father,name,svded_layer)
+                edge_layer_map[father_name]=1
+            else:
+                setattr(model,name,svded_layer)
+                edge_layer_map[name]=1
+        return model,edge_layer_map
 
     
     def search_r(self,number_of_layer_to_reduce,alpha,acc_data,loss_data,step=0.1,reduce_rate=[]):
@@ -236,23 +429,7 @@ class Recrusively_reduce_search:
             print("serched_solution:",self.solution_cnt,end='\r')
             self.solution_cnt+=1
             
-            model=copy.deepcopy(self.model)
-            # model=self.model
-          
-
-            edge_layer_map={}
-            for i,reduce_index in enumerate(reduce_rate):
-                name=self.svded_layers[i][reduce_index][0]
-                svded_layer=self.svded_layers[i][reduce_index][1]
-                if(i in self.is_child):
-                    father_name=self.is_child[i]
-                    father=getattr(model,father_name)
-                    svded_layer=self.svded_layers[i][reduce_index][1]
-                    setattr(father,name,svded_layer)
-                    edge_layer_map[father_name]=1
-                else:
-                    setattr(model,name,svded_layer)
-                    edge_layer_map[name]=1
+            model,edge_layer_map=self.model_reduce(reduce_rate)
             
             edge_num=len(edge_layer_map)
             edge_A,cloud,edge_B=self.split(model,edge_num)
@@ -293,6 +470,7 @@ class Recrusively_reduce_search:
             if(not flag):
                 break
         return True
+    
     
     def search(self,number_of_layer_to_reduce,alpha,acc_data,loss_data,step=0.1,reduce_rate=[]):
         self.search_r(number_of_layer_to_reduce,alpha,acc_data,loss_data,step=step,reduce_rate=reduce_rate)
