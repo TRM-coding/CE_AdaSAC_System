@@ -22,7 +22,7 @@ if __name__=='__main__':
     mp.set_start_method('spawn', force=True)
 
     model_path='./model/best_VGG16Net.pth'
-    device='cuda:5'
+    device='cuda:2'
 
     model_ld=Resnet50Loader()
     model=model_ld.load()
@@ -57,6 +57,7 @@ if __name__=='__main__':
         total_number=100,
         batch_size=100,
         learning_rate=1,
+        warm_lr=1e-3,
         channel=3,
         dim1=224,
         dim2=224,
@@ -67,6 +68,8 @@ if __name__=='__main__':
 
     )
     input_data=input_data.detach()
+    output_label=output_label.detach()
+    torch.cuda.empty_cache()
 
     # train_inputs,train_lables,test_inputs,test_lables=load_data(100,100,device=torch.device(device))
     # input_data,output_label,label= maker.make_origin_data(test_inputs,test_lables)
@@ -111,9 +114,11 @@ if __name__=='__main__':
     import time
     start_time=time.time()
 
+    print("开始搜索")
+    # input()
     with torch.no_grad():
         searcher.init(reduce_step)
-        for i in range(5,6):
+        for i in range(20,21):
             print(f'------------------------------------------------------------- 裁剪层数:{i}')
             # searcher.search(
             #     number_of_layer_to_reduce=i,
@@ -126,7 +131,7 @@ if __name__=='__main__':
 
             searcher.search_GA(
                 number_of_layer_to_reduce=i,
-                alpha=0.3,
+                alpha=0.7,
                 step=0.1
             )
 
@@ -160,26 +165,26 @@ if __name__=='__main__':
     # plt.plot(searcher.loss_data,label='origin_loss')
     # plt.plot(searcher.acc_data,label='origin_acc')
     # plt.scatter(np.arange(len(searcher.F_list)),searcher.F_list)
-    plt.plot(searcher.F_list,label='F')
+    plt.plot(searcher.GA_show,label='F')
     # print("best_index:",searcher.F_list.index(max(searcher.F_list)))
     # plt.scatter(np.arange(len(searcher.F_latency)),searcher.F_latency)
     plt.legend()
 
     plt.savefig('./tables/pic3.png')
 
-    edge_A=searcher.best_partition[0]
-    cloud=searcher.best_partition[1]
-    edge_B=searcher.best_partition[2]
+    #edge_A=searcher.best_partition[0]
+    #cloud=searcher.best_partition[1]
+    #edge_B=searcher.best_partition[2]
 
-    print(edge_A)
-    print(cloud)
-    print(edge_B)
+    #print(edge_A)
+    #print(cloud)
+    #print(edge_B)
 
     print("best_acc:",searcher.best_acc)
     print("best_loss:",searcher.best_loss)
     print("best_latency:",searcher.best_latency)
     # print(searcher.loss_data)
 
-    torch.save(edge_A,'./p_model/edge_A.pth')
-    torch.save(cloud,'./p_model/cloud.pth')
-    torch.save(edge_B,'./p_model/edge_B.pth')
+    # torch.save(edge_A,'./p_model/edge_A.pth')
+    # torch.save(cloud,'./p_model/cloud.pth')
+    # torch.save(edge_B,'./p_model/edge_B.pth')

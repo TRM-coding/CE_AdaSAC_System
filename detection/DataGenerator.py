@@ -56,10 +56,10 @@ class train_based_self_detection():
         
 
     class CustomLRScheduler(_LRScheduler):
-        def __init__(self, optimizer: Optimizer, last_epoch: int = -1, warm_epoch=10,verbose: bool = False):
+        def __init__(self, optimizer: Optimizer, last_epoch: int = -1, warm_epoch=10,highest_lr=1,verbose: bool = False):
             self.last_loss = 0
             self.loss = 0
-            self.warm_param=1/int(warm_epoch)
+            self.warm_param=highest_lr/int(warm_epoch)
             self.warm_epoch=warm_epoch
             self.current_lr=0
             super().__init__(optimizer, last_epoch, verbose)
@@ -86,7 +86,7 @@ class train_based_self_detection():
                 self.loss=loss
             super().step(epoch)
 
-    def make_data_pid(self,total_number,batch_size,learning_rate,channel,dim1,dim2,output_size,randn_magnification,confidence,target_acc=1):
+    def make_data_pid(self,total_number,batch_size,learning_rate,warm_lr,channel,dim1,dim2,output_size,randn_magnification,confidence,target_acc=1):
         data=torch.rand(total_number,channel,dim1,dim2,requires_grad=True)
         output_lable=(torch.rand(total_number,output_size)*randn_magnification)
         max_index=output_lable.argmax(dim=1)
@@ -107,7 +107,7 @@ class train_based_self_detection():
 
         loss_function=nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam([data], lr=learning_rate)
-        scheduler = self.CustomLRScheduler(optimizer)
+        scheduler = self.CustomLRScheduler(optimizer,highest_lr=warm_lr)
         scheduler.warm_epoch=total_number/batch_size
 
         loss_list=[]
@@ -117,6 +117,7 @@ class train_based_self_detection():
         while(1):
             flag=0
             acc=0
+            loss_t=0
             for idx,batchi in enumerate(input_loader):
                 batchii=batchi.to(self.device)
                 output_i=output_loader[idx].to(self.device)
@@ -133,12 +134,13 @@ class train_based_self_detection():
                 if(last_loss==loss.item() and epoch!=0):
                     break
                 last_loss=loss.item()
-                loss_list.append(loss.item())
+                loss_t+=loss.item()
 
                 acc+=(max_index==label_i).sum().item()
             acc=acc/lable.shape[0]
-            print("acc:",acc/len(input_loader))
-            print("loss:",loss.item()/len(input_loader))
+            print("acc:",acc)
+            print("loss:",loss_t/len(input_loader))
+            loss_list.append(loss_t)
             if(acc>target_acc):
                 flag=1
                 break

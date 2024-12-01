@@ -73,8 +73,9 @@ class Recrusively_reduce_search:
         self.inference_time=0
         self.flops_time=0
         self.acc_cut_point=acc_cut_point
-        self.init_size=50
+        self.init_size=100
         self.GA_show=[]
+        self.generate_epoch=20
         # self.flops_map={}
         self.GA_worker_results=[]
         # self.q=q
@@ -94,10 +95,14 @@ class Recrusively_reduce_search:
     
     def init(self,reduce_step):
         x=self.input_data
+        self.model.eval()
         flops_cloud,_=profile(self.model,inputs=(x,))
+        torch.cuda.empty_cache()
         flops_edge=0
         for _,layer in self.model.named_children():
+            layer.eval()
             layer_flops,_=profile(layer,inputs=(x,))
+            torch.cuda.empty_cache()
             flops_edge+=layer_flops
             flops_cloud-=layer_flops
             latency_compute_i=flops_edge/self.local_speed+flops_cloud/self.cloud_speed
@@ -113,6 +118,7 @@ class Recrusively_reduce_search:
             x=self.input_data
             sys.stdout=f
             for name,layer in tqdm(self.model.named_children()):
+                layer.eval()
                 if(not (isinstance(layer,nn.Linear) or 
                         isinstance(layer,nn.Conv2d) or 
                         isinstance(layer,Conv2dNormActivation)or
@@ -121,6 +127,7 @@ class Recrusively_reduce_search:
                     )
                 ):
                     flops,_=profile(layer,inputs=(x,))
+                    torch.cuda.empty_cache()
                     setattr(layer,'flops',flops)
                     x=layer(x)
                     net_Bytes=x.numel()*x.element_size()
@@ -145,6 +152,7 @@ class Recrusively_reduce_search:
                             self.svded_layers[-1].append((name_c,c_svd))
                             flops,_=profile(c_svd,inputs=(x if (isinstance(c_svd,SVDED_Conv) and c_svd.conv_layer.in_channels==x.shape[1]) else ip,))
                             setattr(c_svd,'flops',flops)
+                            torch.cuda.empty_cache()
                             # setattr(c_svd,'netBytes',net_Bytes)
                         x=layer_c(x if (isinstance(c_svd,SVDED_Conv) and c_svd.conv_layer.in_channels==x.shape[1]) else ip)
                     
@@ -159,13 +167,16 @@ class Recrusively_reduce_search:
                         c_svd=self.svder.layer_svd(layer,reduce_rate)
                         self.svded_layers[-1].append((name,c_svd))       
                         flops,_=profile(c_svd,inputs=(x,))
+                        torch.cuda.empty_cache()
                         setattr(c_svd,'flops',flops)
                         setattr(c_svd,'netBytes',net_Bytes)
                     x=output
                     
             x=self.input_data
             for name,layer in tqdm(self.model.named_children()):
+                layer.eval()
                 flops,_=profile(layer,inputs=(x,))
+                torch.cuda.empty_cache()
                 setattr(layer,'flops',flops)
                 x=layer(x)
                 net_Bytes=x.numel()*x.element_size()
@@ -189,21 +200,28 @@ class Recrusively_reduce_search:
             # self.inference_time+=end_time-start_time
         return acc,loss.item()
 
-    
+    def dfs_get_flops(self,layer):
+        flops=0
+        if(isinstance(layer,SVDED_Conv) or isinstance(layer,SVDED_Linear)):
+            return layer.flops
+        for _,layeri in layer.named_children():
+            flops+=self.dfs_get_flops(layeri)
+        return flops
+
     def flops_evaluate(self,model_edge_A,model_cloud,model_edge_B):
         
         total_flops_edge=0
         total_flops_cloud=0
-        
+
         for layer in model_edge_A.model_list:
-            total_flops_edge+=layer.flops
+            total_flops_edge+=self.dfs_get_flops(layer)
    
         for layer in model_cloud.model_list:
             total_flops_cloud+=layer.flops
         
 
         for layer in model_edge_B.model_list:
-            total_flops_edge+=layer.flops
+            total_flops_edge+=self.dfs_get_flops(layer)
 
         return total_flops_edge,total_flops_cloud
 
@@ -227,7 +245,8 @@ class Recrusively_reduce_search:
             model_edge_A=model_edge_A,
             model_cloud=model_cloud,
             model_edge_B=model_edge_B)
-        network=self.network_evaluate(model_edge_A=model_edge_A)
+        self.network_latency=self.network_evaluate(model_edge_A=model_edge_A)
+        network=0
         
 
         normaled_time=((compute_latency+network)-self.min_latency)/(self.max_latency-self.min_latency)
@@ -265,19 +284,33 @@ class Recrusively_reduce_search:
             )
         )
         torch.cuda.empty_cache()
+        return
         
+    def sigmoid(self,x):
+        return (1-np.exp(-x))/(1+np.exp(-x))
+    def ifexpand(self,max_cut,cut_i,alpha)->bool:
+        if(abs(cut_i-alpha*max_cut)==0):
+            return True
+        score=1/abs((cut_i-alpha*max_cut))
+        p=self.sigmoid(score)
+        r=random.random()
+        if(r<p):
+            return True
+        else:
+            return False
     
     def search_GA(self,number_of_layer_to_reduce,alpha,step=0.1):
         upper_bound=self.GA_init(number_of_layer_to_reduce,step)
+        print("每层裁减上限:",upper_bound)
         init_species=[]
         for i in range(self.init_size):
             listi=[random.randint(0,upper_bound[j]) for j,_ in enumerate(range(number_of_layer_to_reduce))]
             init_species.append(listi)
         lass_F=0
-        generate_epoch=5
+        generate_epoch=self.generate_epoch
         # F_score_list=[0 for _ in range(len(init_species))]
         scnt=0
-        numworker=7
+        numworker=4
         pool = multiprocessing.Pool(processes=numworker)
         manager=Manager()
         q=manager.Queue()
@@ -307,12 +340,13 @@ class Recrusively_reduce_search:
             # with mp.Pool(processes=3) as pool:
             #     results = list(pool.starmap(self.taski, task_list))
             F_score_list.clear()
-            init_species.clear()
+            init_species=[]
             while not q.empty():
                 results.append(q.get())
             for ki in results:
                 schemes = ki[0]
-                init_species+=schemes
+                for i in range(len(schemes)):
+                    init_species.append(tuple(schemes[i]))
                 f_list=ki[1]
                 F_score_list+=f_list
                 f_i=max(f_list)
@@ -331,14 +365,35 @@ class Recrusively_reduce_search:
                     self.best_latency=latency
                     lass_F=f_i    
                     print("a new one")
-            
-            
+            print("latency:",latency)
+            print("loss:",loss)
+            # if(generate_epoch==self)
+            unique_dict=dict(zip(init_species,F_score_list))
+            unique_species=list(unique_dict.keys())
+            unique_F=list(unique_dict.values())
 
-            cb=list(zip(init_species,F_score_list))
+            sum_cut_list=[sum(sublist) for sublist in unique_species]
+            max_cut=max(sum_cut_list)
+
+            len_u=len(unique_species)
+            for i in range(len_u):
+                cut_i=sum(unique_species[i])
+                if(self.ifexpand(max_cut=max_cut,cut_i=cut_i,alpha=(1-alpha))):
+                    unique_species.append(unique_species[i])
+                    unique_F.append(unique_F[i])
+
+            # print("种群:\n",unique_species)
+                
+                
+
+            cb=list(zip(unique_species,unique_F))
+
             cbsorted=sorted(cb,key=lambda x:x[1],reverse=True)
             cbsorted=cbsorted[:self.init_size]
             init_species=[x[0] for x in cbsorted]
             F_score_list=[x[1] for x in cbsorted]
+
+
 
             sums=sum(F_score_list)
             for i,_ in enumerate(F_score_list):
@@ -370,11 +425,11 @@ class Recrusively_reduce_search:
                 init_species.append(son1)
                 init_species.append(son2)
                 # print("vvnt:",vvnt,end='\r')
-            
-
-
+        
 
             self.GA_show.append(lass_F)
+            self.F_loss.append(self.best_loss)
+            self.F_latency.append(self.best_latency)
             print("lass_f:",lass_F)
             print()
             scnt+=1
@@ -391,22 +446,44 @@ class Recrusively_reduce_search:
 
 
     def GA_init(self,number_of_layer_to_reduce,step):
-        upper_bound=[]
+        upper_bound=[0 for _ in range(number_of_layer_to_reduce)]
+        upper_bound_0=[0 for _ in range(number_of_layer_to_reduce)]
         for i in range(0,number_of_layer_to_reduce):
-            reduce_rate=[0 for _ in range(i)]
+            reduce_rate=[0 for _ in range(i+1)]
             for reduce_rate_j in np.arange(0,1/step):
-                reduce_rate.append(int(reduce_rate_j))
+                reduce_rate[-1]=int(reduce_rate_j)
                 model,_=self.model_reduce(reduce_rate)
+                model.eval()
                 acc,loss=self.acc_loss_evaluate(model)
                 if(acc<self.acc_cut_point):
                     break
                 else:
-                    upper_bound.append(reduce_rate_j)
+                    upper_bound[i]=reduce_rate_j
+            reduce_rate[i]=0
+            print("第{i}层上限检测:",i,end='\r')
+            torch.cuda.empty_cache()
+        upper_bound=[int(i) for i in upper_bound]
+        model_max_reduce,layer_map=self.model_reduce(upper_bound)
+        model_min_reduce,_=self.model_reduce(upper_bound_0)
+        eA_worst,c_worst,eB_worst=self.split(model_max_reduce,len(layer_map))
+        eA_best,c_best,eB_best=self.split(model_min_reduce,len(layer_map))
+        acc_worst,loss_worst=self.acc_loss_evaluate(model_max_reduce)
+        time_best=self.latency_evaluate(eA_worst,c_worst,eB_worst)
+        time_worst=self.latency_evaluate(eA_best,c_best,eB_best)
+
+        self.highest_loss=loss_worst
+        self.max_latency=time_worst
+        self.min_latency=time_best
+        print("Loss上限:",loss_worst)
+        print("acc上限:",acc_worst)
+        print("最长耗时:",self.max_latency)
+        print("最短耗时:",self.min_latency)
+        torch.cuda.empty_cache()
         return upper_bound
         
     def model_reduce(self,reduce_rate:list):
-        # model=copy.deepcopy(self.model)
-        model=self.model
+        model=copy.deepcopy(self.model)
+        # model=self.model
         edge_layer_map={}
         for i,reduce_index in enumerate(reduce_rate):
             name=self.svded_layers[i][reduce_index][0]
@@ -420,6 +497,7 @@ class Recrusively_reduce_search:
             else:
                 setattr(model,name,svded_layer)
                 edge_layer_map[name]=1
+            torch.cuda.empty_cache()
         return model,edge_layer_map
 
     
