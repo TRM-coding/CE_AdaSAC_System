@@ -86,15 +86,13 @@ class train_based_self_detection():
                 self.loss=loss
             super().step(epoch)
 
-    def make_data_pid(self,total_number,batch_size,learning_rate,warm_lr,channel,dim1,dim2,output_size,randn_magnification,confidence,target_acc=1):
+    def make_data_pid(self,total_number,batch_size,learning_rate,warm_lr,channel=3,dim1=224,dim2=224,output_size=1000,randn_magnification=100,confidence=100000000,target_acc=0.9):
         data=torch.rand(total_number,channel,dim1,dim2,requires_grad=True)
         output_lable=(torch.rand(total_number,output_size)*randn_magnification)
         max_index=output_lable.argmax(dim=1)
         lable=max_index
         output_lable[torch.arange(total_number),max_index]=confidence
-        
         data=data.clone().detach().requires_grad_(True)
-
         ipx=0
         input_loader=[]
         output_loader=[]
@@ -156,7 +154,7 @@ class train_based_self_detection():
             
         self.loss_list=loss_list
 
-        return data,output_lable,lable,self.loss_list[0],self.loss_list[-1]
+        return data.detach(),output_lable.detach(),lable,self.loss_list[0],self.loss_list[-1]
     
     def make_data_less_than_acc(self,total_number,batch_size,learning_rate,channel,dim1,dim2,output_size,randn_magnification,confidence,target_acc):
         data=torch.randn(total_number,channel,dim1,dim2,requires_grad=True)
@@ -213,7 +211,7 @@ class train_based_self_detection():
 
             
         self.loss_list=loss_list
-        return data,output_lable,lable,self.loss_list[0],self.loss_list[-1]
+        return data,lable,self.loss_list[0],self.loss_list[-1]
 
     def show_loss(self):
         import matplotlib.pyplot as plt

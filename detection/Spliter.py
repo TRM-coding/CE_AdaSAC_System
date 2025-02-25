@@ -3,8 +3,8 @@ import numpy as np
 # import SVD
 import gc
 # from detection.SVD import SVD
-from .Model_transfer import Model_transfer
-from .SVD_model import SVDED_Conv,SVDED_Linear
+from detection.Model_transfer import Model_transfer
+from detection.SVD_model import SVDED_Conv,SVDED_Linear
 import copy
 from torch import nn
 
@@ -29,7 +29,7 @@ import random
 import threading
 import queue
 
-from splited_model import Splited_Model
+from .splited_model import Splited_Model
 
 from multiprocessing import Process, Queue,Manager
 
@@ -39,10 +39,8 @@ from multiprocessing import Process, Queue,Manager
 class Recrusively_reduce_search:
     def __init__(self,model,input_data,output_label,label,
                  highest_loss,lowest_loss,network_speed,device,
-                 local_speed,cloud_speed,acc_cut_point,no_weight=True,model_path=None):
+                 local_speed,cloud_speed,acc_cut_point,no_weight=True):
         self.model=model.to(device)
-        if(not no_weight):
-            self.model.load_state_dict(torch.load(model_path))
         self.used_for_search=copy.deepcopy(self.model)
         self.device=device
         self.svder=Model_transfer(model,device)
@@ -235,21 +233,30 @@ class Recrusively_reduce_search:
     def network_evaluate(self,model_edge_A):
         return model_edge_A.model_list[-1].netBytes/self.network_speed
         
-    
+    # def Total_F2(self,model,alpha,model_edge_A,model_cloud,model_edge_B):
+    #     model.eval()
+    #     acc,loss=self.acc_loss_evaluate(model)
+    #     normaled_loss=1
+    #     if(self.highest_loss!=self.lowest_loss):
+    #         normaled_loss=(loss-self.lowest_loss)/(self.highest_loss-self.lowest_loss)
+
     def Total_F(self,model,alpha,model_edge_A,model_cloud,model_edge_B):
         model.eval()
         acc,loss=self.acc_loss_evaluate(model)
-        normaled_loss=(loss-self.lowest_loss)/(self.highest_loss-self.lowest_loss)
+        normaled_loss=1
+        if(self.highest_loss!=self.lowest_loss):
+            normaled_loss=(loss-self.lowest_loss)/(self.highest_loss-self.lowest_loss)
 
         compute_latency=self.latency_evaluate(
             model_edge_A=model_edge_A,
             model_cloud=model_cloud,
             model_edge_B=model_edge_B)
         self.network_latency=self.network_evaluate(model_edge_A=model_edge_A)
-        network=0
+        network=self.network_latency
         
-
-        normaled_time=((compute_latency+network)-self.min_latency)/(self.max_latency-self.min_latency)
+        normaled_time=1
+        if(self.max_latency!=self.min_latency):
+            normaled_time=((compute_latency+network)-self.min_latency)/(self.max_latency-self.min_latency)
 
         F=alpha*(np.exp(1-normaled_loss))+(1-alpha)*np.exp(1-normaled_time)
         self.F_loss.append(np.exp(1-normaled_loss))
@@ -483,6 +490,7 @@ class Recrusively_reduce_search:
         
     def model_reduce(self,reduce_rate:list):
         model=copy.deepcopy(self.model)
+        x=torch.randn(3,224,224).to(self.device)
         # model=self.model
         edge_layer_map={}
         for i,reduce_index in enumerate(reduce_rate):
@@ -492,7 +500,14 @@ class Recrusively_reduce_search:
                 father_name=self.is_child[i]
                 father=getattr(model,father_name)
                 svded_layer=self.svded_layers[i][reduce_index][1]
-                setattr(father,name,svded_layer)
+                flops_y=profile(svded_layer,inputs=(x,))
+                nosvd_layer=self.svded_layers[i][0][1]
+                flops_n=profile(nosvd_layer,inputs=(x,))
+                if(flops_y<flops_n):
+                    setattr(father,name,svded_layer)
+                else:
+                    setattr(father,name,nosvd_layer)
+                    reduce_rate[i]=0
                 edge_layer_map[father_name]=1
             else:
                 setattr(model,name,svded_layer)

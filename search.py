@@ -1,7 +1,6 @@
 
 
 from detection.DataGenerator import train_based_self_detection
-from alex import AlexNet
 from detection.Loader.mymodel_file.VGG16Net import VGG16
 from detection.Loader.ResNet50Loader import Resnet50Loader
 from detection.Loader.AlexnetLoader import AlexnetLoader
