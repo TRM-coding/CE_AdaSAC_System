@@ -7,6 +7,7 @@ print("CODE:loading_resnet50")
 model=Resnet50Loader().load()
 print("CODE:loading_finished")
 device='cuda:1'
+back_divice='cuda:1'
 datamaker=train_based_self_detection(
     model=model,
     device=device,
@@ -38,6 +39,7 @@ searcher=detection.Spliter.Recrusively_reduce_search(
         output_label=output_label,
         label=label,
         device=device,
+        back_device=back_divice,
         highest_loss=highest_loss,
         lowest_loss=lowest_loss,
         # local_speed=2.72e10,   #Flops/s
@@ -71,7 +73,7 @@ class quantiseze_model(nn.Module):
         x_quantized = torch.quantize_per_channel(x, scales=scale, zero_points=zero_point, axis=0, dtype=torch.qint8)
         x=self.model_list[2](x_quantized.dequantize())
         return x
-
+searcher.model.to(device)
 model,edge_layer_map=searcher.model_reduce([0,0,0,0,0,0,0,0,0,0,0])
 eA,c,eB=searcher.split(model,len(edge_layer_map))
 

@@ -3,8 +3,8 @@ import numpy as np
 # import SVD
 import gc
 # from detection.SVD import SVD
-from detection.Model_transfer import Model_transfer
-from detection.SVD_model import SVDED_Conv,SVDED_Linear
+from .Model_transfer import Model_transfer
+from .SVD_model import SVDED_Conv,SVDED_Linear
 import copy
 from torch import nn
 
@@ -33,32 +33,36 @@ from .splited_model import Splited_Model
 
 from multiprocessing import Process, Queue,Manager
 
+from torch.quantization.observer import MovingAveragePerChannelMinMaxObserver
+
 
 
 
 class Recrusively_reduce_search:
     def __init__(self,model,input_data,output_label,label,
                  highest_loss,lowest_loss,network_speed,device,
-                 local_speed,cloud_speed,acc_cut_point,no_weight=True):
+                 local_speed,cloud_speed,acc_cut_point,back_device,no_weight=True):
         self.model=model.to(device)
         self.used_for_search=copy.deepcopy(self.model)
         self.device=device
+        self.back_device=back_device
         self.svder=Model_transfer(model,device)
         self.input_data=input_data.to(device)
         self.output_label=output_label.to(device)
         self.label=label.to(device)
-        self.loss_data=[] # 模型的原始loss数组
-        self.acc_data=[]  #模型的原始acc
+        
+
         self.solution_cnt=0 #有多少个解
-        self.F_loss=[] #归一化过后的loss
-        self.F_latency=[] #归一化过后的时间
+        self.F_loss=[] #原始loss
+        self.F_latency=[] #原始时间
         self.F_list=[] #评估分值
+        self.F_acc=[] #原始acc
         self.best_scheme=[] #最优划分策略
         self.best_F=0 
         self.best_latency=0
         self.best_loss=0
         self.best_acc=0
-        self.best_partition=[] #最优划分模型
+        self.best_partition_model=[] #最优划分模型
         self.highest_loss=highest_loss
         self.lowest_loss=lowest_loss
         self.network_speed=network_speed
@@ -68,28 +72,25 @@ class Recrusively_reduce_search:
         self.min_latency=0x3f3f3f3f
         self.svded_layers=[]
         self.is_child={}
-        self.inference_time=0
-        self.flops_time=0
+
         self.acc_cut_point=acc_cut_point
-        self.init_size=100
-        self.GA_show=[]
-        self.generate_epoch=20
-        # self.flops_map={}
-        self.GA_worker_results=[]
-        # self.q=q
+        self.init_size=80
+        
+        self.generate_epoch=30
+        self.network_latency=0
         return
     
-    def acc_loss_evaluate(self,optimized_model):
-        # start_time=time.time()
-        output=optimized_model(self.input_data)
-        max_index=output.argmax(dim=1)
-        acc=(max_index==self.label).sum().item()/self.label.shape[0]
+    # def acc_loss_evaluate(self,optimized_model):
+    #     # start_time=time.time()
+    #     output=optimized_model(self.input_data)
+    #     max_index=output.argmax(dim=1)
+    #     acc=(max_index==self.label).sum().item()/self.label.shape[0]
         
-        loss_function=torch.nn.CrossEntropyLoss()
-        loss=loss_function(output,self.output_label.softmax(dim=1))
-        # end_time=time.time()
-        # self.inference_time+=end_time-start_time
-        return acc,loss.item()
+    #     loss_function=torch.nn.CrossEntropyLoss()
+    #     loss=loss_function(output,self.output_label.softmax(dim=1))
+    #     # end_time=time.time()
+    #     # self.inference_time+=end_time-start_time
+    #     return acc,loss.item()
     
     def init(self,reduce_step):
         x=self.input_data
@@ -113,7 +114,8 @@ class Recrusively_reduce_search:
         with open('Profile_INFO.txt','w')as f:
             print("max_latency",self.max_latency)
             print("min_latency",self.min_latency)
-            x=self.input_data
+            x=self.input_data.to(self.back_device)
+
             sys.stdout=f
             for name,layer in tqdm(self.model.named_children()):
                 layer.eval()
@@ -124,12 +126,15 @@ class Recrusively_reduce_search:
                         isinstance(layer,MyBot)
                     )
                 ):
-                    flops,_=profile(layer,inputs=(x,))
+                    lateri=layer.to(self.back_device)
+                    flops,_=profile(lateri,inputs=(x,))
+                    
                     torch.cuda.empty_cache()
                     setattr(layer,'flops',flops)
                     x=layer(x)
                     net_Bytes=x.numel()*x.element_size()
                     setattr(layer,'netBytes',net_Bytes)
+                    layer.to(self.device)
                     continue
                 if(
                     isinstance(layer,Conv2dNormActivation) or 
@@ -148,37 +153,47 @@ class Recrusively_reduce_search:
                         for reduce_rate in np.arange(0,1,reduce_step):
                             c_svd=self.svder.layer_svd(layer_c,reduce_rate)
                             self.svded_layers[-1].append((name_c,c_svd))
-                            flops,_=profile(c_svd,inputs=(x if (isinstance(c_svd,SVDED_Conv) and c_svd.conv_layer.in_channels==x.shape[1]) else ip,))
+                            c_svdi=c_svd.to(self.back_device)
+                            flops,_=profile(c_svdi,inputs=(x if (isinstance(c_svd,SVDED_Conv) and c_svd.conv_layer.in_channels==x.shape[1]) else ip,))
+                            c_svdi.to(self.device)
                             setattr(c_svd,'flops',flops)
                             torch.cuda.empty_cache()
                             # setattr(c_svd,'netBytes',net_Bytes)
-                        x=layer_c(x if (isinstance(c_svd,SVDED_Conv) and c_svd.conv_layer.in_channels==x.shape[1]) else ip)
-                    
+                        layer_ci=layer_c.to(self.back_device)
+                        x=layer_ci(x if (isinstance(c_svd,SVDED_Conv) and c_svd.conv_layer.in_channels==x.shape[1]) else ip)
+                        layer_ci.to(self.device)
                     x=output
                         
                 else:
                     self.svded_layers.append([])
-                    output=layer(x)
+                    layeri=layer.to(self.back_device)
+                    output=layeri(x)
+                    layeri.to(self.device)
                     net_Bytes=output.numel()*output.element_size()
                     setattr(layer,'netBytes',net_Bytes)
                     for reduce_rate in np.arange(0,1,reduce_step):
                         c_svd=self.svder.layer_svd(layer,reduce_rate)
-                        self.svded_layers[-1].append((name,c_svd))       
-                        flops,_=profile(c_svd,inputs=(x,))
+                        self.svded_layers[-1].append((name,c_svd)) 
+                        c_svdi=c_svd.to(self.back_device)
+                        flops,_=profile(c_svdi,inputs=(x,))
+                        c_svd.to(self.device)
                         torch.cuda.empty_cache()
                         setattr(c_svd,'flops',flops)
                         setattr(c_svd,'netBytes',net_Bytes)
                     x=output
                     
-            x=self.input_data
+            x=self.input_data.to(self.back_device)
             for name,layer in tqdm(self.model.named_children()):
                 layer.eval()
-                flops,_=profile(layer,inputs=(x,))
+                layeri=layer.to(self.back_device)
+                flops,_=profile(layeri,inputs=(x,))
+                
                 torch.cuda.empty_cache()
                 setattr(layer,'flops',flops)
-                x=layer(x)
+                x=layeri(x)
                 net_Bytes=x.numel()*x.element_size()
                 setattr(layer,'netBytes',net_Bytes)
+                layeri.to(self.device)
             sys.stdout=sys.__stdout__
                 
             print("SVD_finished")
@@ -188,12 +203,16 @@ class Recrusively_reduce_search:
     def acc_loss_evaluate(self,optimized_model):
         with torch.no_grad():
         # start_time=time.time()
-            output=optimized_model(self.input_data)
+            ip=self.input_data.to(self.back_device)
+            opl=self.output_label.to(self.back_device)
+            lb=self.label.to(self.back_device)
+            optimized_model.to(self.back_device)
+            output=optimized_model(ip)
             max_index=output.argmax(dim=1)
-            acc=(max_index==self.label).sum().item()/self.label.shape[0]
+            acc=(max_index==lb).sum().item()/lb.shape[0]
             
             loss_function=torch.nn.CrossEntropyLoss()
-            loss=loss_function(output,self.output_label.softmax(dim=1))
+            loss=loss_function(output,opl.softmax(dim=1))
             # end_time=time.time()
             # self.inference_time+=end_time-start_time
         return acc,loss.item()
@@ -232,38 +251,61 @@ class Recrusively_reduce_search:
     
     def network_evaluate(self,model_edge_A):
         return model_edge_A.model_list[-1].netBytes/self.network_speed
+    
+    def network_evaluate_quantisized(self,quantisized_model):
+        ip=self.input_data
+        observer=MovingAveragePerChannelMinMaxObserver(ch_axis=1).to(self.device)
+        op=quantisized_model.model_list[0](ip)
+        observer(op)
+        scale,zero_point=observer.calculate_qparams()
+        # print(scale,zero_point)
+        op_quantized=torch.quantize_per_channel(op,scales=scale,zero_points=zero_point,axis=1,dtype=torch.qint8)
+        memory_bits=op_quantized.nelement()*op_quantized.element_size()
+        return memory_bits/self.network_speed
         
-    # def Total_F2(self,model,alpha,model_edge_A,model_cloud,model_edge_B):
-    #     model.eval()
-    #     acc,loss=self.acc_loss_evaluate(model)
-    #     normaled_loss=1
-    #     if(self.highest_loss!=self.lowest_loss):
-    #         normaled_loss=(loss-self.lowest_loss)/(self.highest_loss-self.lowest_loss)
-
+    
     def Total_F(self,model,alpha,model_edge_A,model_cloud,model_edge_B):
         model.eval()
+        model.to(self.back_device)
         acc,loss=self.acc_loss_evaluate(model)
-        normaled_loss=1
-        if(self.highest_loss!=self.lowest_loss):
-            normaled_loss=(loss-self.lowest_loss)/(self.highest_loss-self.lowest_loss)
+        model.to(self.device)
+        normaled_loss=(loss-self.lowest_loss)/(self.highest_loss-self.lowest_loss)
 
         compute_latency=self.latency_evaluate(
             model_edge_A=model_edge_A,
             model_cloud=model_cloud,
             model_edge_B=model_edge_B)
-        self.network_latency=self.network_evaluate(model_edge_A=model_edge_A)
+        # if(self.network_latency==0):
+        #     input()
+        # network=0
         network=self.network_latency
-        
-        normaled_time=1
-        if(self.max_latency!=self.min_latency):
-            normaled_time=((compute_latency+network)-self.min_latency)/(self.max_latency-self.min_latency)
+
+        normaled_time=((compute_latency+network)-self.min_latency)/(self.max_latency-self.min_latency)
 
         F=alpha*(np.exp(1-normaled_loss))+(1-alpha)*np.exp(1-normaled_time)
-        self.F_loss.append(np.exp(1-normaled_loss))
-        self.F_latency.append(np.exp(1-normaled_time))
-        self.F_list.append(F)
-        return F,compute_latency+network,loss,acc
+        return F,compute_latency+network,loss,acc,self.network_latency
     
+    # def Total_F(self,model,alpha,quantisized_model):
+    #     model.eval()
+    #     model.to(self.back_device)
+    #     acc,loss=self.acc_loss_evaluate(model)
+    #     model.to(self.device)
+    #     normaled_loss=(loss-self.lowest_loss)/(self.highest_loss-self.lowest_loss)
+
+    #     compute_latency=self.latency_evaluate(
+    #         model_edge_A=model_edge_A,
+    #         model_cloud=model_cloud,
+    #         model_edge_B=model_edge_B)
+    #     self.network_latency=self.network_evaluate(model_edge_A=model_edge_A)
+    #     if(self.network_latency==0):
+    #         input()
+    #     network=0
+        
+
+    #     normaled_time=((compute_latency+network)-self.min_latency)/(self.max_latency-self.min_latency)
+
+    #     F=alpha*(np.exp(1-normaled_loss))+(1-alpha)*np.exp(1-normaled_time)
+    #     return F,compute_latency+network,loss,acc,self.network_latency
 
     def taski(self,tasks,q):
         torch.cuda.empty_cache()
@@ -275,9 +317,9 @@ class Recrusively_reduce_search:
             schemes.append(speciesi)
             model,layer_map=self.model_reduce(speciesi)
             eA,c,eB=self.split(model,len(layer_map))
-            F_i,latency,loss,acc=self.Total_F(model,alpha,eA,c,eB)
+            F_i,latency,loss,acc,net_latency=self.Total_F(model,alpha,eA,c,eB)
             F_score_list[idx]=F_i
-            torch.cuda.empty_cache()
+            # torch.cuda.empty_cache()
         
         q.put(
             (
@@ -287,10 +329,11 @@ class Recrusively_reduce_search:
                     latency,
                     loss,
                     acc,
+                    net_latency
                 )
             )
         )
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
         return
         
     def sigmoid(self,x):
@@ -317,7 +360,7 @@ class Recrusively_reduce_search:
         generate_epoch=self.generate_epoch
         # F_score_list=[0 for _ in range(len(init_species))]
         scnt=0
-        numworker=4
+        numworker=6
         pool = multiprocessing.Pool(processes=numworker)
         manager=Manager()
         q=manager.Queue()
@@ -327,6 +370,7 @@ class Recrusively_reduce_search:
             results = []
             threads=[]
             task_list=[]
+            torch.cuda.empty_cache()
             # partial_task = functools.partial(self.taski)
             for idx,speciesi in enumerate(init_species):
                 task_list.append((speciesi,alpha))
@@ -343,9 +387,8 @@ class Recrusively_reduce_search:
             
             print("All tasks are completed.")
             ed=time.time()
-            print("time:",ed-st)
-            # with mp.Pool(processes=3) as pool:
-            #     results = list(pool.starmap(self.taski, task_list))
+            print("Generate_time:",ed-st)
+            
             F_score_list.clear()
             init_species=[]
             while not q.empty():
@@ -358,23 +401,21 @@ class Recrusively_reduce_search:
                 F_score_list+=f_list
                 f_i=max(f_list)
                 max_idx=f_list.index(f_i)
-                latency,loss,acc=ki[2]
+                latency,loss,acc,net_latency=ki[2]
+                self.network_latency=net_latency
                 # TODO:splited_after_finished
 
                 if(f_i>lass_F):
                     self.best_scheme=schemes[max_idx]
-                    # self.best_partition.clear()
-                    # self.best_partition.append(eA)
-                    # self.best_partition.append(c)
-                    # self.best_partition.append(eB)
                     self.best_acc=acc
                     self.best_loss=loss
-                    self.best_latency=latency
+                    self.best_latency=latency+self.network_latency
                     lass_F=f_i    
                     print("a new one")
+                torch.cuda.empty_cache()
             print("latency:",latency)
             print("loss:",loss)
-            # if(generate_epoch==self)
+            
             unique_dict=dict(zip(init_species,F_score_list))
             unique_species=list(unique_dict.keys())
             unique_F=list(unique_dict.values())
@@ -388,10 +429,7 @@ class Recrusively_reduce_search:
                 if(self.ifexpand(max_cut=max_cut,cut_i=cut_i,alpha=(1-alpha))):
                     unique_species.append(unique_species[i])
                     unique_F.append(unique_F[i])
-
-            # print("种群:\n",unique_species)
-                
-                
+                    
 
             cb=list(zip(unique_species,unique_F))
 
@@ -399,7 +437,6 @@ class Recrusively_reduce_search:
             cbsorted=cbsorted[:self.init_size]
             init_species=[x[0] for x in cbsorted]
             F_score_list=[x[1] for x in cbsorted]
-
 
 
             sums=sum(F_score_list)
@@ -412,7 +449,6 @@ class Recrusively_reduce_search:
                     F_Integral[i]+=F_score_list[j]
 
             maxx=len(init_species)
-
             
             for _ in range(maxx):
                 r=random.random()
@@ -431,28 +467,32 @@ class Recrusively_reduce_search:
                 son2=father[1][:int(len(father[0])*r)]+father[0][int(len(father[0])*r):]
                 init_species.append(son1)
                 init_species.append(son2)
-                # print("vvnt:",vvnt,end='\r')
         
-
-            self.GA_show.append(lass_F)
+            #Save DATA
+            self.F_list.append(lass_F)
             self.F_loss.append(self.best_loss)
             self.F_latency.append(self.best_latency)
+            self.F_acc.append(self.best_acc)
+
             print("lass_f:",lass_F)
             print()
             scnt+=1
             generate_epoch-=1
             print("solutions:",scnt,end='\r')
         
-        # eA,c,eB=self.split(self.model,self.best_scheme)
-        # self.best_partition.append(eA)
-        # self.best_partition.append(c)
-        # self.best_partition.append(eB)
         pool.close()
         pool.join()
         manager.shutdown()
 
 
     def GA_init(self,number_of_layer_to_reduce,step):
+        self.F_loss=[]
+        self.F_latency=[]
+        self.F_list=[]
+        self.F_acc=[]
+        self.best_scheme=[]
+        self.best_partition_model=[]
+
         upper_bound=[0 for _ in range(number_of_layer_to_reduce)]
         upper_bound_0=[0 for _ in range(number_of_layer_to_reduce)]
         for i in range(0,number_of_layer_to_reduce):
@@ -490,7 +530,6 @@ class Recrusively_reduce_search:
         
     def model_reduce(self,reduce_rate:list):
         model=copy.deepcopy(self.model)
-        x=torch.randn(3,224,224).to(self.device)
         # model=self.model
         edge_layer_map={}
         for i,reduce_index in enumerate(reduce_rate):
@@ -500,14 +539,7 @@ class Recrusively_reduce_search:
                 father_name=self.is_child[i]
                 father=getattr(model,father_name)
                 svded_layer=self.svded_layers[i][reduce_index][1]
-                flops_y=profile(svded_layer,inputs=(x,))
-                nosvd_layer=self.svded_layers[i][0][1]
-                flops_n=profile(nosvd_layer,inputs=(x,))
-                if(flops_y<flops_n):
-                    setattr(father,name,svded_layer)
-                else:
-                    setattr(father,name,nosvd_layer)
-                    reduce_rate[i]=0
+                setattr(father,name,svded_layer)
                 edge_layer_map[father_name]=1
             else:
                 setattr(model,name,svded_layer)
@@ -515,58 +547,6 @@ class Recrusively_reduce_search:
             torch.cuda.empty_cache()
         return model,edge_layer_map
 
-    
-    def search_r(self,number_of_layer_to_reduce,alpha,acc_data,loss_data,step=0.1,reduce_rate=[]):
-        flag=True
-        if(len(reduce_rate)==number_of_layer_to_reduce):
-            print("serched_solution:",self.solution_cnt,end='\r')
-            self.solution_cnt+=1
-            
-            model,edge_layer_map=self.model_reduce(reduce_rate)
-            
-            edge_num=len(edge_layer_map)
-            edge_A,cloud,edge_B=self.split(model,edge_num)
-            F_score,this_latency,this_loss,this_acc=self.Total_F(
-                model=model,
-                alpha=alpha,
-                model_edge_A=edge_A,
-                model_cloud=cloud,
-                model_edge_B=edge_B)
-
-           
-            self.acc_data.append(this_acc)
-            self.loss_data.append(this_loss)
-            
-
-            if(this_acc<self.acc_cut_point):
-                # print()
-                # print("CUT")
-                return False
-            
-            if(F_score>self.best_F):
-                self.best_partition.clear()
-                self.best_partition.append(edge_A)
-                self.best_partition.append(cloud)
-                self.best_partition.append(edge_B)
-                self.best_F=F_score
-                self.best_scheme=copy.deepcopy(reduce_rate)
-                self.best_latency=this_latency
-                self.best_loss=this_loss
-                self.best_acc=this_acc
-
-            return True
-        
-        for i in range(int(1/step)):
-            reduce_rate.append(i)
-            flag=self.search_r(number_of_layer_to_reduce,alpha,acc_data,loss_data,step,reduce_rate,)
-            reduce_rate.pop()
-            if(not flag):
-                break
-        return True
-    
-    
-    def search(self,number_of_layer_to_reduce,alpha,acc_data,loss_data,step=0.1,reduce_rate=[]):
-        self.search_r(number_of_layer_to_reduce,alpha,acc_data,loss_data,step=step,reduce_rate=reduce_rate)
 
     def split(self,model,split_scheme_list):
         cloud_model=Splited_Model()
@@ -598,48 +578,3 @@ class Recrusively_reduce_search:
             edge_model_B.model_list.append(model_list[-1])
         return edge_model_A,cloud_model,edge_model_B
     
-    # def recrusively_split(
-    #         self,
-    #         split_scheme_list,
-    #         svded_model,
-    #         proceed_layer=[],
-    #         flag=0,
-    #         edge_model_A=Splited_Model(),
-    #         cloud_model=Splited_Model(),
-    #         data_channel_A_edge=None,
-    #         data_channel_A_cloud=None,
-    #         ):
-        
-    #     if(len(list(svded_model.children()))==0):
-    #         if(svded_model in proceed_layer):
-    #             return 
-    #         if(len(proceed_layer)==len(split_scheme_list)):
-    #             flag=1
-    #             data_channel_A_edge=edge_model_A.model_list[-1]
-    #             edge_model_A.model_list.pop()
-    #             data_channel_A_cloud=svded_model
-    #         else:
-
-    #             if(flag):
-    #                 cloud_model.model_list.append(svded_model)
-    #             else:
-    #                 edge_model_A.model_list.append(svded_model)
-    #         proceed_layer.append(svded_model)
-
-
-    #     for name,child in svded_model.named_children():
-    #         self.recrusively_split(child)
-    #     return edge_model_A,cloud_model,data_channel_A_edge,data_channel_A_cloud
-    
-    # def split_model(self,split_scheme_list,svded_model):
-    #     model=copy.deepcopy(svded_model)
-    #     model=self.svder.recrusively_update_based_on_list(model,split_scheme_list)
-    #     edge_model_A,cloud_model,data_channel_A_edge,data_channel_A_cloud=self.recrusively_split(
-    #         split_scheme_list=split_scheme_list,
-    #         svded_model=model
-    #     )
-    #     data_channel_B_edge=cloud_model.model_list[-1]
-    #     cloud_model.model_list.pop()
-    #     data_channel_B_cloud=cloud_model.model_list[-1]
-    #     cloud_model.model_list.pop()
-    #     return edge_model_A,cloud_model,data_channel_A_edge,data_channel_A_cloud,data_channel_B_edge,data_channel_B_cloud
