@@ -153,7 +153,7 @@ class train_based_self_detection():
             
         self.loss_list=loss_list
         print()
-        return data.detach(),output_lable.detach(),lable,self.loss_list[0].detach() if (isinstance(self.loss_list[0],torch.Tensor)) else self.loss_list[0],self.loss_list[-1].detach() if (isinstance(self.loss_list[-1],torch.Tensor)) else self.loss_list[-1]
+        return data.detach(),output_lable.detach(),lable,self.loss_list[0],self.loss_list[-1]
     
     def make_data_less_than_acc(self,total_number,batch_size,learning_rate,channel,dim1,dim2,output_size,randn_magnification,confidence,target_acc):
         data=torch.randn(total_number,channel,dim1,dim2,requires_grad=True)

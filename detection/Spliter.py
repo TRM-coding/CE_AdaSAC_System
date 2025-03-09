@@ -52,9 +52,7 @@ class Recrusively_reduce_search:
         self.input_data=self.input_data.detach()
 
         self.output_label=output_label.to(device)
-        self.output_label=self.output_label.detach()
         self.label=label.to(device)
-        self.label=self.label.detach()
         
 
         self.solution_cnt=0 #有多少个解
@@ -83,6 +81,14 @@ class Recrusively_reduce_search:
         
         self.generate_epoch=30
         self.network_latency=0
+        return
+
+    def move_to_device(self,device):
+        self.model.to(device)
+        self.input_data.to(device)
+        self.output_label.to(device)
+        self.label.to(device)
+        self.device=self.back_device=device
         return
     
     # def acc_loss_evaluate(self,optimized_model):
@@ -208,10 +214,10 @@ class Recrusively_reduce_search:
     def acc_loss_evaluate(self,optimized_model:nn.modules):
         with torch.no_grad():
         # start_time=time.time()
-            ip=self.input_data.to(self.back_device)
-            opl=self.output_label.to(self.back_device)
-            lb=self.label.to(self.back_device)
-            optimized_model.to(self.back_device)
+            ip=self.input_data.to(self.device)
+            opl=self.output_label.to(self.device)
+            lb=self.label.to(self.device)
+            optimized_model.to(self.device)
             output=optimized_model(ip)
             max_index=output.argmax(dim=1)
             acc=(max_index==lb).sum().item()/lb.shape[0]
@@ -276,8 +282,6 @@ class Recrusively_reduce_search:
         acc,loss=self.acc_loss_evaluate(model)
         model.to(self.device)
         normaled_loss=(loss-self.lowest_loss)/(self.highest_loss-self.lowest_loss)
-
-        normaled_loss=normaled_loss.detach()
         compute_latency=self.latency_evaluate(
             model_edge_A=model_edge_A,
             model_cloud=model_cloud,
@@ -314,7 +318,10 @@ class Recrusively_reduce_search:
     #     F=alpha*(np.exp(1-normaled_loss))+(1-alpha)*np.exp(1-normaled_time)
     #     return F,compute_latency+network,loss,acc,self.network_latency
 
-    def taski(self,tasks,q):
+    def taski(self,tasks,q,gpu_usage:list):
+        task_gpu=gpu_usage.index(min(gpu_usage))
+        gpu_usage[task_gpu]+=1
+        self.move_to_device(task_gpu)
         torch.cuda.empty_cache()
         print("子进程任务量:",len(tasks))
         F_score_list=[0 for _ in tasks]
@@ -341,6 +348,7 @@ class Recrusively_reduce_search:
             )
         )
         torch.cuda.empty_cache()
+        gpu_usage[task_gpu]-=1
         return
         
     def sigmoid(self,x):
@@ -371,6 +379,12 @@ class Recrusively_reduce_search:
         pool = multiprocessing.Pool(processes=numworker)
         manager=Manager()
         q=manager.Queue()
+        gpu_usage=manager.list()
+        # gpu_usage={}
+        # 除了0号GPU外，其他GPU都是空闲的
+        for i in range(0,7):
+            gpu_usage.append(0)
+        gpu_usage[0]=1000000
         while(generate_epoch):
             F_score_list=[]
             st=time.time()
@@ -384,11 +398,12 @@ class Recrusively_reduce_search:
             
             i=0
             torch.cuda.empty_cache()
+
             
         # 将任务分配给进程池中的进程
             print("开始分配进程,总任务量:",len(task_list))
             pool.starmap(self.taski, [ 
-                (task_list[i:min(len(task_list), i + len(task_list) // numworker)],q) 
+                (task_list[i:min(len(task_list), i + len(task_list) // numworker)],q,gpu_usage) 
                                   for i in range(0, len(init_species), len(init_species) // numworker)])
             
             
