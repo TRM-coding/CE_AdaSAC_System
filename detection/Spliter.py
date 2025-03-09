@@ -43,13 +43,18 @@ class Recrusively_reduce_search:
                  highest_loss,lowest_loss,network_speed,device,
                  local_speed,cloud_speed,acc_cut_point,back_device,no_weight=True):
         self.model=model.to(device)
+        self.model.eval()
         self.used_for_search=copy.deepcopy(self.model)
         self.device=device
         self.back_device=back_device
         self.svder=Model_transfer(model,device)
         self.input_data=input_data.to(device)
+        self.input_data=self.input_data.detach()
+
         self.output_label=output_label.to(device)
+        self.output_label=self.output_label.detach()
         self.label=label.to(device)
+        self.label=self.label.detach()
         
 
         self.solution_cnt=0 #有多少个解
@@ -194,13 +199,13 @@ class Recrusively_reduce_search:
                 net_Bytes=x.numel()*x.element_size()
                 setattr(layer,'netBytes',net_Bytes)
                 layeri.to(self.device)
-            sys.stdout=sys.__stdout__
-                
-            print("SVD_finished")
-            return
+            
+        sys.stdout=sys.__stdout__        
+        print("SVD_finished")
+        return
 
 
-    def acc_loss_evaluate(self,optimized_model):
+    def acc_loss_evaluate(self,optimized_model:nn.modules):
         with torch.no_grad():
         # start_time=time.time()
             ip=self.input_data.to(self.back_device)
@@ -252,14 +257,15 @@ class Recrusively_reduce_search:
     def network_evaluate(self,model_edge_A):
         return model_edge_A.model_list[-1].netBytes/self.network_speed
     
-    def network_evaluate_quantisized(self,quantisized_model):
+    def network_evaluate_quantisized(self,quantisized_model,quantisized_type):
         ip=self.input_data
-        observer=MovingAveragePerChannelMinMaxObserver(ch_axis=1).to(self.device)
+        observer=MovingAveragePerChannelMinMaxObserver(ch_axis=1,dtype=quantisized_type).to(self.device)
+        observer.eval()
         op=quantisized_model.model_list[0](ip)
         observer(op)
         scale,zero_point=observer.calculate_qparams()
         # print(scale,zero_point)
-        op_quantized=torch.quantize_per_channel(op,scales=scale,zero_points=zero_point,axis=1,dtype=torch.qint8)
+        op_quantized=torch.quantize_per_channel(op,scales=scale,zero_points=zero_point,axis=1,dtype=quantisized_type)
         memory_bits=op_quantized.nelement()*op_quantized.element_size()
         return memory_bits/self.network_speed
         
@@ -271,6 +277,7 @@ class Recrusively_reduce_search:
         model.to(self.device)
         normaled_loss=(loss-self.lowest_loss)/(self.highest_loss-self.lowest_loss)
 
+        normaled_loss=normaled_loss.detach()
         compute_latency=self.latency_evaluate(
             model_edge_A=model_edge_A,
             model_cloud=model_cloud,
@@ -333,7 +340,7 @@ class Recrusively_reduce_search:
                 )
             )
         )
-        # torch.cuda.empty_cache()
+        torch.cuda.empty_cache()
         return
         
     def sigmoid(self,x):
@@ -507,7 +514,7 @@ class Recrusively_reduce_search:
                 else:
                     upper_bound[i]=reduce_rate_j
             reduce_rate[i]=0
-            print("第{i}层上限检测:",i,end='\r')
+            print(f"第{i}层上限检测:",end='\r')
             torch.cuda.empty_cache()
         upper_bound=[int(i) for i in upper_bound]
         model_max_reduce,layer_map=self.model_reduce(upper_bound)
@@ -545,18 +552,22 @@ class Recrusively_reduce_search:
                 setattr(model,name,svded_layer)
                 edge_layer_map[name]=1
             torch.cuda.empty_cache()
+        model.eval()
         return model,edge_layer_map
 
 
-    def split(self,model,split_scheme_list):
+    def split(self,model,split_number):
         cloud_model=Splited_Model()
+        cloud_model.eval()
         edge_model_A=Splited_Model()
+        edge_model_A.eval()
         edge_model_B=Splited_Model()
+        edge_model_B.eval()
         model_list=[]
         for _,layer in model.named_children():
             model_list.append(layer)
         
-        Tot=split_scheme_list
+        Tot=split_number
         i=0    
         while(i<Tot):
             if(not (isinstance(model_list[i],SVDED_Conv) or 

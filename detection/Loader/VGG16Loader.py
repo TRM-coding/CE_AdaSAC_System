@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torchvision import models
-from mymodel_file.VGG16Net import VGG16
+from .mymodel_file.VGG16Net import VGG16
 class VGG16Loader:
     def __init__(self):
         self.model=VGG16()

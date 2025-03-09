@@ -136,8 +136,7 @@ class train_based_self_detection():
 
                 acc+=(max_index==label_i).sum().item()
             acc=acc/lable.shape[0]
-            print("acc:",acc)
-            print("loss:",loss_t/len(input_loader))
+            print("acc:",acc,"loss:",loss_t/len(input_loader),end='\r')
             loss_list.append(loss_t)
             if(acc>target_acc):
                 flag=1
@@ -153,8 +152,8 @@ class train_based_self_detection():
             # print(loss.item(),end='\r')
             
         self.loss_list=loss_list
-
-        return data.detach(),output_lable.detach(),lable,self.loss_list[0],self.loss_list[-1]
+        print()
+        return data.detach(),output_lable.detach(),lable,self.loss_list[0].detach() if (isinstance(self.loss_list[0],torch.Tensor)) else self.loss_list[0],self.loss_list[-1].detach() if (isinstance(self.loss_list[-1],torch.Tensor)) else self.loss_list[-1]
     
     def make_data_less_than_acc(self,total_number,batch_size,learning_rate,channel,dim1,dim2,output_size,randn_magnification,confidence,target_acc):
         data=torch.randn(total_number,channel,dim1,dim2,requires_grad=True)
