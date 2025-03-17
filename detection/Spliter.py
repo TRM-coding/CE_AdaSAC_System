@@ -22,6 +22,8 @@ from .Loader.mymodel_file.VGG16Net import *
 import torch.multiprocessing as mp
 import multiprocessing
 
+from .config import CONFIG
+
 import concurrent.futures
 import functools
 
@@ -295,6 +297,27 @@ class Recrusively_reduce_search:
 
         F=alpha*(np.exp(1-normaled_loss))+(1-alpha)*np.exp(1-normaled_time)
         return F,compute_latency+network,loss,acc,self.network_latency
+
+    def F_all_alpha(self,model,alpha_step,model_edge_A,model_cloud,model_edge_B):
+        model.eval()
+        model.to(self.back_device)
+        acc,loss=self.acc_loss_evaluate(model)
+        model.to(self.device)
+        normaled_loss=(loss-self.lowest_loss)/(self.highest_loss-self.lowest_loss)
+        compute_latency=self.latency_evaluate(
+            model_edge_A=model_edge_A,
+            model_cloud=model_cloud,
+            model_edge_B=model_edge_B)
+        # if(self.network_latency==0):
+        #     input()
+        # network=0
+        network=self.network_latency
+
+        normaled_time=((compute_latency+network)-self.min_latency)/(self.max_latency-self.min_latency)
+        F_list=[]
+        for alpha in np.arange(0,1,alpha_step):
+            F_list.append(alpha*(np.exp(1-normaled_loss))+(1-alpha)*np.exp(1-normaled_time))
+        return F_list,compute_latency+network,loss,acc,self.network_latency
     
     # def Total_F(self,model,alpha,quantisized_model):
     #     model.eval()
@@ -326,6 +349,10 @@ class Recrusively_reduce_search:
         print("子进程任务量:",len(tasks))
         F_score_list=[0 for _ in tasks]
         schemes=[]
+        latency_list=[]
+        loss_list=[]
+        acc_list=[]
+        net_latency_list=[]
         for idx,ti in enumerate(tasks):
             speciesi,alpha=ti
             schemes.append(speciesi)
@@ -333,6 +360,43 @@ class Recrusively_reduce_search:
             eA,c,eB=self.split(model,len(layer_map))
             F_i,latency,loss,acc,net_latency=self.Total_F(model,alpha,eA,c,eB)
             F_score_list[idx]=F_i
+            latency_list.append(latency)
+            loss_list.append(loss)
+            acc_list.append(acc)
+            net_latency_list.append(net_latency)
+            # torch.cuda.empty_cache()
+        
+        q.put(
+            (
+                copy.deepcopy(schemes),
+                copy.deepcopy(F_score_list),
+                copy.deepcopy(latency_list),
+                copy.deepcopy(loss_list),
+                copy.deepcopy(acc_list),
+                copy.deepcopy(net_latency_list)
+            )
+        )
+        torch.cuda.empty_cache()
+        gpu_usage[task_gpu]-=1
+        return
+    # TODO:重写taski_v2
+    def taski_v2(self,tasks,q,gpu_usage:list):
+        task_gpu=gpu_usage.index(min(gpu_usage))
+        gpu_usage[task_gpu]+=1
+        self.move_to_device(task_gpu)
+        torch.cuda.empty_cache()
+        print("子进程任务量:",len(tasks))
+        F_score_list=[0 for _ in tasks]
+        schemes=[]
+        for idx,ti in enumerate(tasks):
+            speciesi,alpha_step=ti
+            schemes.append(speciesi)
+            model,layer_map=self.model_reduce(speciesi)
+            eA,c,eB=self.split(model,len(layer_map))
+            F_i,latency,loss,acc,net_latency=self.F_all_alpha(model,alpha_step,eA,c,eB)
+            F_i_score=max(F_i)
+            alpha_fit=F_i.index(F_i_score)*alpha_step
+            F_score_list[idx]=(F_i_score,alpha_fit)
             # torch.cuda.empty_cache()
         
         q.put(
@@ -363,11 +427,14 @@ class Recrusively_reduce_search:
             return True
         else:
             return False
-    
-    def search_GA(self,number_of_layer_to_reduce,alpha,step=0.1):
+
+
+    # TODO: 重写searcher_GA_V2,实现分段遗传机制
+    def search_GA_v2(self,number_of_layer_to_reduce,alpha,step=0.1):
         upper_bound=self.GA_init(number_of_layer_to_reduce,step)
         print("每层裁减上限:",upper_bound)
         init_species=[]
+        species_map={}
         for i in range(self.init_size):
             listi=[random.randint(0,upper_bound[j]) for j,_ in enumerate(range(number_of_layer_to_reduce))]
             init_species.append(listi)
@@ -375,16 +442,17 @@ class Recrusively_reduce_search:
         generate_epoch=self.generate_epoch
         # F_score_list=[0 for _ in range(len(init_species))]
         scnt=0
-        numworker=6
+        numworker=10
         pool = multiprocessing.Pool(processes=numworker)
         manager=Manager()
         q=manager.Queue()
         gpu_usage=manager.list()
         # gpu_usage={}
         # 除了0号GPU外，其他GPU都是空闲的
-        for i in range(0,7):
+        for i in range(CONFIG.GPU_AVAILABLE[0],CONFIG.GPU_AVAILABLE[1]+1):
             gpu_usage.append(0)
-        gpu_usage[0]=1000000
+        for i in CONFIG.UNAVAILABLE:
+            gpu_usage[i]=1000000
         while(generate_epoch):
             F_score_list=[]
             st=time.time()
@@ -392,8 +460,10 @@ class Recrusively_reduce_search:
             threads=[]
             task_list=[]
             torch.cuda.empty_cache()
-            # partial_task = functools.partial(self.taski)
+
             for idx,speciesi in enumerate(init_species):
+                if(speciesi in species_map):
+                    continue
                 task_list.append((speciesi,alpha))
             
             i=0
@@ -419,13 +489,14 @@ class Recrusively_reduce_search:
                 schemes = ki[0]
                 for i in range(len(schemes)):
                     init_species.append(tuple(schemes[i]))
+                
                 f_list=ki[1]
                 F_score_list+=f_list
                 f_i=max(f_list)
                 max_idx=f_list.index(f_i)
-                latency,loss,acc,net_latency=ki[2]
+                latency,loss,acc,net_latency=ki[2][max_idx],ki[3][max_idx],ki[4][max_idx],ki[5][max_idx]
                 self.network_latency=net_latency
-                # TODO:splited_after_finished
+                # TODO:修改遗传机制
 
                 if(f_i>lass_F):
                     self.best_scheme=schemes[max_idx]
@@ -505,6 +576,151 @@ class Recrusively_reduce_search:
         pool.close()
         pool.join()
         manager.shutdown()
+        return
+    
+    def search_GA(self,number_of_layer_to_reduce,alpha,step=0.1):
+        upper_bound=self.GA_init(number_of_layer_to_reduce,step)
+        print("每层裁减上限:",upper_bound)
+        init_species=[]
+        for i in range(self.init_size):
+            listi=[random.randint(0,upper_bound[j]) for j,_ in enumerate(range(number_of_layer_to_reduce))]
+            init_species.append(listi)
+        lass_F=0
+        generate_epoch=self.generate_epoch
+        # F_score_list=[0 for _ in range(len(init_species))]
+        scnt=0
+        numworker=10
+        pool = multiprocessing.Pool(processes=numworker)
+        manager=Manager()
+        q=manager.Queue()
+        gpu_usage=manager.list()
+        # gpu_usage={}
+        # 除了0号GPU外，其他GPU都是空闲的
+        for i in range(CONFIG.GPU_AVAILABLE[0],CONFIG.GPU_AVAILABLE[1]+1):
+            gpu_usage.append(0)
+        for i in CONFIG.UNAVAILABLE:
+            gpu_usage[i]=1000000
+        while(generate_epoch):
+            F_score_list=[]
+            st=time.time()
+            results = []
+            threads=[]
+            task_list=[]
+            torch.cuda.empty_cache()
+            # partial_task = functools.partial(self.taski)
+            for idx,speciesi in enumerate(init_species):
+                task_list.append((speciesi,alpha))
+            
+            i=0
+            torch.cuda.empty_cache()
+
+            
+        # 将任务分配给进程池中的进程
+            print("开始分配进程,总任务量:",len(task_list))
+            pool.starmap(self.taski, [ 
+                (task_list[i:min(len(task_list), i + len(task_list) // numworker)],q,gpu_usage) 
+                                  for i in range(0, len(init_species), len(init_species) // numworker)])
+            
+            
+            print("All tasks are completed.")
+            ed=time.time()
+            print("Generate_time:",ed-st)
+            
+            F_score_list.clear()
+            init_species=[]
+            while not q.empty():
+                results.append(q.get())
+            for ki in results:
+                schemes = ki[0]
+                for i in range(len(schemes)):
+                    init_species.append(tuple(schemes[i]))
+                f_list=ki[1]
+                F_score_list+=f_list
+                f_i=max(f_list)
+                max_idx=f_list.index(f_i)
+                latency,loss,acc,net_latency=ki[2][max_idx],ki[3][max_idx],ki[4][max_idx],ki[5][max_idx]
+                self.network_latency=net_latency
+                # TODO:修改遗传机制
+
+                if(f_i>lass_F):
+                    self.best_scheme=schemes[max_idx]
+                    self.best_acc=acc
+                    self.best_loss=loss
+                    self.best_latency=latency+self.network_latency
+                    lass_F=f_i    
+                    print("a new one")
+                torch.cuda.empty_cache()
+            print("latency:",latency)
+            print("loss:",loss)
+            
+            unique_dict=dict(zip(init_species,F_score_list))
+            unique_species=list(unique_dict.keys())
+            unique_F=list(unique_dict.values())
+
+            sum_cut_list=[sum(sublist) for sublist in unique_species]
+            max_cut=max(sum_cut_list)
+
+            len_u=len(unique_species)
+            for i in range(len_u):
+                cut_i=sum(unique_species[i])
+                if(self.ifexpand(max_cut=max_cut,cut_i=cut_i,alpha=(1-alpha))):
+                    unique_species.append(unique_species[i])
+                    unique_F.append(unique_F[i])
+                    
+
+            cb=list(zip(unique_species,unique_F))
+
+            cbsorted=sorted(cb,key=lambda x:x[1],reverse=True)
+            cbsorted=cbsorted[:self.init_size]
+            init_species=[x[0] for x in cbsorted]
+            F_score_list=[x[1] for x in cbsorted]
+
+
+            sums=sum(F_score_list)
+            for i,_ in enumerate(F_score_list):
+                F_score_list[i]/=sums
+            F_Integral=[]
+            for i in range(len(F_score_list)):
+                F_Integral.append(0)
+                for j in range(i+1):
+                    F_Integral[i]+=F_score_list[j]
+
+            maxx=len(init_species)
+            
+            for _ in range(maxx):
+                r=random.random()
+                father=[]
+                for i,p in enumerate(F_Integral):
+                    if len(father)>1:
+                        break
+                    if r<p:
+                        father.append(init_species[i])
+                
+                if(len(father)<=1):
+                    continue
+                
+                r=random.random()
+                son1=father[0][:int(len(father[0])*r)]+father[1][int(len(father[0])*r):]
+                son2=father[1][:int(len(father[0])*r)]+father[0][int(len(father[0])*r):]
+                init_species.append(son1)
+                init_species.append(son2)
+        
+            #Save DATA
+            self.F_list.append(lass_F)
+            self.F_loss.append(self.best_loss)
+            self.F_latency.append(self.best_latency)
+            self.F_acc.append(self.best_acc)
+
+            print("lass_f:",lass_F)
+            print()
+            scnt+=1
+            generate_epoch-=1
+            print("solutions:",scnt,end='\r')
+        
+        pool.close()
+        pool.join()
+        manager.shutdown()
+        return
 
 
     def GA_init(self,number_of_layer_to_reduce,step):

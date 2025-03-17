@@ -4,6 +4,8 @@ import detection.Spliter
 import torch.multiprocessing as mp
 import torch
 from torch import nn
+import numpy as np
+from detection.config import CONFIG
 
 if __name__ == '__main__':
 
@@ -11,10 +13,10 @@ if __name__ == '__main__':
     print("CODE:loading_resnet50")
     model=Resnet50Loader().load()
     print("CODE:loading_finished")
-    device='cuda:6'
-    back_device='cuda:6'
-    quantisized_type=torch.qint8
-    cut_step=0.2
+    device=CONFIG.DEFAULT_DEVICE
+    back_device=CONFIG.DEFAULT_DEVICE
+    quantisized_type=CONFIG.QUANTISIZED_TYPE
+    cut_step=CONFIG.CUT_STEP
 
     from torch.quantization.observer import MovingAveragePerChannelMinMaxObserver
     observer = MovingAveragePerChannelMinMaxObserver(ch_axis=0,dtype=quantisized_type).to(device)
@@ -47,17 +49,17 @@ if __name__ == '__main__':
     )
 
     input_data,output_label,label,highest_loss,lowest_loss= datamaker.make_data_pid(
-            total_number=100,
-            batch_size=100,
-            learning_rate=1,
-            warm_lr=1e-3,
-            channel=3,
-            dim1=224,
-            dim2=224,
-            output_size=1000,
-            randn_magnification=100,
-            confidence=1000000,
-            target_acc=0.8
+            total_number=CONFIG.TEST_DATA_TOTAL_NUMBER,
+            batch_size=CONFIG.TEST_DATA_BATCH_SIZE,
+            learning_rate=CONFIG.TEST_DATA_LEARNING_RATE,
+            warm_lr=CONFIG.TEST_DATA_WARM_LR,
+            channel=CONFIG.TEST_DATA_CHANNEL,
+            dim1=CONFIG.TEST_DATA_DIM1,
+            dim2=CONFIG.TEST_DATA_DIM2,
+            output_size=CONFIG.TEST_DATA_OUTPUT_SIZE,
+            randn_magnification=CONFIG.TEST_DATA_RANDN_MAGNIFICATION,
+            confidence=CONFIG.TEST_DATA_CONFIDENCE,
+            target_acc=CONFIG.TEST_DATA_TARGET_ACC
 
     )
     print(input_data.dtype)
@@ -74,17 +76,16 @@ if __name__ == '__main__':
                 back_device=back_device,
                 highest_loss=highest_loss,
                 lowest_loss=lowest_loss,
-                local_speed=2.72e10,   #Flops/s
+                local_speed=CONFIG.LOCAL_SPEED,   #Flops/s
                 # local_speed=9.6e9,   #Flops/s
-                cloud_speed=1.7e13,    #Flops/s
-                network_speed=1e7,     #B/s
-                acc_cut_point=0.7,
-                # q=q,
+                cloud_speed=CONFIG.CLOUD_SPEED,    #Flops/s
+                network_speed=CONFIG.NETWORK_SPEED,     #B/s
+                acc_cut_point=CONFIG.ACC_CUT_POINT,
         )
         searcher.init(cut_step)
 
         searcher.input_data.shape
-        upper_bound=searcher.GA_init(50,step=cut_step)
+        upper_bound=searcher.GA_init(CONFIG.MODEL_LAYER_NUMBER,step=cut_step)
 
         print()
         upper_num=min(upper_bound)
@@ -92,7 +93,7 @@ if __name__ == '__main__':
         quantized_compute_list=[]
         quantized_time_list=[]
         quantized_acc_list=[]
-        for i in range(1,50):
+        for i in range(1,CONFIG.MODEL_LAYER_NUMBER):
             torch.cuda.empty_cache()
             cut_num=int((max(upper_bound[:i+1])+min(upper_bound[:i+1]))/2)
             model_r,edge_layer_map=searcher.model_reduce([cut_num]*i)
@@ -128,30 +129,31 @@ if __name__ == '__main__':
         print("min_quantized_time_list:",min(quantized_time_list))
         print("max_quantized_time_list:",max(quantized_time_list))
         normaled_time=[(x-min(quantized_time_list))/(max(quantized_time_list)-min(quantized_time_list)) for x in quantized_time_list]
-        normaled_acc=[(x-min(quantized_acc_list))/(max(quantized_acc_list)-min(quantized_acc_list)) for x in quantized_acc_list]
+        # normaled_acc=[(x-min(quantized_acc_list))/(max(quantized_acc_list)-min(quantized_acc_list)) for x in quantized_acc_list]
+        normaled_acc=[(1/(1+np.exp(np.mean(quantized_acc_list)-x))) for x in quantized_acc_list]
         print("normaled_time:",normaled_time)
         print("normaled_acc:",normaled_acc)
 
         import numpy as np
-        alpha=0.5
+        alpha=CONFIG.ALPHA
         print()
         def F_score(alpha,index):
             return float(alpha*np.exp(1-normaled_time[index])+(1-alpha)*np.exp(normaled_acc[index]))
-        F_per_point=[F_score(alpha,i) for i in range(0,48)]
+        F_per_point=[F_score(alpha,i) for i in range(0,CONFIG.MODEL_LAYER_NUMBER-1)]
 
 
-        for i in range(0,48):
-            print("idx:",i,"net_time:",quantized_network_list[i],"compute_time:",quantized_compute_list[i],"acc:",quantized_acc_list[i],"F_per_point:",F_per_point[i])
+        for i in range(0,CONFIG.MODEL_LAYER_NUMBER-1):
+            print("idx:",i,"net_time:",quantized_network_list[i],"compute_time:",quantized_compute_list[i]," total_time:",quantized_compute_list[i]+quantized_network_list[i]," acc:",quantized_acc_list[i],"F_per_point:",F_per_point[i])
         F_per_point=[0,0]+F_per_point
 
         best_index=F_per_point.index(max(F_per_point))
-        best_index
+        print("best_index:",best_index,"max_F:",max(F_per_point))
 
         
 
         
         searcher.search_GA(
             number_of_layer_to_reduce=best_index,
-            alpha=0.7,
+            alpha=CONFIG.ALPHA,
             step=cut_step
         )
