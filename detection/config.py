@@ -28,4 +28,7 @@ CONFIG = Namespace(
     NETWORK_SPEED                 =1e7,
     ACC_CUT_POINT                 =0.7,
 
+    GENERATE_EPOCH_WARM=10,
+    INIT_SIZE_WARM=100
+
 )

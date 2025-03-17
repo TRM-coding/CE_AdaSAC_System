@@ -152,8 +152,14 @@ if __name__ == '__main__':
         
 
         
-        searcher.search_GA(
+        # searcher.search_GA(
+        #     number_of_layer_to_reduce=best_index,
+        #     alpha=CONFIG.ALPHA,
+        #     step=cut_step
+        # )
+        mapp=searcher.search_GA_v2(
             number_of_layer_to_reduce=best_index,
-            alpha=CONFIG.ALPHA,
             step=cut_step
         )
+        print(mapp)
+
