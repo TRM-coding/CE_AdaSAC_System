@@ -7,7 +7,7 @@ class Resnet50Loader:
     def __init__(self):
         self.model=Resnet50()
         self.origin=Resnet50()
-        self.pre_trained=models.resnet50(pretrained=True)
+        self.pre_trained=models.resnet50(weights=True)
         # print(self.pre_trained)
         self.layer_name=[f'bt{i}' for i in range(1,17)]
         self.pre_layer_map={name:layer for name,layer in self.pre_trained.named_children()}

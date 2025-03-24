@@ -85,7 +85,7 @@ if __name__ == '__main__':
         searcher.init(cut_step)
 
         searcher.input_data.shape
-        upper_bound=searcher.GA_init(CONFIG.MODEL_LAYER_NUMBER,step=cut_step)
+        upper_bound=searcher.GA_init(CONFIG .MODEL_LAYER_NUMBER,step=cut_step)
 
         print()
         upper_num=min(upper_bound)
@@ -117,7 +117,7 @@ if __name__ == '__main__':
             torch.cuda.empty_cache()
 
         # normaled_acc_list=[(x-min(quantized_acc_list))/max(quantized_acc_list)-min(quantized_acc_list) for x in quantized_acc_list]
-        # normaled_time_list=[(x-min(quantized_acc_list))/max(quantized_acc_list)]
+        # normaled_time_list=[(x-min(quantized_acc_l55ist))/max(quantized_acc_list)]
 
         print()
         print("quantized_acc_list:",quantized_acc_list)
@@ -138,7 +138,7 @@ if __name__ == '__main__':
         alpha=CONFIG.ALPHA
         print()
         def F_score(alpha,index):
-            return float(alpha*np.exp(1-normaled_time[index])+(1-alpha)*np.exp(normaled_acc[index]))
+            return float(alpha*np.exp(1-normaled_time[index])-(1-alpha)*(np.exp((normaled_acc[index]-1)**2)-1))
         F_per_point=[F_score(alpha,i) for i in range(0,CONFIG.MODEL_LAYER_NUMBER-1)]
 
 
@@ -157,9 +157,14 @@ if __name__ == '__main__':
         #     alpha=CONFIG.ALPHA,
         #     step=cut_step
         # )
-        mapp=searcher.search_GA_v2(
+        mapp=searcher.search_GA_warm(
             number_of_layer_to_reduce=best_index,
             step=cut_step
         )
-        print(mapp)
-
+        # print(mapp)
+        
+        # input("请确认开始进一步搜索：")
+        searcher.searcer_GA_V2(
+            init_specise=mapp,
+            alpha_step=CONFIG.ALPHASTEP,
+        )
