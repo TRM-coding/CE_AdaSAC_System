@@ -296,12 +296,12 @@ class Recrusively_reduce_search:
 
         normaled_time=((compute_latency+network)-self.min_latency)/(self.max_latency-self.min_latency)
 
-        F=alpha*np.exp(1-normaled_time)-(1-alpha)*(np.exp(1-(normaled_loss-1)**2))
+        F=alpha*np.exp(1-normaled_time)-(1-alpha)*(np.exp(1-(normaled_loss-1)**2)-1)
 
         alpha_=0
         F_min=0
         for alpha in np.arange(0,1,alpha_step):
-            new_F=alpha*np.exp(1-normaled_time)-(1-alpha)*(np.exp(1-(normaled_loss-1)**2))
+            new_F=alpha*np.exp(1-normaled_time)-(1-alpha)*(np.exp(1-(normaled_loss-1)**2)-1)
             if(new_F>F_min):
                 F_min=new_F
                 alpha_=alpha
@@ -326,7 +326,7 @@ class Recrusively_reduce_search:
         normaled_time=((compute_latency+network)-self.min_latency)/(self.max_latency-self.min_latency)
         F_list=[]
         for alpha in np.arange(0,1,alpha_step):
-            new_F=alpha*np.exp(1-normaled_time)-(1-alpha)*(np.exp(1-(normaled_loss-1)**2))
+            new_F=alpha*np.exp(1-normaled_time)-(1-alpha)*(np.exp(1-(normaled_loss-1)**2)-1)
             F_list.append((new_F,alpha))
         return F_list,compute_latency+network,loss,acc,self.network_latency
     

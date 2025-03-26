@@ -4,14 +4,14 @@ import torch
 
 CONFIG = Namespace(
     GPU_AVAILABLE                 = (1,6),
-    UNAVAILABLE                   = [0],
+    UNAVAILABLE                   = [0,1,2],
     DEFAULT_DEVICE                = "cuda:7",
     CUT_STEP                      =0.1,
     MODEL_LAYER_NUMBER            =50,
-    ALPHA                         =0.5,
+    ALPHA                         =0.9,# alpha ->time
     QUANTISIZED_TYPE              =torch.qint8,
 
-    TEST_DATA_TOTAL_NUMBER        = 500,
+    TEST_DATA_TOTAL_NUMBER        = 100,#how many batchs
     TEST_DATA_BATCH_SIZE          = 100,
     TEST_DATA_LEARNING_RATE       = 1,
     TEST_DATA_WARM_LR             = 1e-3,
@@ -25,7 +25,7 @@ CONFIG = Namespace(
 
     LOCAL_SPEED                   =6.4e10,
     CLOUD_SPEED                   =1.7e13,
-    NETWORK_SPEED                 =1e7,
+    NETWORK_SPEED                 =1e8,#B/s
     ACC_CUT_POINT                 =0.7,
 
     GENERATE_EPOCH_WARM=30,
@@ -34,8 +34,11 @@ CONFIG = Namespace(
     ASTOEPOCH=30,
     ALPHASTEP=0.1,
 
-    SAVE_PATH_SCHEME="./pi5.txt",
+    SAVE_PATH_SCHEME="./cloud_cpu.txt",
     LOAD_NUMBER=12,
+    CLOUD_PORT=5000,
+    CLOUDIP='http://127.0.0.1:5000',
+    TIMEOUT=60,
 
     IMAGENET_PATH="/SSD/val"
 )

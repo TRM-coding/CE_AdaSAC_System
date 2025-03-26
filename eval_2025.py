@@ -7,6 +7,7 @@ from detection.Loader.ResNet50Loader import Resnet50Loader
 import detection.Spliter
 import torch.multiprocessing as mp
 from torch import nn
+from torch.quantization.observer import MovingAveragePerChannelMinMaxObserver
 
 
 class quantiseze_model(nn.Module):
@@ -45,7 +46,6 @@ if __name__ == "__main__":
         no_weight=True
     )
 
-    from torch.quantization.observer import MovingAveragePerChannelMinMaxObserver
    
 
     
@@ -88,16 +88,24 @@ if __name__ == "__main__":
                 acc_cut_point=CONFIG.ACC_CUT_POINT,
         )
         searcher.init(cut_step)
+        torch.cuda.empty_cache()
         searcher.model.to(device)
-        # model,edge_layer_map=searcher.model_reduce([0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 2, 0, 0, 0, 0, 4, 2, 0, 0, 1, 2, 0, 0, 0, 0, 2])
+        #model,edge_layer_map=searcher.model_reduce([0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 2, 0, 0, 0, 0, 4, 2, 0, 0, 1, 2, 0, 0, 0, 0, 2])
         # model,edge_layer_map=searcher.model_reduce([0,0,0])
         
         # model,edge_layer_map=searcher.model_reduce([2, 2, 3, 3, 2, 4, 2, 2, 3, 0, 3, 4, 1, 2, 5, 8, 6, 5, 0, 2, 1, 3, 0, 3, 2, 4])
-        model,edge_layer_map=searcher.model_reduce([4, 1, 6, 5, 4, 6, 2, 5, 6, 1, 5, 5, 3, 5, 6, 8, 6, 4, 5, 4, 5, 5, 2, 4, 4, 5])
+        #model,edge_layer_map=searcher.model_reduce([4, 1, 6, 5, 4, 6, 2, 5, 6, 1, 5, 5, 3, 5, 6, 8, 6, 4, 5, 4, 5, 5, 2, 4, 4, 5])
+        #model,edge_layer_map=searcher.model_reduce([4,4,2,5,3,5,5,1,5,1,4,2,0,5,6,7,5,6,4,2,5,4,0,5,3,4])
+        #model,edge_layer_map=searcher.model_reduce([4,6,5,4,5,8,6,7,6,3,6,5,5,4,7,8,7,8,4,6,6,6,2,7,5,6])
+        model,edge_layer_map=searcher.model_reduce([4,6])
         eA,c,eB=searcher.split(model,len(edge_layer_map))
 
         qm=quantiseze_model([eA,c,eB])
-
-        elaver=eval(inputs_and_labels,qm)
+        print("start eval")
+        elaver=eval(inputs_and_labels,qm)# remenber to change it
         loss,acc=elaver.eval()
         print("loss:",loss," acc:",acc)
+        torch.save(eA,"./clientA.pth")
+        torch.save(c,"./clientB.pth")
+        torch.save(eB,"./clientC.pth")
+        print("CODE:finish")

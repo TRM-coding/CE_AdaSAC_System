@@ -166,11 +166,11 @@ class train_based_self_detection():
             acc=acc/lable.shape[0]
             print("acc:",acc,"loss:",loss_t/len(input_loader),end='\r')
             loss_list.append(loss_t)
-            if(acc>target_acc):
+            if(acc>=1):
                 flag=1
                 break
               
-
+        # notice :remenber to recover the 2 if
             
             epoch+=1
             if(flag):

@@ -122,7 +122,8 @@ if __name__ == '__main__':
         print()
         print("quantized_acc_list:",quantized_acc_list)
         print("quantized_network_list:",quantized_network_list)
-        print("quantized_compute_list:",quantized_compute_list)
+        print("max_compute_time:",max(quantized_compute_list))
+        print("min_compute_time:",min(quantized_compute_list))
         print("quantized_time_list:",quantized_time_list)
 
         print()
@@ -138,7 +139,7 @@ if __name__ == '__main__':
         alpha=CONFIG.ALPHA
         print()
         def F_score(alpha,index):
-            return float(alpha*np.exp(1-normaled_time[index])-(1-alpha)*(np.exp((normaled_acc[index]-1)**2)-1))
+            return float(alpha*np.exp(1-normaled_time[index])-(1-alpha)*(np.exp((normaled_acc[index]-0.5)**3))-1)
         F_per_point=[F_score(alpha,i) for i in range(0,CONFIG.MODEL_LAYER_NUMBER-1)]
 
 
