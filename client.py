@@ -69,10 +69,12 @@ if __name__ == "__main__":
         no_weight=True
     )
 
-    inputs_and_labels=datamaker.make_data_img()
+    #inputs_and_labels=datamaker.make_data_img()
 
-    input_batch=inputs_and_labels[0][0]
+    #input_batch=inputs_and_labels[0][0]
     
+    input_batch=torch.rand(50,3,224,224)
+
     print("边侧开始推理")
     start_time=time.time()
     op_a=model_A(input_batch)
