@@ -44,6 +44,9 @@ class eval:
                 data=list(data)
                 data[0]=data[0].to(device)
                 data[1]=data[1].to(device)
+                if(len(data[0].shape)<4):
+                    print("wowow!")
+                    input()
                 output = model(data[0])
                 criterion = torch.nn.CrossEntropyLoss()
                 loss += criterion(output, data[1]).item()

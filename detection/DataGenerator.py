@@ -39,11 +39,14 @@ class train_based_self_detection():
         print("loading imagenet")
         imagenet_dataloader = DataLoader(dataset, batch_size=batch_number, shuffle=False, num_workers=CONFIG.LOAD_NUMBER, pin_memory=False,)
         datas=[]
+        # labels=[]
         print("making tasks")
-        for i, (input, target) in tqdm(enumerate(imagenet_dataloader)):
+        for i, (inputi, target) in tqdm(enumerate(imagenet_dataloader)):
             if(i>total_number):
                 break
-            datas.append((input,target))
+            datas.append((inputi,target))
+            # input_datas.append(inputi)
+            # labels.append(target)
         print("finished")
         return datas
         

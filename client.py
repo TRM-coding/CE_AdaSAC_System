@@ -10,128 +10,160 @@ import httpx
 import struct
 import numpy as np
 import base64
+import torch
+from thop import profile
+import pickle
 
-
+import socket
 
 def quantisez(tensor:torch.Tensor,observer:MovingAveragePerChannelMinMaxObserver):
     observer(tensor)
     scale, zero_point = observer.calculate_qparams()
     tensor_quantized = torch.quantize_per_channel(tensor, scales=scale, zero_points=zero_point, axis=0, dtype=torch.qint8)
-    numpy_data=tensor_quantized.int_repr().numpy()
-    scale=scale.numpy()
-    zero_point=zero_point.numpy()
-    shape=list(tensor.shape)
-    return numpy_data,scale,zero_point,shape
+    return tensor_quantized
 
-def dequantise(numpy_data,scale,zero_point):
-    tensor=torch.from_numpy(numpy_data)
-    zero=torch.tensor(zero_point)
-    scale=torch.tensor(scale)
-    zero=zero.reshape(-1,1)
-    scale=scale.reshape(-1,1)
-    detensor=(tensor.to(torch.float32)-zero)*scale
+def dequantise(numpy_data:torch.tensor):
+    detensor=numpy_data.dequantize()
     return detensor
 
-headers = {
-    "User-Agent": "MyApp/1.0",
-    "Accept": "application/json",
-    "Authorization": "Bearer YOUR_TOKEN"  # 示例认证头
-}
+def get_data(conn, chunk_size=4096):
+    header_data = conn.recv(1024)
+    if not header_data:
+        raise Exception("No header received")
+    try:
+        data_length = pickle.loads(header_data)
+    except Exception as e:
+        raise Exception("Failed to unpickle header") from e
+    
+    # 发送 header 确认
+    conn.sendall("HEADER RECEIVED".encode("utf-8"))
+    
+    # 分批接收实际数据
+    received_bytes = 0
+    chunks = []
+    while received_bytes < data_length:
+        chunk = conn.recv(min(chunk_size, data_length - received_bytes))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        received_bytes += len(chunk)
+    
+    full_data = b"".join(chunks)
+    
+    # 发送数据接收完成的确认
+    conn.sendall("DATA RECEIVED".encode("utf-8"))
+    
+    try:
+        data = pickle.loads(full_data)
+    except Exception as e:
+        raise Exception("Failed to unpickle data") from e
+    
+    return data
+
+
+def send_data(conn, data, chunk_size=4096):
+
+    serialized_data = pickle.dumps(data)
+    data_length = len(serialized_data)
+    print("数据长度:", data_length)
+    
+    # 发送 header（数据长度）
+    header = pickle.dumps(data_length)
+    conn.sendall(header)
+    
+    # 等待 header 确认
+    ack = conn.recv(1024)
+    if ack.decode('utf-8') != "HEADER RECEIVED":
+        raise Exception("Header acknowledgment not received")
+    
+    # 分批发送实际数据
+    conn.sendall(serialized_data)
+    
+    # 等待数据确认
+    ack2 = conn.recv(1024)
+    if ack2.decode('utf-8') != "DATA RECEIVED":
+        raise Exception("Data acknowledgment not received")
 
 
 if __name__ == "__main__":
-    print("CODE:云侧握手")
-    client = httpx.Client(http2=True)
-    client.get(f'{CONFIG.CLOUDIP}/cloud',headers=headers)    # 预热
-    resp = client.get(f'{CONFIG.CLOUDIP}/cloud', params={"q": "peak"}, headers=headers)
-    print("CODE:云侧握手完成")
-    print("CODE:loading_model")
-    model_A=Splited_Model()
-    model_C=Splited_Model()
-    observer = MovingAveragePerChannelMinMaxObserver(ch_axis=0)
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.connect((CONFIG.CLOUDIP, CONFIG.CLOUD_PORT))
+    with torch.no_grad():     
+        print("CODE:云侧握手")
+        warm_batch=torch.rand(50,3,224,224)
+        send_data(client_socket, warm_batch)
+        print("CODE:云侧握手完成")
+        print("CODE:loading_model")
+        model_A=Splited_Model()
+        model_C=Splited_Model()
+        observer = MovingAveragePerChannelMinMaxObserver(ch_axis=0)
 
 
-    model_A=torch.load("./clientA.pth")
-    model_A.to('cpu')
-    model_A.eval()
-    model_C=torch.load("./clientC.pth")
-    model_C.to('cpu')
-    model_A.eval()
-    model_C.eval()
-    print("CODE:loading_finished")
+        model_A=torch.load("./nclientA.pth",map_location=torch.device('cpu'))
+        model_A.to('cpu')
+        model_A.eval()
+        model_C=torch.load("./nclientC.pth",map_location=torch.device('cpu'))
+        model_C.to('cpu')
+        model_A.eval()
+        model_C.eval()
+        print("CODE:loading_finished")
 
-    edge_compute_time=0
-    net_time=0
-    cloud_time=0
-    datamaker=train_based_self_detection(
-        model=model_A,
-        device='cpu',
-        no_weight=True
-    )
+        edge_compute_time=0
+        net_time=0
+        cloud_time=0
+        datamaker=train_based_self_detection(
+            model=model_A,
+            device='cpu',
+            no_weight=True
+        )
 
-    #inputs_and_labels=datamaker.make_data_img()
+        #inputs_and_labels=datamaker.make_data_img()
 
-    #input_batch=inputs_and_labels[0][0]
+        #input_batch=inputs_and_labels[0][0]
+        
+        input_batch=torch.rand(2,3,224,224)
+        # warm_batch=torch.rand(50,3,224,224)
+        flops,params=profile(model_A,inputs=(input_batch,))
+        print("flops:",flops)
+        print("start_warmup")
+        model_A(input_batch)
+        print("边侧开始推理")
+        total_time=0
+        for i in range(100):
+            start_time=time.perf_counter()
+            op_a=model_A(input_batch)
+            time1=time.perf_counter()
+            total_time+=time1-start_time
+        print("纯推理速度：",total_time/100)
+        print(op_a.shape)
+        output=quantisez(op_a,observer)
+        end_time=time.perf_counter()
+        edge_compute_time=end_time-start_time
+
+        print("边侧推理1结束，开始上传数据")
+        # 发送数据
     
-    input_batch=torch.rand(50,3,224,224)
+        start_time=time.perf_counter()
+        send_data(client_socket, output)
+        end_time=time.perf_counter()
+        output=get_data(client_socket)
+        
+        print("传输完成，获取到云侧推理结果")
+        net_time+=end_time-start_time
 
-    print("边侧开始推理")
-    start_time=time.time()
-    op_a=model_A(input_batch)
-    #time1=time.time()
-    #print("纯推理速度：",time1-start_time)
-    #print(op_a.shape)
-    output=quantisez(op_a,observer)
-    data={
-        "data": base64.b64encode(output[0].tobytes()).decode("utf-8"),
-        "scale":base64.b64encode(output[1].tobytes()).decode("utf-8"),
-        "zero_point":base64.b64encode(output[2].tobytes()).decode("utf-8"),
-        "shape":base64.b64encode(np.array(output[3]).tobytes()).decode("utf-8")
-    }
-    
-    end_time=time.time()
-    edge_compute_time=end_time-start_time
-    print("边侧推理1结束，开始上传数据")
-    start_time=time.time()
+        start_time=time.perf_counter()
 
-    response=client.post(f'{CONFIG.CLOUDIP}/inff',json=data,headers=headers,timeout=CONFIG.TIMEOUT)
-    end_time=time.time()
-    print("传输完成，获取到云侧推理结果")
-    cloud_time=response.json()["cloud_time"]
-    net_time=end_time-start_time-cloud_time
-    
-    data=response.json()
+        input_data=output.dequantize()
 
 
-    tensor=data['data']
-    decoded_tensor = base64.b64decode(tensor)
-    scale=data['scale']
-    decoded_scale = base64.b64decode(scale)
-    zero_point=data['zero_point']
-    decoded_zero = base64.b64decode(zero_point)
-    shape=data['shape']
-    decoded_shape = base64.b64decode(shape)
-    decoded_shape=np.frombuffer(decoded_shape,dtype=np.int64)
-    decoded_tensor=np.frombuffer(decoded_tensor,dtype=np.int8).reshape(decoded_shape)
-    decoded_scale=np.frombuffer(decoded_scale,dtype=np.float32)
-    decoded_zero=np.frombuffer(decoded_zero,dtype=np.int32)
+        end_result=model_C(input_data)
+        end_time=time.perf_counter()
+        edge_compute_time+=end_time-start_time
+        print("边侧推理结束")
 
-
-
-    start_time=time.time()
-
-    input_data=dequantise(decoded_tensor,decoded_scale,decoded_zero)
-
-
-    end_result=model_C(input_data)
-    end_time=time.time()
-    edge_compute_time+=end_time-start_time
-    print("边侧推理结束")
-
-    print("边侧推理时间:",edge_compute_time)
-    print("网络传输时间:",net_time)
-    print("云侧推理时间:",cloud_time)
-    print("总时间:",edge_compute_time+net_time+cloud_time)
+        print("边侧推理时间:",edge_compute_time)
+        print("网络传输时间:",net_time)
+        print("总时间:",edge_compute_time+net_time+cloud_time)
 
         
 
