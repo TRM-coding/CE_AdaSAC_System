@@ -27,6 +27,7 @@ model_B.eval()
 def quantisez(tensor:torch.Tensor,observer:MovingAveragePerChannelMinMaxObserver):
     observer(tensor)
     scale, zero_point = observer.calculate_qparams()
+    zero_point=torch.zeros_like(zero_point).to(device=tensor.device)
     tensor_quantized = torch.quantize_per_channel(tensor, scales=scale, zero_points=zero_point, axis=0, dtype=torch.qint8)
     return tensor_quantized
 
@@ -71,6 +72,7 @@ def send_data(conn, data, chunk_size=4096):
     data=data.to('cpu')
     serialized_data = pickle.dumps(data)
     data_length = len(serialized_data)
+    print("数据长度：",data_length)
     
     # 发送 header（数据长度）
     header = pickle.dumps(data_length)
@@ -97,7 +99,7 @@ def send_data(conn, data, chunk_size=4096):
 if __name__ == "__main__":
     # data=request.get_json()
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_address = ('0.0.0.0', 5000)  # 例如使用 12345 端口
+    server_address = ('0.0.0.0', 5001)  # 例如使用 12345 端口
     server_socket.bind(server_address)
     server_socket.listen(5)
     print("Server is listening on port 5000...")
@@ -127,15 +129,17 @@ if __name__ == "__main__":
             ender.record()
             torch.cuda.synchronize()
             cloud_time += starter.elapsed_time(ender)
-    cloud_time=cloud_time/50
+    cloud_time=cloud_time/100
     print("CODE:云侧推理结束")
     print("云侧推理时间：",cloud_time)
     print("返回中间数据")
     # 量化数据
     observer = MovingAveragePerChannelMinMaxObserver(ch_axis=0).to(device)
     output=quantisez(op_b,observer)
-
+    start_time=time.perf_counter()
     send_data(conn, output)
+    end_time=time.perf_counter()
+    print("结果数据时间:",end_time-start_time)
 
     print("CODE:云侧返回数据完成")
     conn.close()

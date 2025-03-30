@@ -140,11 +140,7 @@ class SVDED_Conv(nn.Module):
             bias=False
         ).to(self.device)
         conv_1.weight=nn.Parameter(U.contiguous().t().view(U.shape[1],self.conv_layer.in_channels,*self.conv_layer.kernel_size))
-
-        # newlinear1=torch.nn.Linear(U.shape[0],U.shape[1],bias=False).to(self.device)
-        newlinear2=torch.nn.Linear(V.shape[0],V.shape[1],bias=False).to(self.device)
-        
-        # newlinear1.weight=nn.Parameter(U.t())
+        newlinear2=torch.nn.Linear(V.shape[0],V.shape[1],bias=False).to(self.device)        
         newlinear2.weight=nn.Parameter(V.t())
         if(self.b is not None):
             newbias=Bias(self.b).to(self.device)

@@ -166,10 +166,14 @@ class Recrusively_reduce_search:
                         self.is_child[len(self.svded_layers)-1]=name
                         for reduce_rate in np.arange(0,1,reduce_step):
                             c_svd=self.svder.layer_svd(layer_c,reduce_rate)
-                            self.svded_layers[-1].append((name_c,c_svd))
-                            c_svdi=c_svd.to(self.back_device)
-                            flops,_=profile(c_svdi,inputs=(x if (isinstance(c_svd,SVDED_Conv) and c_svd.conv_layer.in_channels==x.shape[1]) else ip,))
-                            c_svdi.to(self.device)
+                            flops_r,_=profile(c_svd,inputs=(x if (isinstance(c_svd,SVDED_Conv) and c_svd.conv_layer.in_channels==x.shape[1]) else ip,))
+                            flops_nr,_=profile(layer_c,inputs=(x if (isinstance(c_svd,SVDED_Conv) and c_svd.conv_layer.in_channels==x.shape[1]) else ip,))
+                            if flops_r<flops_nr:
+                                self.svded_layers[-1].append((name_c,c_svd))
+                            else:
+                                self.svded_layers[-1].append((name_c,layer_c))
+                            
+                            c_svd.to(self.device)
                             setattr(c_svd,'flops',flops)
                             torch.cuda.empty_cache()
                             # setattr(c_svd,'netBytes',net_Bytes)
@@ -187,10 +191,12 @@ class Recrusively_reduce_search:
                     setattr(layer,'netBytes',net_Bytes)
                     for reduce_rate in np.arange(0,1,reduce_step):
                         c_svd=self.svder.layer_svd(layer,reduce_rate)
-                        self.svded_layers[-1].append((name,c_svd)) 
-                        c_svdi=c_svd.to(self.back_device)
-                        flops,_=profile(c_svdi,inputs=(x,))
-                        c_svd.to(self.device)
+                        flops,_=profile(c_svd,inputs=(x,))
+                        flops_nr,_=profile(layeri,inputs=(x,))
+                        if flops<flops_nr:
+                            self.svded_layers[-1].append((name,c_svd))
+                        else:
+                            self.svded_layers[-1].append((name,layer)) 
                         torch.cuda.empty_cache()
                         setattr(c_svd,'flops',flops)
                         setattr(c_svd,'netBytes',net_Bytes)

@@ -11,25 +11,23 @@ from torch.quantization.observer import MovingAveragePerChannelMinMaxObserver
 
 
 class quantiseze_model(nn.Module):
-        def __init__(self,model_list):
-            super(quantiseze_model,self).__init__()
-            self.model_list=nn.ModuleList(model_list)
-            self.observer = MovingAveragePerChannelMinMaxObserver(ch_axis=0).to(next(self.parameters()).device)
-        def forward(self,x):
-            x=self.model_list[0](x)
-            self.observer(x)
-            scale, zero_point = self.observer.calculate_qparams()
-            # scale=scale.to(device)
-            # zero_point=zero_point.to(device)
-            x_quantized = torch.quantize_per_channel(x, scales=scale, zero_points=zero_point, axis=0, dtype=torch.qint8)
-            x=self.model_list[1](x_quantized.dequantize())
-            self.observer(x)
-            scale, zero_point = self.observer.calculate_qparams()
-            # scale=scale.to(device)
-            # zero_point=zero_point.to(device)
-            x_quantized = torch.quantize_per_channel(x, scales=scale, zero_points=zero_point, axis=0, dtype=torch.qint8)
-            x=self.model_list[2](x_quantized.dequantize())
-            return x
+    def __init__(self,model_list):
+        super(quantiseze_model,self).__init__()
+        self.model_list=nn.ModuleList(model_list)
+        self.observer = MovingAveragePerChannelMinMaxObserver(ch_axis=0).to(next(self.parameters()).device)
+    def forward(self,x):
+        x=self.model_list[0](x)
+        self.observer(x)
+        scale, zero_point = self.observer.calculate_qparams()
+        zero_point=torch.zeros_like(zero_point).to(device=x.device)
+        x_quantized = torch.quantize_per_channel(x, scales=scale, zero_points=zero_point, axis=0, dtype=torch.qint8)
+        x=self.model_list[1](x_quantized.dequantize())
+        self.observer(x)
+        scale, zero_point = self.observer.calculate_qparams()
+        zero_point=torch.zeros_like(zero_point).to(device=x.device)
+        x_quantized = torch.quantize_per_channel(x, scales=scale, zero_points=zero_point, axis=0, dtype=torch.qint8)
+        x=self.model_list[2](x_quantized.dequantize())
+        return x
 
 if __name__ == "__main__":
     mp.set_start_method('spawn', force=True)
@@ -98,17 +96,20 @@ if __name__ == "__main__":
         #model,edge_layer_map=searcher.model_reduce([4,4,2,5,3,5,5,1,5,1,4,2,0,5,6,7,5,6,4,2,5,4,0,5,3,4])
         # model,edge_layer_map=searcher.model_reduce([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
 
-        # model,edge_layer_map=searcher.model_reduce([4,7])
-        model,edge_layer_map=searcher.model_reduce([0,0])
+        model,edge_layer_map=searcher.model_reduce([4])
+        # model,edge_layer_map=searcher.model_reduce([0,0])
+        print("layer_map_len:",len(edge_layer_map))
         eA,c,eB=searcher.split(model,len(edge_layer_map))
 
         qm=quantiseze_model([eA,c,eB])
 
         print("start eval")
+
+    
         elaver=eval(inputs,qm)# remenber to change it
         loss,acc=elaver.eval()
         print("loss:",loss," acc:",acc)
-        torch.save(eA,"./nclientA.pth")
+        torch.save(eA,"./clientA.pth")
         torch.save(c,"./clientB.pth")
-        torch.save(eB,"./nclientC.pth")
+        torch.save(eB,"./clientC.pth")
         print("CODE:finish")
