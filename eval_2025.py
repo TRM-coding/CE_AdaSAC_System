@@ -98,7 +98,8 @@ if __name__ == "__main__":
         #model,edge_layer_map=searcher.model_reduce([4,4,2,5,3,5,5,1,5,1,4,2,0,5,6,7,5,6,4,2,5,4,0,5,3,4])
         # model,edge_layer_map=searcher.model_reduce([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
 
-        model,edge_layer_map=searcher.model_reduce([4,7])
+        # model,edge_layer_map=searcher.model_reduce([4,7])
+        model,edge_layer_map=searcher.model_reduce([0,0])
         eA,c,eB=searcher.split(model,len(edge_layer_map))
 
         qm=quantiseze_model([eA,c,eB])

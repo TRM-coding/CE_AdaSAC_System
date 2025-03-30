@@ -13,6 +13,7 @@ class SVDED_Linear(nn.Module):
     def __init__(self,origin_layer,reduce_rate,device):
         super(SVDED_Linear,self).__init__()
         self.device=device
+        self.origin_layer=origin_layer
         self.weight=origin_layer.weight
         if(origin_layer.bias is not None):
             self.b=origin_layer.bias
@@ -22,13 +23,22 @@ class SVDED_Linear(nn.Module):
         self.U,self.V,self.bias=self.svd()
         return
     
-    def forward(self,x):
+    def forward_origin(self,x):
+        return self.origin_layer(x)
+    
+    def forward_svd(self,x):
         o1=self.U(x)
         o2=self.V(o1)
         if(self.bias is not None):
             o3=self.bias(o2)
             return o3
         return o2
+    
+    def forward(self,x):
+        if(self.reduce_rate==0):
+            return self.forward_origin(x)
+        else:
+            return self.forward_svd(x)
 
     def svd(self):
         
@@ -80,18 +90,12 @@ class SVDED_Conv(nn.Module):
         x=x.view(x.shape[0],-1)
         return w@x
     
-    def forward(self,x):
-        # x_unfold=nn.Unfold(
-        #     kernel_size=self.conv_layer.kernel_size,
-        #     stride=self.conv_layer.stride,
-        #     padding=self.conv_layer.padding
-        # )(x)
-        # x_permute=x_unfold.permute(0,2,1)
+    def forward_origin(self,x):
+        return self.conv_layer(x)
+    
+    def forward_svd(self,x):
         output1=self.newconv1(x)
         output2=output1.view(output1.shape[0],output1.shape[1],-1)
-        # linear_f=vmap(self.linear2,in_dims=(None,0))
-        # output2=linear_f(self.newlinear2,output1)
-        # output2=self.newlinear2(output1)
         output3=torch.matmul(self.newlinear2,output2)
 
         if(self.bias is not None):
@@ -102,6 +106,12 @@ class SVDED_Conv(nn.Module):
         output_W=(x.shape[3]+2*self.conv_layer.padding[1]-self.conv_layer.kernel_size[1])//self.conv_layer.stride[1]+1
         output_res=output_permute.view(output_permute.shape[0],output_permute.shape[1],output_H,output_W)
         return output_res
+    
+    def forward(self,x):
+        if(self.reduce_rate==0):
+            return self.forward_origin(x)
+        else:
+            return self.forward_svd(x)
 
     def svd(self):
         U,S,V=torch.linalg.svd(self.weight.t())
