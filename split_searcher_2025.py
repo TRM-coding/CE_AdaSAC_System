@@ -1,5 +1,6 @@
 from detection.DataGenerator import train_based_self_detection
 from detection.Loader.ResNet50Loader import Resnet50Loader
+from detection.Loader.VGG16Loader import VGG16Loader
 import detection.Spliter
 import torch.multiprocessing as mp
 import torch
@@ -11,7 +12,7 @@ if __name__ == '__main__':
 
     mp.set_start_method('spawn', force=True)
     print("CODE:loading_resnet50")
-    model=Resnet50Loader().load()
+    model=VGG16Loader().load()
     print("CODE:loading_finished")
     device=CONFIG.DEFAULT_DEVICE
     back_device=CONFIG.DEFAULT_DEVICE

@@ -984,6 +984,21 @@ class Recrusively_reduce_search:
                 Tot=Tot+1
             edge_model_A.model_list.append(model_list[i])
             i=i+1
+            flag=0
+            k=copy.deepcopy(i)
+            while(not (isinstance(model_list[k],SVDED_Conv) or 
+                    isinstance(model_list[k],SVDED_Linear) or 
+                    isinstance(model_list[k],SqueezeExcitation) or
+                    isinstance(model_list[k],Conv2dNormActivation)or
+                    isinstance(model_list[k],MyBot))):
+                if(isinstance(model_list[k],nn.MaxPool2d) or isinstance(model_list[k],nn.AvgPool2d)):    
+                    flag=k
+                k=k+1                                  
+            if(flag!=0):
+                while(i<=flag):
+                    edge_model_A.model_list.append(model_list[i])
+                    i=i+1
+                    Tot=Tot+1
             
         for i in range(Tot,len(model_list)-1):
             cloud_model.model_list.append(model_list[i])

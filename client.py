@@ -19,6 +19,7 @@ import socket
 def quantisez(tensor:torch.Tensor,observer:MovingAveragePerChannelMinMaxObserver):
     observer(tensor)
     scale, zero_point = observer.calculate_qparams()
+    zero_point=torch.zeros_like(zero_point)
     tensor_quantized = torch.quantize_per_channel(tensor, scales=scale, zero_points=zero_point, axis=0, dtype=torch.qint8)
     return tensor_quantized
 
@@ -29,6 +30,7 @@ def dequantise(numpy_data:torch.tensor):
 def get_data(conn, chunk_size=4096):
     header_data = conn.recv(1024)
     if not header_data:
+
         raise Exception("No header received")
     try:
         data_length = pickle.loads(header_data)
@@ -86,25 +88,25 @@ def send_data(conn, data, chunk_size=4096):
 
 
 if __name__ == "__main__":
+    print("CODE:云侧握手")
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((CONFIG.CLOUDIP, CONFIG.CLOUD_PORT))
+    print("CODE:握手成功")
+
     with torch.no_grad():     
-        print("CODE:云侧握手")
-        warm_batch=torch.rand(50,3,224,224)
-        send_data(client_socket, warm_batch)
-        print("CODE:云侧握手完成")
         print("CODE:loading_model")
         model_A=Splited_Model()
         model_C=Splited_Model()
         observer = MovingAveragePerChannelMinMaxObserver(ch_axis=0)
 
 
-        model_A=torch.load("./nclientA.pth",map_location=torch.device('cpu'))
-        model_A.to('cpu')
-        model_A.eval()
-        model_C=torch.load("./nclientC.pth",map_location=torch.device('cpu'))
+        model_A_=torch.load("./clientA.pth",map_location=torch.device('cpu'))
+        model_A_.to('cpu')
+        model_A_.eval()
+        model_C=torch.load("./clientC.pth",map_location=torch.device('cpu'))
         model_C.to('cpu')
-        model_A.eval()
+
+       
         model_C.eval()
         print("CODE:loading_finished")
 
@@ -122,26 +124,34 @@ if __name__ == "__main__":
         #input_batch=inputs_and_labels[0][0]
         
         input_batch=torch.rand(2,3,224,224)
-        # warm_batch=torch.rand(50,3,224,224)
-        flops,params=profile(model_A,inputs=(input_batch,))
+        print("code:设备预热")
+        flops,params=profile(model_A_,inputs=(input_batch,))
+        model_A=torch.compile(model_A_)
+        # model_A=torch.jit.script(model_A_)
         print("flops:",flops)
         print("start_warmup")
-        model_A(input_batch)
         print("边侧开始推理")
+        for i in range(20):
+            model_A(input_batch)
         total_time=0
-        for i in range(100):
+        for i in range(200):
             start_time=time.perf_counter()
             op_a=model_A(input_batch)
             time1=time.perf_counter()
             total_time+=time1-start_time
-        print("纯推理速度：",total_time/100)
+        print("纯推理速度：",total_time/200)
         print(op_a.shape)
+        start_time=time.perf_counter()
         output=quantisez(op_a,observer)
         end_time=time.perf_counter()
-        edge_compute_time=end_time-start_time
+        edge_compute_time=total_time/200+end_time-start_time
 
         print("边侧推理1结束，开始上传数据")
         # 发送数据
+        print("发送预热数据")
+        warm_batch=torch.rand(1,3,224,224)
+        send_data(client_socket, warm_batch)
+        print("CODE:预热数据发送完成")
     
         start_time=time.perf_counter()
         send_data(client_socket, output)
