@@ -1,11 +1,17 @@
 import torch
 from torch import nn
 from torch import vmap
-class Bias(nn.Module):
+class Bias_conv(nn.Module):
     def __init__(self,b):
         super().__init__()
-        self.bias=nn.Parameter(b)
+        self.bias=nn.Parameter(b.view(1,b.shape[0],1,1)) 
+    def forward(self,x):
+        return x+self.bias
     
+class Bias_linear(nn.Module):
+    def __init__(self,b):
+        super().__init__()
+        self.bias=nn.Parameter(b) 
     def forward(self,x):
         return x+self.bias
 
@@ -65,7 +71,7 @@ class SVDED_Linear(nn.Module):
         newlinear1.weight=nn.Parameter(U.t())
         newlinear2.weight=nn.Parameter(V.t())
         if(self.b is not None):
-            newbias=Bias(self.b).to(self.device)
+            newbias=Bias_linear(self.b).to(self.device)
         else :
             newbias=None
         
@@ -98,13 +104,16 @@ class SVDED_Conv(nn.Module):
         output2=output1.view(output1.shape[0],output1.shape[1],-1)
         output3=torch.matmul(self.newlinear2,output2)
 
-        if(self.bias is not None):
-            output3=self.bias(output3)
+        
         output_permute=output3
 
         output_H=(x.shape[2]+2*self.conv_layer.padding[0]-self.conv_layer.kernel_size[0])//self.conv_layer.stride[0]+1
         output_W=(x.shape[3]+2*self.conv_layer.padding[1]-self.conv_layer.kernel_size[1])//self.conv_layer.stride[1]+1
         output_res=output_permute.view(output_permute.shape[0],output_permute.shape[1],output_H,output_W)
+        
+        if(self.bias is not None):
+            output_res=self.bias(output_res)
+
         return output_res
     
     def forward(self,x):
@@ -143,7 +152,7 @@ class SVDED_Conv(nn.Module):
         newlinear2=torch.nn.Linear(V.shape[0],V.shape[1],bias=False).to(self.device)        
         newlinear2.weight=nn.Parameter(V.t())
         if(self.b is not None):
-            newbias=Bias(self.b).to(self.device)
+            newbias=Bias_conv(self.b).to(self.device)
         else :
             newbias=None
         

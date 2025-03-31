@@ -6,7 +6,7 @@ class VGG16Loader:
     def __init__(self):
         self.model=VGG16()
         self.pre_trained=models.vgg16_bn(weights=True)
-        print(self.pre_trained)
+        # print(self.pre_trained)
         self.pre_layer_map={name:layer for name,layer in self.pre_trained.named_children()}
         self.layer_names=[name for name,_ in self.model.named_children()]
     

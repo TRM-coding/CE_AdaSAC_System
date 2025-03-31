@@ -11,8 +11,9 @@ from detection.config import CONFIG
 if __name__ == '__main__':
 
     mp.set_start_method('spawn', force=True)
-    print("CODE:loading_resnet50")
+    print("CODE:loading_vgg16")
     model=VGG16Loader().load()
+    # model=Resnet50Loader().load()
     print("CODE:loading_finished")
     device=CONFIG.DEFAULT_DEVICE
     back_device=CONFIG.DEFAULT_DEVICE
@@ -95,12 +96,12 @@ if __name__ == '__main__':
         for i in range(1,CONFIG.MODEL_LAYER_NUMBER):
             torch.cuda.empty_cache()
             cut_num=int((max(upper_bound[:i+1])+min(upper_bound[:i+1]))/2)
-            model_r,edge_layer_map=searcher.model_reduce([cut_num]*i)
-            model_nr,edge_layer_map=searcher.model_reduce([0]*i)
-            eA_r,c_r,eB_r=searcher.split(model_r,len(edge_layer_map))
+            model_r,edge_layer_map_r=searcher.model_reduce([cut_num]*i)
+            model_nr,edge_layer_map_nr=searcher.model_reduce([0]*i)
+            eA_r,c_r,eB_r=searcher.split(model_r,len(edge_layer_map_r))
             # print(model_r)
             # input()
-            eA_nr,c_nr,eB_nr=searcher.split(model_nr,len(edge_layer_map))
+            eA_nr,c_nr,eB_nr=searcher.split(model_nr,len(edge_layer_map_nr))
             qm_r=quantiseze_model([eA_r,c_r,eB_r])
             qm_r.eval()
             qm_nr=quantiseze_model([eA_nr,c_nr,eB_nr])
@@ -144,7 +145,7 @@ if __name__ == '__main__':
 
         for i in range(0,CONFIG.MODEL_LAYER_NUMBER-1):
             print("idx:",i,"net_time:",quantized_network_list[i],"compute_time:",quantized_compute_list[i]," total_time:",quantized_compute_list[i]+quantized_network_list[i]," acc:",quantized_acc_list[i],"F_per_point:",F_per_point[i])
-        F_per_point=[0,0]+F_per_point
+        F_per_point=[0]+F_per_point
 
         best_index=F_per_point.index(max(F_per_point))
         print("best_index:",best_index,"max_F:",max(F_per_point))

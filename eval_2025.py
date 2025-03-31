@@ -4,6 +4,7 @@ from detection.config import CONFIG
 
 from detection.DataGenerator import train_based_self_detection
 from detection.Loader.ResNet50Loader import Resnet50Loader
+from detection.Loader.VGG16Loader import VGG16Loader
 import detection.Spliter
 import torch.multiprocessing as mp
 from torch import nn
@@ -32,7 +33,8 @@ class quantiseze_model(nn.Module):
 if __name__ == "__main__":
     mp.set_start_method('spawn', force=True)
     print("CODE:loading_resnet50")
-    model=Resnet50Loader().load()
+    # model=Resnet50Loader().load()
+    model=VGG16Loader().load()
     print("CODE:loading_finished")
 
     device=CONFIG.DEFAULT_DEVICE
@@ -44,24 +46,7 @@ if __name__ == "__main__":
         no_weight=True
     )
 
-   
 
-    
-
-    # input_data,output_label,label,highest_loss,lowest_loss= datamaker.make_data_pid(
-    #         total_number=CONFIG.TEST_DATA_TOTAL_NUMBER,
-    #         batch_size=CONFIG.TEST_DATA_BATCH_SIZE,
-    #         learning_rate=CONFIG.TEST_DATA_LEARNING_RATE,
-    #         warm_lr=CONFIG.TEST_DATA_WARM_LR,
-    #         channel=CONFIG.TEST_DATA_CHANNEL,
-    #         dim1=CONFIG.TEST_DATA_DIM1,
-    #         dim2=CONFIG.TEST_DATA_DIM2,
-    #         output_size=CONFIG.TEST_DATA_OUTPUT_SIZE,
-    #         randn_magnification=CONFIG.TEST_DATA_RANDN_MAGNIFICATION,
-    #         confidence=CONFIG.TEST_DATA_CONFIDENCE,
-    #         target_acc=CONFIG.TEST_DATA_TARGET_ACC
-
-    # )
     inputs=datamaker.make_data_img()
     print(type(inputs))
     print(inputs[0][0].shape)
@@ -96,8 +81,10 @@ if __name__ == "__main__":
         #model,edge_layer_map=searcher.model_reduce([4,4,2,5,3,5,5,1,5,1,4,2,0,5,6,7,5,6,4,2,5,4,0,5,3,4])
         # model,edge_layer_map=searcher.model_reduce([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
 
-        model,edge_layer_map=searcher.model_reduce([4])
-        # model,edge_layer_map=searcher.model_reduce([0,0])
+
+        # model,edge_layer_map=searcher.model_reduce([7,6])
+        # model,edge_layer_map=searcher.model_reduce([4])
+        model,edge_layer_map=searcher.model_reduce([0,0])
         print("layer_map_len:",len(edge_layer_map))
         eA,c,eB=searcher.split(model,len(edge_layer_map))
 
@@ -109,7 +96,7 @@ if __name__ == "__main__":
         elaver=eval(inputs,qm)# remenber to change it
         loss,acc=elaver.eval()
         print("loss:",loss," acc:",acc)
-        torch.save(eA,"./clientA.pth")
-        torch.save(c,"./clientB.pth")
-        torch.save(eB,"./clientC.pth")
+        torch.save(eA,"./nclientA_v.pth")
+        torch.save(c,"./nclientB_v.pth")
+        torch.save(eB,"./nclientC_v.pth")
         print("CODE:finish")

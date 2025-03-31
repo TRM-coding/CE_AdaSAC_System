@@ -238,6 +238,8 @@ class Recrusively_reduce_search:
         return acc,loss.item()
 
     def dfs_get_flops(self,layer):
+        if(hasattr(layer,'flops')):
+            return layer.flops
         flops=0
         if(isinstance(layer,SVDED_Conv) or isinstance(layer,SVDED_Linear)):
             return layer.flops
@@ -254,7 +256,7 @@ class Recrusively_reduce_search:
             total_flops_edge+=self.dfs_get_flops(layer)
    
         for layer in model_cloud.model_list:
-            total_flops_cloud+=layer.flops
+            total_flops_cloud+=self.dfs_get_flops(layer)
         
 
         for layer in model_edge_B.model_list:
@@ -279,6 +281,7 @@ class Recrusively_reduce_search:
         op=quantisized_model.model_list[0](ip)
         observer(op)
         scale,zero_point=observer.calculate_qparams()
+        zero_point=torch.zeros_like(zero_point).to(device=ip.device)
         # print(scale,zero_point)
         op_quantized=torch.quantize_per_channel(op,scales=scale,zero_points=zero_point,axis=1,dtype=quantisized_type)
         memory_bits=op_quantized.nelement()*op_quantized.element_size()
@@ -557,152 +560,7 @@ class Recrusively_reduce_search:
             print(f"F:{f[0]},latency:{f[1]},loss:{f[2]},acc:{f[3]},net_latency:{f[4]},alpha:{spi[1]}")
         return species_map
     
-    def search_GA_trash(self,number_of_layer_to_reduce,alpha,step=0.1):
-        # upper_bound=self.GA_init(number_of_layer_to_reduce,step)
-        # print("每层裁减上限:",upper_bound)
-        # init_species=[]
-        # for i in range(self.init_size):
-        #     listi=[random.randint(0,upper_bound[j]) for j,_ in enumerate(range(number_of_layer_to_reduce))]
-        #     init_species.append(listi)
-        # lass_F=0
-        # generate_epoch=self.generate_epoch
-        # # F_score_list=[0 for _ in range(len(init_species))]
-        # scnt=0
-        # numworker=CONFIG.WORKERNUMBER
-        # pool = multiprocessing.Pool(processes=numworker)
-        # manager=Manager()
-        # q=manager.Queue()
-        # gpu_usage=manager.list()
-        # # gpu_usage={}
-        # # 除了0号GPU外，其他GPU都是空闲的
-        # for i in range(CONFIG.GPU_AVAILABLE[0],CONFIG.GPU_AVAILABLE[1]+1):
-        #     gpu_usage.append(0)
-        # for i in CONFIG.UNAVAILABLE:
-        #     gpu_usage[i]=1000000
-        # while(generate_epoch):
-        #     F_score_list=[]
-        #     st=time.time()
-        #     results = []
-        #     threads=[]
-        #     task_list=[]
-        #     torch.cuda.empty_cache()
-        #     # partial_task = functools.partial(self.taski)
-        #     for idx,speciesi in enumerate(init_species):
-        #         task_list.append((speciesi,alpha))
-            
-        #     i=0
-        #     torch.cuda.empty_cache()
-
-            
-        # # 将任务分配给进程池中的进程
-        #     print("开始分配进程,总任务量:",len(task_list))
-        #     pool.starmap(self.taski, [ 
-        #         (task_list[i:min(len(task_list), i + len(task_list) // numworker)],q,gpu_usage) 
-        #                           for i in range(0, len(init_species), len(init_species) // numworker)])
-            
-            
-        #     print("All tasks are completed.")
-        #     ed=time.time()
-        #     print("Generate_time:",ed-st)
-            
-        #     F_score_list.clear()
-        #     init_species=[]
-        #     while not q.empty():
-        #         results.append(q.get())
-        #     for ki in results:
-        #         schemes = ki[0]
-        #         for i in range(len(schemes)):
-        #             init_species.append(tuple(schemes[i]))
-        #         f_list=ki[1]
-        #         F_score_list+=f_list
-        #         f_i=max(f_list)
-        #         max_idx=f_list.index(f_i)
-        #         latency,loss,acc,net_latency=ki[2][max_idx],ki[3][max_idx],ki[4][max_idx],ki[5][max_idx]
-        #         self.network_latency=net_latency
-        #         # TODO:修改遗传机制
-
-        #         if(f_i>lass_F):
-        #             self.best_scheme=schemes[max_idx]
-        #             self.best_acc=acc
-        #             self.best_loss=loss
-        #             self.best_latency=latency+self.network_latency
-        #             lass_F=f_i    
-        #             print("a new one")
-        #         torch.cuda.empty_cache()
-        #     print("latency:",latency)
-        #     print("loss:",loss)
-            
-
-        #     # 分布调整
-        #     unique_dict=dict(zip(init_species,F_score_list))
-        #     unique_species=list(unique_dict.keys())
-        #     unique_F=list(unique_dict.values())
-
-        #     sum_cut_list=[sum(sublist) for sublist in unique_species]
-        #     max_cut=max(sum_cut_list)
-
-        #     len_u=len(unique_species)
-        #     for i in range(len_u):
-        #         cut_i=sum(unique_species[i])
-        #         if(self.ifexpand(max_cut=max_cut,cut_i=cut_i,alpha=(1-alpha))):
-        #             unique_species.append(unique_species[i])
-        #             unique_F.append(unique_F[i])
-                    
-        #     # 淘汰个体
-        #     cb=list(zip(unique_species,unique_F))
-
-        #     cbsorted=sorted(cb,key=lambda x:x[1],reverse=True)
-        #     cbsorted=cbsorted[:self.init_size]
-        #     init_species=[x[0] for x in cbsorted]
-        #     F_score_list=[x[1] for x in cbsorted]
-
-        #     # 构造归一化积分函数
-        #     sums=sum(F_score_list)
-        #     for i,_ in enumerate(F_score_list):
-        #         F_score_list[i]/=sums
-        #     F_Integral=[]
-        #     for i in range(len(F_score_list)):
-        #         F_Integral.append(0)
-        #         for j in range(i+1):
-        #             F_Integral[i]+=F_score_list[j]
-
-        #     maxx=len(init_species)
-            
-        #     #随机选择个体作为父代并进行交叉遗传
-        #     for _ in range(maxx):
-        #         r=random.random()
-        #         father=[]
-        #         for i,p in enumerate(F_Integral):
-        #             if len(father)>1:
-        #                 break
-        #             if r<p:
-        #                 father.append(init_species[i])
-                
-        #         if(len(father)<=1):
-        #             continue
-                
-        #         r=random.random()
-        #         son1=father[0][:int(len(father[0])*r)]+father[1][int(len(father[0])*r):]
-        #         son2=father[1][:int(len(father[0])*r)]+father[0][int(len(father[0])*r):]
-        #         init_species.append(son1)
-        #         init_species.append(son2)
-        
-        #     #Save DATA
-        #     self.F_list.append(lass_F)
-        #     self.F_loss.append(self.best_loss)
-        #     self.F_latency.append(self.best_latency)
-        #     self.F_acc.append(self.best_acc)
-
-        #     print("lass_f:",lass_F)
-        #     print()
-        #     scnt+=1
-        #     generate_epoch-=1
-        #     print("solutions:",scnt,end='\r')
-        
-        # pool.close()
-        # pool.join()
-        # manager.shutdown()
-        return
+    
 
     def searcer_GA_V2(self,init_specise,alpha_step):
         species=[tuple(x) for x in init_specise]
@@ -978,6 +836,8 @@ class Recrusively_reduce_search:
         while(i<Tot):
             if(not (isinstance(model_list[i],SVDED_Conv) or 
                     isinstance(model_list[i],SVDED_Linear) or 
+                    isinstance(model_list[i],nn.Conv2d)or
+                    isinstance(model_list[i],nn.Linear)or
                     isinstance(model_list[i],SqueezeExcitation) or
                     isinstance(model_list[i],Conv2dNormActivation)or
                     isinstance(model_list[i],MyBot))):
@@ -986,14 +846,20 @@ class Recrusively_reduce_search:
             i=i+1
             flag=0
             k=copy.deepcopy(i)
+            if(k>=len(model_list)):
+                break
             while(not (isinstance(model_list[k],SVDED_Conv) or 
-                    isinstance(model_list[k],SVDED_Linear) or 
+                    isinstance(model_list[k],SVDED_Linear) or
+                    isinstance(model_list[k],nn.Conv2d)or
+                    isinstance(model_list[k],nn.Linear)or 
                     isinstance(model_list[k],SqueezeExcitation) or
                     isinstance(model_list[k],Conv2dNormActivation)or
                     isinstance(model_list[k],MyBot))):
                 if(isinstance(model_list[k],nn.MaxPool2d) or isinstance(model_list[k],nn.AvgPool2d)):    
                     flag=k
-                k=k+1                                  
+                k=k+1                  
+                if(k>=len(model_list)):
+                    break
             if(flag!=0):
                 while(i<=flag):
                     edge_model_A.model_list.append(model_list[i])
@@ -1002,6 +868,8 @@ class Recrusively_reduce_search:
             
         for i in range(Tot,len(model_list)-1):
             cloud_model.model_list.append(model_list[i])
+        if(len(cloud_model.model_list)+len(edge_model_A.model_list)==len(model_list)):
+            return edge_model_A,cloud_model,edge_model_B
         if(isinstance(model_list[-1],SVDED_Linear) or isinstance(model_list[-1],SVDED_Conv)):
             cloud_model.model_list.append(model_list[-1].U)
             edge_model_B.model_list.append(model_list[-1].V)

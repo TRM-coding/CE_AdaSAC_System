@@ -11,8 +11,8 @@ CONFIG = Namespace(
     ALPHA                         =0.9,# alpha ->time
     QUANTISIZED_TYPE              =torch.qint8,
 
-    TEST_DATA_TOTAL_NUMBER        = 100,#how many batchs
-    TEST_DATA_BATCH_SIZE          = 100,
+    TEST_DATA_TOTAL_NUMBER        = 50,#how many batchs
+    TEST_DATA_BATCH_SIZE          = 50,
     TEST_DATA_LEARNING_RATE       = 1,
     TEST_DATA_WARM_LR             = 1e-3,
     TEST_DATA_CHANNEL             = 3,
@@ -25,13 +25,13 @@ CONFIG = Namespace(
 
     LOCAL_SPEED                   =3.6e9,
     CLOUD_SPEED                   =1.7e13,
-    NETWORK_SPEED                 =0.5e7,#B/s
+    NETWORK_SPEED                 =1e7,#B/s
     ACC_CUT_POINT                 =0.7,
 
-    GENERATE_EPOCH_WARM=30,
-    INIT_SIZE_WARM=30,
+    GENERATE_EPOCH_WARM=10,
+    INIT_SIZE_WARM=100,
     WORKERNUMBER=15,
-    ASTOEPOCH=30,
+    ASTOEPOCH=10,
     ALPHASTEP=0.1,
 
     SAVE_PATH_SCHEME="./cloud_cpu_vgg.txt",
