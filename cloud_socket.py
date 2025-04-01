@@ -97,12 +97,12 @@ def send_data(conn, data, chunk_size=4096):
 if __name__ == "__main__":
     # data=request.get_json()
     model_B_=Splited_Model()
-    model_B_=torch.load("./clientB.pth")
+    model_B_=torch.load("./clientB_v.pth")
     model_B_.to(device)
     model_B_.eval()
     model_B=model_B_
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_address = ('0.0.0.0', 5001)  # 例如使用 12345 端口
+    server_address = (CONFIG.CLOUDIP, CONFIG.CLOUD_PORT)  # 例如使用 12345 端口
     server_socket.bind(server_address)
     server_socket.listen(5)
     print("Server is listening on port 5000...")

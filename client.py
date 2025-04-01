@@ -100,10 +100,11 @@ if __name__ == "__main__":
         observer = MovingAveragePerChannelMinMaxObserver(ch_axis=0)
 
 
-        model_A_=torch.load("./clientA.pth",map_location=torch.device('cpu'))
+        model_A_=torch.load("./nclientA_v.pth",map_location=torch.device('cpu'))
         model_A_.to('cpu')
+        print(model_A_)
         model_A_.eval()
-        model_C=torch.load("./clientC.pth",map_location=torch.device('cpu'))
+        model_C=torch.load("./nclientC_v.pth",map_location=torch.device('cpu'))
         model_C.to('cpu')
 
        
@@ -123,28 +124,31 @@ if __name__ == "__main__":
 
         #input_batch=inputs_and_labels[0][0]
         
-        input_batch=torch.rand(2,3,224,224)
+        input_batch=torch.rand(1,3,224,224)
         print("code:设备预热")
+        #model_A=torch.compile(model_A_)
         flops,params=profile(model_A_,inputs=(input_batch,))
+        #model_A=model_A_
         model_A=torch.compile(model_A_)
-        # model_A=torch.jit.script(model_A_)
+        #model_A=torch.jit.script(model_A_)
         print("flops:",flops)
         print("start_warmup")
         print("边侧开始推理")
         for i in range(20):
             model_A(input_batch)
         total_time=0
-        for i in range(200):
+        epoch=100
+        for i in range(epoch):
             start_time=time.perf_counter()
             op_a=model_A(input_batch)
             time1=time.perf_counter()
             total_time+=time1-start_time
-        print("纯推理速度：",total_time/200)
+        print("纯推理速度：",total_time/epoch)
         print(op_a.shape)
         start_time=time.perf_counter()
         output=quantisez(op_a,observer)
         end_time=time.perf_counter()
-        edge_compute_time=total_time/200+end_time-start_time
+        edge_compute_time=total_time/epoch+end_time-start_time
 
         print("边侧推理1结束，开始上传数据")
         # 发送数据

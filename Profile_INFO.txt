@@ -1,290 +1,420 @@
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv1_time: 0.0008338773623108864
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.031216559000313282
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.004857422783970833
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.004431847482919693
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.003724818117916584
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.015197567641735077
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.006436396390199661
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.008466843515634537
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.016558822244405746
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
-[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
-[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
-[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.042708720080554485
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
 [INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv1_time: 0.0005203140899538994
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.05254013743251562
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.006937788799405098
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.006561322137713432
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.009059491567313671
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.005817823112010956
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.008479236625134945
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0052385954186320305
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0033090850338339806
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0034996280446648598
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
 [INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
 [INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv1_time: 0.000347871333360672
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0067831650376319885
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0046945177018642426
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.004635985009372234
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.004647246561944485
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.012053812853991985
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.013165461830794811
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.005316717550158501
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.006299372762441635
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
-[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.004148721694946289
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
 [INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv1_time: 0.0003922218456864357
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.007982625626027584
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0022799093276262283
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0030315592885017395
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0020660487934947014
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0026716776192188263
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.007315218448638916
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0019030570983886719
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.001864645630121231
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
-[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
-[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
-[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
-[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0017300210893154144
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
 [INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
 [INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv1_time: 0.00033353734761476517
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.007303818129003048
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.006772228516638279
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.005688877776265144
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.008298831060528755
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.003843238577246666
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0028826743364334106
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0028464877977967262
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0029211007058620453
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
-[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
-[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0027667945250868797
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
 [INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv1_time: 0.001970888115465641
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.002481701783835888
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.002092125825583935
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.002124878577888012
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0020705629140138626
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.002134977839887142
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.002133340574800968
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0019520046189427376
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0019078878685832024
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0018444499000906944
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv1_time: 0.0003394950181245804
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0500530619174242
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.005245985463261604
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0010970719158649445
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0010095909237861633
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0009957626461982727
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0007643159478902817
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0009004482999444008
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0007994426414370537
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.000797247514128685
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv1_time: 0.00036721862852573395
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0030735889449715614
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0029215076938271523
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.002539469860494137
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.002877160906791687
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.00351692084223032
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0028664832934737206
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.003012288361787796
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0027843033894896507
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0031589027494192123
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv1_time: 0.00036883726716041565
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.002099449746310711
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.001960489898920059
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.002031460404396057
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0017437450587749481
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.002186502330005169
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0020473962649703026
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.002141944132745266
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.001921921968460083
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0018562078475952148
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv1_time: 0.0004518665373325348
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0010647308081388474
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0011674687266349792
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0007494781166315079
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.001149989664554596
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.009195246733725071
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.001986374147236347
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0018521035090088844
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0007367609068751335
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0006239833310246468
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv1_time: 0.00034645572304725647
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.003177526406943798
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0031888484954833984
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0031116828322410583
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0029137255623936653
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.003089900128543377
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0027612699195742607
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.002858290448784828
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0026345131918787956
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0026833228766918182
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv1_time: 0.0003813263028860092
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0009957468137145042
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0008217254653573036
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0007439544424414635
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0008738022297620773
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0008084513247013092
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0007281927391886711
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0006613116711378098
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0006963470950722694
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0006504971534013748
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv1_time: 0.0003810599446296692
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0008107088506221771
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0007236180827021599
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0007968759164214134
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.000812075100839138
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0006660856306552887
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0007094750180840492
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0006992463022470474
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0006856899708509445
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+CODE:conv2_time: 0.0007709991186857224
 [INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
 [INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
 [INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
@@ -295,4 +425,114 @@
 [INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
 [INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
 [INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.dropout.Dropout'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.dropout.Dropout'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register count_convNd() for <class 'torch.nn.modules.conv.Conv2d'>.
+[INFO] Register count_normalization() for <class 'torch.nn.modules.batchnorm.BatchNorm2d'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.pooling.MaxPool2d'>.
+[INFO] Register count_adap_avgpool() for <class 'torch.nn.modules.pooling.AdaptiveAvgPool2d'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.dropout.Dropout'>.
+[INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.activation.ReLU'>.
+[INFO] Register zero_ops() for <class 'torch.nn.modules.dropout.Dropout'>.
 [INFO] Register count_linear() for <class 'torch.nn.modules.linear.Linear'>.

@@ -1,6 +1,9 @@
 import torch
 from torch import nn
 from torch import vmap
+import time
+from thop import profile
+import torch.nn.functional as F
 class Bias_conv(nn.Module):
     def __init__(self,b):
         super().__init__()
@@ -26,7 +29,7 @@ class SVDED_Linear(nn.Module):
         else:
             self.b=None
         self.reduce_rate=reduce_rate
-        self.U,self.V,self.bias=self.svd()
+        self.U,self.V=self.svd()
         return
     
     def forward_origin(self,x):
@@ -35,9 +38,9 @@ class SVDED_Linear(nn.Module):
     def forward_svd(self,x):
         o1=self.U(x)
         o2=self.V(o1)
-        if(self.bias is not None):
-            o3=self.bias(o2)
-            return o3
+        # if(self.bias is not None):
+        #     o3=self.bias(o2)
+        #     return o3
         return o2
     
     def forward(self,x):
@@ -66,16 +69,19 @@ class SVDED_Linear(nn.Module):
             V[i]=V[i]*S[i][i]
 
         newlinear1=torch.nn.Linear(U.shape[0],U.shape[1],bias=False).to(self.device)
-        newlinear2=torch.nn.Linear(V.shape[0],V.shape[1],bias=False).to(self.device)
-        
+        newlinear2=None
         newlinear1.weight=nn.Parameter(U.t())
-        newlinear2.weight=nn.Parameter(V.t())
-        if(self.b is not None):
-            newbias=Bias_linear(self.b).to(self.device)
-        else :
-            newbias=None
         
-        return newlinear1,newlinear2,newbias
+        if(self.b is not None):
+            newlinear2=torch.nn.Linear(V.shape[0],V.shape[1],bias=False).to(self.device)
+            newlinear2.weight=nn.Parameter(V.t())
+            newlinear2.bias=nn.Parameter(self.b)
+        else :
+            newlinear2=torch.nn.Linear(V.shape[0],V.shape[1],bias=False).to(self.device)
+            newlinear2.weight=nn.Parameter(V.t())
+            # newlinear2.bias=None
+        
+        return newlinear1,newlinear2
 
 
 class SVDED_Conv(nn.Module):
@@ -83,44 +89,83 @@ class SVDED_Conv(nn.Module):
         super(SVDED_Conv,self).__init__()
         self.device=device
         self.conv_layer=origin_layer
+        self.conv_layer_padding=origin_layer.padding
+        self.conv_layer_stride=origin_layer.stride
+        self.conv_layer_kernel_size=origin_layer.kernel_size
         self.weight=origin_layer.weight.view(origin_layer.out_channels,-1)
+        self.compile=0
+        self.temp_conv=nn.Conv2d(in_channels=1,out_channels=1,kernel_size=(1,1),stride=(1,1),padding=(0,0),bias=False).to(self.device)
         if(origin_layer.bias is not None):
             self.b=origin_layer.bias
         else:
             self.b=None
         self.reduce_rate=reduce_rate
-        self.newconv1,self.newlinear2,self.bias=self.svd()
+        self.newconv1,self.newlinear2=self.svd()
+        
         return
     
-    def linear2(self,w,x):
-        x=x.view(x.shape[0],-1)
-        return w@x
     
     def forward_origin(self,x):
         return self.conv_layer(x)
     
-    def forward_svd(self,x):
+    def linear2(self,x):
+        
+        if(len(x.shape)!=3):
+            x=x.view(x.shape[-3],x.shape[-2],x.shape[-1])
+        # st=time.perf_counter()
         output1=self.newconv1(x)
-        output2=output1.view(output1.shape[0],output1.shape[1],-1)
-        output3=torch.matmul(self.newlinear2,output2)
-
+        # ed=time.perf_counter()
+        # print("CODE:conv1_time:",ed-st)
+        # print("CODE:conv1_flops:",flops)
+        # st=time.perf_counter()
+        output2=output1.view(output1.shape[0],-1)
         
-        output_permute=output3
+        weight=output2
+        output2=output2.view(1,1,output2.shape[0],output2.shape[1])
+        output2=output2.permute(3,0,1,2)
+        weight=output2
 
-        output_H=(x.shape[2]+2*self.conv_layer.padding[0]-self.conv_layer.kernel_size[0])//self.conv_layer.stride[0]+1
-        output_W=(x.shape[3]+2*self.conv_layer.padding[1]-self.conv_layer.kernel_size[1])//self.conv_layer.stride[1]+1
-        output_res=output_permute.view(output_permute.shape[0],output_permute.shape[1],output_H,output_W)
+        output3=F.conv2d(self.newlinear2,weight)
+        # ed=time.perf_counter()
+        # print("CODE:conv2_time:",ed-st)
+        # flops,_=profile(F.conv2d,inputs=(weight,))
+        # print("CODE:conv2_flops:",flops)
+        # st=time.perf_counter()
+        output3_=output3.permute(0,3,2,1)
+        # 
+        # output3_=torch.matmul(self.newlinear2,output2)
+
+        output3_=output3_.view(output3_.shape[2],output3_.shape[3])
+        output_H=(x.shape[1]+2*self.conv_layer_padding[0]-self.conv_layer_kernel_size[0])//self.conv_layer_stride[0]+1
+        output_W=(x.shape[2]+2*self.conv_layer_padding[1]-self.conv_layer_kernel_size[1])//self.conv_layer_stride[1]+1
+        output_res=output3_.view(1,output3_.shape[0],output_H,output_W)
+        # ed=time.perf_counter()
+        # print("CODE:permute_time:",ed-st)
+        # print("----------------------------------------------")
+        # ed2=time.perf_counter()
+        # print("CODE:out_time:",ed2-ed)
+        return output_res
+    
+    def forward_svd(self,x):
         
-        if(self.bias is not None):
-            output_res=self.bias(output_res)
+        #start_time=time.perf_counter()
+        output_res=vmap(self.linear2, in_dims=(0))(x)
+        # output_res=self.linear2(x)
 
         return output_res
     
     def forward(self,x):
+        st=time.perf_counter()
         if(self.reduce_rate==0):
-            return self.forward_origin(x)
+            op=self.forward_origin(x)
+            ed=time.perf_counter()
+            print("CODE:conv1_time:",ed-st)
+            return op
         else:
-            return self.forward_svd(x)
+            op=self.forward_svd(x)
+            ed=time.perf_counter()
+            print("CODE:conv2_time:",ed-st)
+            return op
 
     def svd(self):
         U,S,V=torch.linalg.svd(self.weight.t())
@@ -148,12 +193,21 @@ class SVDED_Conv(nn.Module):
             groups=self.conv_layer.groups,
             bias=False
         ).to(self.device)
-        conv_1.weight=nn.Parameter(U.contiguous().t().view(U.shape[1],self.conv_layer.in_channels,*self.conv_layer.kernel_size))
-        newlinear2=torch.nn.Linear(V.shape[0],V.shape[1],bias=False).to(self.device)        
-        newlinear2.weight=nn.Parameter(V.t())
+        conv_1.weight=nn.Parameter(U.t().contiguous().view(U.shape[1],self.conv_layer.in_channels,*self.conv_layer.kernel_size).contiguous())
+        newlinear2=None
         if(self.b is not None):
-            newbias=Bias_conv(self.b).to(self.device)
+            newlinear2=torch.nn.Linear(V.shape[0],V.shape[1],bias=True).to(self.device)   
+            weight=V.contiguous().t().contiguous()     
+            weight=weight.view(1,1,weight.shape[0],weight.shape[1])
+            newlinear2.weight=nn.Parameter(weight)
+            newlinear2.bias=nn.Parameter(self.b.contiguous())
         else :
-            newbias=None
+            newlinear2=torch.nn.Linear(V.shape[0],V.shape[1],bias=False).to(self.device)
+            weight=V.contiguous().t().contiguous()
+            weight=weight.view(1,1,weight.shape[0],weight.shape[1])
+            newlinear2.weight=nn.Parameter(weight)
+        newlinear2.requires_grad_=False
+        conv_1.weight.requires_grad=False
         
-        return conv_1,newlinear2.weight,newbias
+        
+        return conv_1,newlinear2.weight,

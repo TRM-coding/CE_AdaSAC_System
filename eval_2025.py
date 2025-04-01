@@ -82,9 +82,9 @@ if __name__ == "__main__":
         # model,edge_layer_map=searcher.model_reduce([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
 
 
-        # model,edge_layer_map=searcher.model_reduce([7,6])
+        model,edge_layer_map=searcher.model_reduce([7,6])
         # model,edge_layer_map=searcher.model_reduce([4])
-        model,edge_layer_map=searcher.model_reduce([0,0])
+        # model,edge_layer_map=searcher.model_reduce([0,0])
         print("layer_map_len:",len(edge_layer_map))
         eA,c,eB=searcher.split(model,len(edge_layer_map))
 
@@ -96,7 +96,7 @@ if __name__ == "__main__":
         elaver=eval(inputs,qm)# remenber to change it
         loss,acc=elaver.eval()
         print("loss:",loss," acc:",acc)
-        torch.save(eA,"./nclientA_v.pth")
-        torch.save(c,"./nclientB_v.pth")
-        torch.save(eB,"./nclientC_v.pth")
+        torch.save(eA,"./clientA_v.pth")
+        torch.save(c,"./clientB_v.pth")
+        torch.save(eB,"./clientC_v.pth")
         print("CODE:finish")

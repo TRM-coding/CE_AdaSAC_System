@@ -37,7 +37,7 @@ CONFIG = Namespace(
     SAVE_PATH_SCHEME="./cloud_cpu_vgg.txt",
     LOAD_NUMBER=12,
     CLOUD_PORT=5000,
-    CLOUDIP='http://127.0.0.1:5000',
+    CLOUDIP='10.126.59.25',
     TIMEOUT=60,
 
     IMAGENET_PATH="/SSD/val"
