@@ -94,8 +94,8 @@ if __name__ == "__main__":
 
     
         elaver=eval(inputs,qm)# remenber to change it
-        loss,acc=elaver.eval()
-        print("loss:",loss," acc:",acc)
+        # loss,acc=elaver.eval()
+        # print("loss:",loss," acc:",acc)
         torch.save(eA,"./clientA_v.pth")
         torch.save(c,"./clientB_v.pth")
         torch.save(eB,"./clientC_v.pth")

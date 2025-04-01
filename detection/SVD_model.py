@@ -109,10 +109,9 @@ class SVDED_Conv(nn.Module):
         return self.conv_layer(x)
     
     def linear2(self,x):
-        
         if(len(x.shape)!=3):
             x=x.view(x.shape[-3],x.shape[-2],x.shape[-1])
-        # st=time.perf_counter()
+        st=time.perf_counter()
         output1=self.newconv1(x)
         # ed=time.perf_counter()
         # print("CODE:conv1_time:",ed-st)
@@ -133,39 +132,35 @@ class SVDED_Conv(nn.Module):
         # st=time.perf_counter()
         output3_=output3.permute(0,3,2,1)
         # 
-        # output3_=torch.matmul(self.newlinear2,output2)
+        # output3_=torch.matmul(self.newlinear2,output2)  # 打开这里使用linear计算
 
         output3_=output3_.view(output3_.shape[2],output3_.shape[3])
         output_H=(x.shape[1]+2*self.conv_layer_padding[0]-self.conv_layer_kernel_size[0])//self.conv_layer_stride[0]+1
         output_W=(x.shape[2]+2*self.conv_layer_padding[1]-self.conv_layer_kernel_size[1])//self.conv_layer_stride[1]+1
-        output_res=output3_.view(1,output3_.shape[0],output_H,output_W)
+        output_res=output3_.view(output3_.shape[0],output_H,output_W)
         # ed=time.perf_counter()
         # print("CODE:permute_time:",ed-st)
         # print("----------------------------------------------")
-        # ed2=time.perf_counter()
+        ed2=time.perf_counter()
         # print("CODE:out_time:",ed2-ed)
-        return output_res
+        return output_res,ed2-st
     
     def forward_svd(self,x):
-        
+        # 记着在有批量数据的时候开vamp
         #start_time=time.perf_counter()
-        output_res=vmap(self.linear2, in_dims=(0))(x)
-        # output_res=self.linear2(x)
+        # output_res,time=vmap(self.linear2, in_dims=(0))(x)
+        output_res,time_=self.linear2(x)
 
-        return output_res
+        return output_res,time_
     
     def forward(self,x):
-        st=time.perf_counter()
         if(self.reduce_rate==0):
             op=self.forward_origin(x)
-            ed=time.perf_counter()
-            print("CODE:conv1_time:",ed-st)
             return op
         else:
-            op=self.forward_svd(x)
-            ed=time.perf_counter()
-            print("CODE:conv2_time:",ed-st)
-            return op
+            op,time_=self.forward_svd(x)
+            
+            return op,time_
 
     def svd(self):
         U,S,V=torch.linalg.svd(self.weight.t())

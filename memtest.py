@@ -17,10 +17,10 @@ if __name__ == "__main__":
         print("CODE:模型加载完成")
         print("CODE:开始测试")
         time_=0
-        for i in range(15):
-            start=time.perf_counter()
-            op_a=model_A(input_batch)
+        for i in range(150):
+            
+            op_a,time_1=model_A(input_batch)
             end=time.perf_counter()
-            time_+=end-start
+            time_+=time_1
         print("CODE:模型测试完成")
-        print("CODE:模型测试时间:",time_/15)
+        print("CODE:模型测试时间:",time_/150)
