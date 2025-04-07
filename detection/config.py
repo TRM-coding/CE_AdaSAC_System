@@ -11,8 +11,8 @@ CONFIG = Namespace(
     ALPHA                         =0.9,# alpha ->time
     QUANTISIZED_TYPE              =torch.qint8,
 
-    TEST_DATA_TOTAL_NUMBER        = 50,#how many batchs
-    TEST_DATA_BATCH_SIZE          = 50,
+    TEST_DATA_TOTAL_NUMBER        = 500,#how many batchs
+    TEST_DATA_BATCH_SIZE          = 100,
     TEST_DATA_LEARNING_RATE       = 1,
     TEST_DATA_WARM_LR             = 1e-3,
     TEST_DATA_CHANNEL             = 3,

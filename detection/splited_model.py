@@ -10,9 +10,5 @@ class Splited_Model(nn.Module):
             if(len(x.shape)==3):
                 x=x.unsqueeze(0)
             x=model(x)
-            
-            if(len(x)==2):
-                time+=x[1]
-                x=x[0]
-        return x,time
+        return x
     
