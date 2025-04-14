@@ -4,3 +4,4 @@ detection/__pycache__/
 model/
 p_model/
 *.pth
+gpt2/

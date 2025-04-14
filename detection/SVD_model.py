@@ -150,7 +150,7 @@ class SVDED_Conv(nn.Module):
         return output_res
     
     def linear2_val(self,x):
-        print("linear2_val")
+        # print("linear2_val")
         if(len(x.shape)!=3):
             x=x.view(1,x.shape[-3],x.shape[-2],x.shape[-1])
         output1=self.newconv1(x)
@@ -259,3 +259,8 @@ class SVDED_Conv(nn.Module):
         
         
         return conv_1,newlinear2.weight,biass
+
+class SVDED_CONV1D(nn.Module):
+    def __init__(self):
+        super(SVDED_CONV1D,self).__init__()
+        return

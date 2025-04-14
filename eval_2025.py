@@ -9,7 +9,9 @@ import detection.Spliter
 import torch.multiprocessing as mp
 from torch import nn
 from torch.quantization.observer import MovingAveragePerChannelMinMaxObserver
-
+import random
+import numpy as np
+import matplotlib.pyplot as plt
 
 class quantiseze_model(nn.Module):
     def __init__(self,model_list):
@@ -33,8 +35,8 @@ class quantiseze_model(nn.Module):
 if __name__ == "__main__":
     mp.set_start_method('spawn', force=True)
     print("CODE:loading_resnet50")
-    # model=Resnet50Loader().load()
-    model=VGG16Loader().load()
+    model=Resnet50Loader().load()
+    # model=VGG16Loader().load()
     print("CODE:loading_finished")
 
     device=CONFIG.DEFAULT_DEVICE
@@ -47,19 +49,34 @@ if __name__ == "__main__":
     )
 
 
-    inputs=datamaker.make_data_img()
-    print(type(inputs))
-    print(inputs[0][0].shape)
-    little_batch=inputs[0][0]
+    inputs_img=datamaker.make_data_img()
+    inputs_maked,output_label,label,highest_loss,lowest_loss= datamaker.make_data_pid(
+            total_number=CONFIG.TEST_DATA_TOTAL_NUMBER,
+            batch_size=CONFIG.TEST_DATA_BATCH_SIZE,
+            learning_rate=CONFIG.TEST_DATA_LEARNING_RATE,
+            warm_lr=CONFIG.TEST_DATA_WARM_LR,
+            channel=CONFIG.TEST_DATA_CHANNEL,
+            dim1=CONFIG.TEST_DATA_DIM1,
+            dim2=CONFIG.TEST_DATA_DIM2,
+            output_size=CONFIG.TEST_DATA_OUTPUT_SIZE,
+            randn_magnification=CONFIG.TEST_DATA_RANDN_MAGNIFICATION,
+            confidence=CONFIG.TEST_DATA_CONFIDENCE,
+            target_acc=CONFIG.TEST_DATA_TARGET_ACC
+
+    )
+    # inputs_maked=(inputs_maked.to(device),label.to(device))
+    # inputs_maked=[(inputs_maked[i].to(device),label[i].to(device)) for i in range(len(inputs_maked))]
+
+    little_batch=inputs_img[0][0]
     torch.cuda.empty_cache()
 
     with torch.no_grad():
         searcher=detection.Spliter.Recrusively_reduce_search(
                 model=model,
                 no_weight=True,
-                input_data=little_batch,
-                output_label=little_batch,
-                label=little_batch,
+                input_data=inputs_maked,
+                output_label=output_label,
+                label=label,
                 device=device,
                 back_device=back_device,
                 highest_loss=0,
@@ -80,23 +97,58 @@ if __name__ == "__main__":
         # model,edge_layer_map=searcher.model_reduce([4, 1, 6, 5, 4, 6, 2, 5, 6, 1, 5, 5, 3, 5, 6, 8, 6, 4, 5, 4, 5, 5, 2, 4, 4, 5])
         #model,edge_layer_map=searcher.model_reduce([4,4,2,5,3,5,5,1,5,1,4,2,0,5,6,7,5,6,4,2,5,4,0,5,3,4])
         # model,edge_layer_map=searcher.model_reduce([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+        model_len=CONFIG.MODEL_LAYER_NUMBER
+        #评估自生成数据
+        maked_acc=[]
+        maked_loss=[]
+        print("start eval maked_data")
+        number_of_layer_reduce=CONFIG.EVAL_REDUCE_NUMBER
+        for i in number_of_layer_reduce:
+            with torch.no_grad():
+                tmp_acc=[]
+                tmp_loss=[]
+                for j in range(10):
+                    model,edge_layer_map=searcher.model_reduce([j for _ in range(i)])
+                    eA,c,eB=searcher.split(model,len(edge_layer_map))
+                    qm=quantiseze_model([eA,c,eB])
+                    # elaver=eval(inputs_maked,qm)
+                    # loss,acc=elaver.eval()
+                    acc,loss=searcher.acc_loss_evaluate(qm)
+                    tmp_acc.append(acc)
+                    tmp_loss.append(loss)
+                    
+            maked_acc.append(tmp_acc)
+            maked_loss.append(tmp_loss)
+        print("finish eval maked_data")
 
+        img_acc=[]
+        img_loss=[]
+        print("start eval img_data")
+        model_len=CONFIG.MODEL_LAYER_NUMBER
+        for i in number_of_layer_reduce:
+            with torch.no_grad():
+                tmp_acc=[]
+                tmp_loss=[]
+                for j in range(10):
+                    model,edge_layer_map=searcher.model_reduce([j for _ in range(i)])
+                    eA,c,eB=searcher.split(model,len(edge_layer_map))
+                    qm=quantiseze_model([eA,c,eB])
+                    elaver=eval(inputs_img,qm)
+                    loss,acc=elaver.eval()
+                    tmp_acc.append(acc)
+                    tmp_loss.append(loss)
+                    print("start eval")
+                    
+            img_acc.append(tmp_acc)
+            img_loss.append(tmp_loss)
+        
+        np.savez('./data_arrays_res50.npz',
+            maked_acc=maked_acc,
+            maked_loss=maked_loss,
+            img_acc=img_acc,
+            img_loss=img_loss)
 
-        model,edge_layer_map=searcher.model_reduce([7,6])
-        # model,edge_layer_map=searcher.model_reduce([4])
-        # model,edge_layer_map=searcher.model_reduce([0,0])
-        print("layer_map_len:",len(edge_layer_map))
-        eA,c,eB=searcher.split(model,len(edge_layer_map))
+        # x = np.arange(len(maked_acc))
+        # x=list[i for i in range]
 
-        qm=quantiseze_model([eA,c,eB])
-
-        print("start eval")
-
-    
-        elaver=eval(inputs,qm)# remenber to change it
-        # loss,acc=elaver.eval()
-        # print("loss:",loss," acc:",acc)
-        torch.save(eA,"./clientA_v.pth")
-        torch.save(c,"./clientB_v.pth")
-        torch.save(eB,"./clientC_v.pth")
         print("CODE:finish")

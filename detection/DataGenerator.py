@@ -118,17 +118,17 @@ class train_based_self_detection():
             super().step(epoch)
 
     def make_data_pid(self,total_number,batch_size,learning_rate,warm_lr,channel=3,dim1=224,dim2=224,output_size=1000,randn_magnification=100,confidence=100000000,target_acc=0.9):
-        data=torch.rand(total_number,channel,dim1,dim2,requires_grad=True)
-        output_lable=(torch.rand(total_number,output_size)*randn_magnification)
+        data=torch.rand(batch_size,channel,dim1,dim2,requires_grad=True)
+        output_lable=(torch.rand(batch_size,output_size)*randn_magnification)
         max_index=output_lable.argmax(dim=1)
         lable=max_index
-        output_lable[torch.arange(total_number),max_index]=confidence
+        output_lable[torch.arange(batch_size),max_index]=confidence
         data=data.clone().detach().requires_grad_(True)
         ipx=0
         input_loader=[]
         output_loader=[]
         label_loader=[]
-        while(ipx<total_number):
+        while(ipx<batch_size):
             input_loader.append(data[ipx:ipx+batch_size])
             output_loader.append(output_lable[ipx:ipx+batch_size])
             label_loader.append(lable[ipx:ipx+batch_size])
@@ -137,7 +137,7 @@ class train_based_self_detection():
         loss_function=nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam([data], lr=learning_rate)
         scheduler = self.CustomLRScheduler(optimizer,highest_lr=warm_lr)
-        scheduler.warm_epoch=total_number/batch_size
+        scheduler.warm_epoch=batch_size/batch_size
 
         loss_list=[]
         last_loss=0
@@ -187,11 +187,11 @@ class train_based_self_detection():
         return data.detach(),output_lable.detach(),lable,self.loss_list[0],self.loss_list[-1]
     
     def make_data_less_than_acc(self,total_number,batch_size,learning_rate,channel,dim1,dim2,output_size,randn_magnification,confidence,target_acc):
-        data=torch.randn(total_number,channel,dim1,dim2,requires_grad=True)
-        output_lable=(torch.randn(total_number,output_size)*randn_magnification)
+        data=torch.randn(batch_size,channel,dim1,dim2,requires_grad=True)
+        output_lable=(torch.randn(batch_size,output_size)*randn_magnification)
         max_index=output_lable.argmax(dim=1)
         lable=max_index
-        output_lable[torch.arange(total_number),max_index]=confidence
+        output_lable[torch.arange(batch_size),max_index]=confidence
         
         
         data=data.clone().detach().requires_grad_(True)
@@ -203,7 +203,7 @@ class train_based_self_detection():
         input_loader=[]
         output_loader=[]
         label_loader=[]
-        while(ipx<total_number):
+        while(ipx<batch_size):
             input_loader.append(data[ipx:ipx+batch_size])
             output_loader.append(output_lable[ipx:ipx+batch_size])
             label_loader.append(lable[ipx:ipx+batch_size])

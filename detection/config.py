@@ -4,10 +4,10 @@ import torch
 
 CONFIG = Namespace(
     GPU_AVAILABLE                 = (1,6),
-    UNAVAILABLE                   = [0],
+    UNAVAILABLE                   = [0,1],
     DEFAULT_DEVICE                = "cuda:7",
     CUT_STEP                      =0.1,
-    MODEL_LAYER_NUMBER            =16,
+    MODEL_LAYER_NUMBER            =50,
     ALPHA                         =0.9,# alpha ->time
     QUANTISIZED_TYPE              =torch.qint8,
 
@@ -39,6 +39,7 @@ CONFIG = Namespace(
     CLOUD_PORT=5000,
     CLOUDIP='10.126.59.25',
     TIMEOUT=60,
+    EVAL_REDUCE_NUMBER=[10,20,30,40,],
 
     IMAGENET_PATH="/SSD/val"
 )
