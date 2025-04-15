@@ -21,7 +21,7 @@ from .Loader.mymodel_file.VGG16Net import *
 # import multiprocessing as mp
 import torch.multiprocessing as mp
 import multiprocessing
-
+import threading
 from .config import CONFIG
 
 import concurrent.futures
@@ -341,15 +341,12 @@ class Recrusively_reduce_search:
     
 
     def taski(self,tasks,q,gpu_usage:list,lock):
-        while(lock.lock):
-            continue
-        lock.lock=True
-        if min(gpu_usage) in gpu_usage:
-            task_gpu=gpu_usage.index(min(gpu_usage))
-        else:
-            task_gpu=random.randint(0,len(gpu_usage)-1)
-        lock.lock=False
-        gpu_usage[task_gpu]+=1
+        with lock:
+            if min(gpu_usage) in gpu_usage:
+                task_gpu=gpu_usage.index(min(gpu_usage))
+            else:
+                task_gpu=random.randint(0,len(gpu_usage)-1)
+            gpu_usage[task_gpu]+=1
         self.move_to_device(task_gpu)
         torch.cuda.empty_cache()
         print("子进程任务量:",len(tasks),"GPU:",task_gpu)   
@@ -419,8 +416,9 @@ class Recrusively_reduce_search:
         pool = multiprocessing.Pool(processes=numworker)
         manager=Manager()
         q=manager.Queue()
-        lock=manager.Namespace()
-        lock.lock=False
+        # lock=manager.Namespace()
+        # lock.lock=False
+        lock=manager.Lock()
         gpu_usage=manager.list()
         for i in range(CONFIG.GPU_AVAILABLE[0],CONFIG.GPU_AVAILABLE[1]+1):
             gpu_usage.append(0)
@@ -428,12 +426,13 @@ class Recrusively_reduce_search:
             gpu_usage[i]=1000000
         alpha_cp=[]
         while(generate_epoch):
-            alpha=random.randint(0,9)*CONFIG.ALPHASTEP
+            alpha=random.randint(0,int(1/CONFIG.ALPHASTEP)-1)*CONFIG.ALPHASTEP
             if(len(alpha_cp)<1//CONFIG.ALPHASTEP):
                 alpha=len(alpha_cp)*CONFIG.ALPHASTEP
                 alpha_cp.append(0)
             F_score_list=[]
             st=time.time()
+
             task_group = []
             
             task_list=[]
@@ -563,6 +562,8 @@ class Recrusively_reduce_search:
     
 
     def searcer_GA_V2(self,init_specise,alpha_step):
+        task_number_change=[]
+        f_change=[]
         species=[tuple(x) for x in init_specise]
         species_map={(x[0],round(x[1],1)):y for x,y in init_specise.items()}
         # species_map={}
@@ -589,13 +590,16 @@ class Recrusively_reduce_search:
         pool = multiprocessing.Pool(processes=numworker)
         manager=Manager()
         q=manager.Queue()
-        lock=manager.Namespace()
-        lock.lock=False
+        # lock=manager.Namespace()
+        lock=manager.Lock()
+        # lock.lock=False
         gpu_usage=manager.list()
-        for i in range(CONFIG.GPU_AVAILABLE[0],CONFIG.GPU_AVAILABLE[1]+1):
+        for i in range(CONFIG.GPU_AVAILABLE[0],CONFIG.GPU_AVAILABLE[1]):
             gpu_usage.append(0)
         for i in CONFIG.UNAVAILABLE:
             gpu_usage[i]=1000000
+
+        ffg=0
         for alpha in np.arange(0,1,alpha_step):
             alpha=round(alpha,1)
             print(f"alpha:{alpha}")
@@ -619,7 +623,8 @@ class Recrusively_reduce_search:
                 
                 i=0
                 torch.cuda.empty_cache()
-
+                if(alpha==0.5):
+                    task_number_change.append(len(task_list))
             # 将任务分配给进程池中的进程
                 print("开始分配进程,总任务量:",len(task_list))
                 if((len(task_list)//numworker)==0):
@@ -686,7 +691,8 @@ class Recrusively_reduce_search:
                 cbsorted=cbsorted[:self.init_size]
                 init_species=[x[0] for x in cbsorted]
                 F_score_list=[x[1] for x in cbsorted]
-
+                if(alpha==0.5):
+                    f_change.append(max(F_score_list))
                 # 构造归一化积分函数
                 sums=sum(F_score_list)
                 for i,_ in enumerate(F_score_list):
@@ -723,6 +729,7 @@ class Recrusively_reduce_search:
                 generate_epoch-=1
                 print("solutions:",scnt,end='\r')
             print("alpha:",alpha,"搜索结束,正在计算最优划分方案")
+            ffg=1
             max_F=-10
             best_sp=None
             for ii in init_species:
@@ -754,7 +761,7 @@ class Recrusively_reduce_search:
         manager.shutdown()
 
        
-        return species_map
+        return species_map,task_number_change,f_change
 
     def GA_init(self,number_of_layer_to_reduce,step):
         self.F_loss=[]

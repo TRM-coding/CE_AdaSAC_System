@@ -1,6 +1,7 @@
 from detection.DataGenerator import train_based_self_detection
 from detection.Loader.ResNet50Loader import Resnet50Loader
 from detection.Loader.VGG16Loader import VGG16Loader
+from detection.Loader.AlexnetLoader import AlexnetLoader
 import detection.Spliter
 import torch.multiprocessing as mp
 import torch
@@ -10,10 +11,14 @@ from detection.config import CONFIG
 
 if __name__ == '__main__':
 
+    np_task_number_change=[]
+    np_f_change=[]
+
     mp.set_start_method('spawn', force=True)
-    print("CODE:loading_vgg16")
-    model=VGG16Loader().load()
-    # model=Resnet50Loader().load()
+    print("CODE:loading_alex")
+    # model=VGG16Loader().load()
+    # model=AlexnetLoader().load()
+    model=Resnet50Loader().load()
     print("CODE:loading_finished")
     device=CONFIG.DEFAULT_DEVICE
     back_device=CONFIG.DEFAULT_DEVICE
@@ -116,8 +121,7 @@ if __name__ == '__main__':
             # input()
             torch.cuda.empty_cache()
 
-        # normaled_acc_list=[(x-min(quantized_acc_list))/max(quantized_acc_list)-min(quantized_acc_list) for x in quantized_acc_list]
-        # normaled_time_list=[(x-min(quantized_acc_l55ist))/max(quantized_acc_list)]
+        
 
         print()
         print("quantized_acc_list:",quantized_acc_list)
@@ -165,7 +169,11 @@ if __name__ == '__main__':
         # print(mapp)
         
         # input("请确认开始进一步搜索：")
-        searcher.searcer_GA_V2(
+        _,np_task_number_change,np_f_change=searcher.searcer_GA_V2(
             init_specise=mapp,
             alpha_step=CONFIG.ALPHASTEP,
+        )
+        np.savez("np_task_number_change.npy",
+                np_task_number_change=np_task_number_change,
+                np_f_change=np_f_change
         )

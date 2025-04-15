@@ -3,24 +3,24 @@ from scipy.interpolate import make_interp_spline
 import seaborn as sns
 import matplotlib.pyplot as plt
 # 加载 .npz 文件
-data = np.load('./data_arrays_vgg.npz')
+data = np.load('./np_task_number_change.npy.npz')
 
 # 通过键名访问数组
-maked_acc = data['maked_acc']
-maked_loss = data['maked_loss']
-img_acc    = data['img_acc']
-img_loss   = data['img_loss']
+np_task_number_change = data['np_task_number_change']
+np_f_change = data['np_f_change'][:90]
+
 
 # 使用加载的数据
 
 # x 表示裁剪的百分比
-x = list(i for i in range(len(maked_acc[0])))
+x = list(i for i in range(len(np_f_change)))
 
 # 设置颜色列表
 colar_ = ['blue', 'green', 'orange', 'purple']
 
 # 创建图形和坐标轴
 fig, ax1 = plt.subplots(figsize=(10, 6))
+ax2= ax1.twinx()  # 创建共享 x 轴的第二个 y 轴
 
 # 设置 Seaborn 风格，调整字体大小适合论文格式
 plt.rcParams.update({
@@ -36,33 +36,37 @@ plt.rcParams.update({
 })
 
 # 绘制每个方案的曲线和散点
-for i, y_values in enumerate(maked_acc[:]):
+
     # 绘制虚线
-    ax1.plot(x, y_values, label=f"Scheme {i+1}_forecast", linestyle=':', color=colar_[i])
+ax1.plot(x, np_task_number_change, label=f"task_number", linestyle=':', color='blue')
 
-    # 绘制实线
-    ax1.plot(x, img_acc[i] / 100 / (max(img_acc[i]) / 100), label=f"Scheme {i+1}_IMG", linestyle='-', color=colar_[i])
+# 绘制实线
+ax2.plot(x, np_f_change, label=f"F_score", linestyle='-', color='green')
 
-    # 绘制散点
-    ax1.scatter(x, y_values, marker='o', s=30, color=colar_[i], edgecolor='black', zorder=5)
-    ax1.scatter(x, img_acc[i] / 100 / (max(img_acc[i]) / 100), marker='o', s=30, color=colar_[i], edgecolor='black', zorder=5)
+# 绘制散点
+ax1.scatter(x, np_task_number_change, marker='o', s=30, color='blue', edgecolor='black', zorder=5)
+ax2.scatter(x, np_f_change, marker='x', s=30, color='green', edgecolor='black', zorder=5)
 
 # 设置横纵坐标标签
-ax1.set_xlabel('Clipping Percentage (%)', fontsize=14)
-ax1.set_ylabel('Accuracy (%)', fontsize=14)
-
+ax1.set_xlabel('epoch', fontsize=14)
+ax1.set_ylabel('task_number', fontsize=14)
+ax2.set_ylabel('f_score', fontsize=14)
 # 设置标题
 ax1.set_title('Performance Comparison', fontsize=16)
 
+
+
 # 添加网格，便于阅读数据
 ax1.grid(True, which='both', linestyle='--', linewidth=0.5)
-
+ax2.grid(True, which='both', linestyle='--', linewidth=0.5)
 # 设置图例
 ax1.legend(fontsize=8,loc='upper left', bbox_to_anchor=(1.05, 1))
+
+ax2.legend(fontsize=8,loc='upper left', bbox_to_anchor=(1.05, 0.8))
 
 # 调整布局，使标签和图例不重叠
 plt.tight_layout()
 
 # 保存为图像文件，适合论文使用
-plt.savefig('scatter_plot.png', dpi=300)  # 设置 dpi 为 300 确保高质量输出
+plt.savefig('search_res50.png', dpi=300)  # 设置 dpi 为 300 确保高质量输出
 plt.close()

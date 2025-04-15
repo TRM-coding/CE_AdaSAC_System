@@ -23,6 +23,9 @@ class SVDED_Linear(nn.Module):
         super(SVDED_Linear,self).__init__()
         self.device=device
         self.origin_layer=origin_layer
+        # self.origion_conv=nn.Conv1d(in_channels=self.origin_layer.in_features, out_channels=self.origin_layer.out_features, kernel_size=1)
+        # self.origion_conv.weight.data = self.origin_layer.weight.data.unsqueeze(2)
+        # self.origion_conv.bias.data = self.origin_layer.bias.data
         self.weight=origin_layer.weight
         if(origin_layer.bias is not None):
             self.b=origin_layer.bias
@@ -77,7 +80,6 @@ class SVDED_Linear(nn.Module):
             newlinear2=torch.nn.Linear(V.shape[0],V.shape[1],bias=False).to(self.device)
             newlinear2.weight=nn.Parameter(V.t())
             # newlinear2.bias=None
-        
         return newlinear1,newlinear2
 
 

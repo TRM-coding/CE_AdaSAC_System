@@ -97,7 +97,7 @@ def send_data(conn, data, chunk_size=4096):
 if __name__ == "__main__":
     # data=request.get_json()
     model_B_=Splited_Model()
-    model_B_=torch.load("./clientB_v.pth")
+    model_B_=torch.load("./clientB_alex.pth")
     model_B_.to(device)
     model_B_.eval()
     model_B=model_B_
@@ -122,7 +122,8 @@ if __name__ == "__main__":
     input_data=tensor_de.to(device)
     # model_B.to('cpu')
     op_b=None
-    op_b=model_B(input_data)
+    for i in range(10):
+        op_b=model_B(input_data)
     print("CODE:云侧预热完成")
     # 处理数据
     
@@ -139,7 +140,7 @@ if __name__ == "__main__":
             cloud_time += starter.elapsed_time(ender)
     cloud_time=cloud_time/500
     print("CODE:云侧推理结束")
-    print("云侧推理时间：",cloud_time)
+    print("云侧推理时间：",cloud_time,"ms")
     print("返回中间数据")
     # 量化数据
     observer = MovingAveragePerChannelMinMaxObserver(ch_axis=0).to(device)

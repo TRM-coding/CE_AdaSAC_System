@@ -169,7 +169,7 @@ class train_based_self_detection():
             acc=acc/lable.shape[0]
             print("acc:",acc,"loss:",loss_t/len(input_loader),end='\r')
             loss_list.append(loss_t)
-            if(acc>=1):
+            if(acc>=1 or loss_t<0.1):
                 flag=1
                 break
               

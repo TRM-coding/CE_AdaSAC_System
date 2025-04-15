@@ -3,9 +3,9 @@ import torch
 
 
 CONFIG = Namespace(
-    GPU_AVAILABLE                 = (1,6),
+    GPU_AVAILABLE                 = (0,7),
     UNAVAILABLE                   = [0,1],
-    DEFAULT_DEVICE                = "cuda:7",
+    DEFAULT_DEVICE                = "cuda:3",
     CUT_STEP                      =0.1,
     MODEL_LAYER_NUMBER            =50,
     ALPHA                         =0.9,# alpha ->time
@@ -23,7 +23,7 @@ CONFIG = Namespace(
     TEST_DATA_CONFIDENCE          = 1000000,
     TEST_DATA_TARGET_ACC          = 0.8,
 
-    LOCAL_SPEED                   =3.6e9,
+    LOCAL_SPEED                   =5e11,
     CLOUD_SPEED                   =1.7e13,
     NETWORK_SPEED                 =1e7,#B/s
     ACC_CUT_POINT                 =0.7,
@@ -31,10 +31,10 @@ CONFIG = Namespace(
     GENERATE_EPOCH_WARM=10,
     INIT_SIZE_WARM=100,
     WORKERNUMBER=15,
-    ASTOEPOCH=10,
-    ALPHASTEP=0.1,
+    ASTOEPOCH=30,
+    ALPHASTEP=0.5,
 
-    SAVE_PATH_SCHEME="./cloud_cpu_vgg.txt",
+    SAVE_PATH_SCHEME="./cloud_pi_res.txt_",
     LOAD_NUMBER=12,
     CLOUD_PORT=5000,
     CLOUDIP='10.126.59.25',
