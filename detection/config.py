@@ -28,11 +28,11 @@ CONFIG = Namespace(
     NETWORK_SPEED                 =1e7,#B/s
     ACC_CUT_POINT                 =0.7,
 
-    GENERATE_EPOCH_WARM=10,
-    INIT_SIZE_WARM=100,
+    GENERATE_EPOCH_WARM=15,
+    INIT_SIZE_WARM=300,
     WORKERNUMBER=15,
     ASTOEPOCH=30,
-    ALPHASTEP=0.5,
+    ALPHASTEP=0.1,
 
     SAVE_PATH_SCHEME="./cloud_pi_res.txt_",
     LOAD_NUMBER=12,
@@ -40,6 +40,7 @@ CONFIG = Namespace(
     CLOUDIP='10.126.59.25',
     TIMEOUT=60,
     EVAL_REDUCE_NUMBER=[10,20,30,40,],
+    PRESSURE_REDUCE=False,
 
     IMAGENET_PATH="/SSD/val"
 )
