@@ -4,6 +4,10 @@ from torch import vmap
 import time
 from thop import profile
 import torch.nn.functional as F
+
+class SVDED_GPT2_EDGE_Layer()
+    
+
 class Bias_conv(nn.Module):
     def __init__(self,b):
         super().__init__()
