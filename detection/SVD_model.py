@@ -5,8 +5,175 @@ import time
 from thop import profile
 import torch.nn.functional as F
 
-class SVDED_GPT2_EDGE_Layer()
+
+
+class SVDED_GPT2_EDGE_Layer(nn.Module):
+    def __init__(self, gpt2_edge_layer, reduce_rate, device):
+        super(SVDED_GPT2_EDGE_Layer, self).__init__()
+        self.device = device
+        self.reduce_rate = reduce_rate
+        self.original_layer = gpt2_edge_layer
+        
+        # 保存配置信息
+        self.num_heads = gpt2_edge_layer.num_heads
+        self.head_dim = gpt2_edge_layer.head_dim
+        self.ln1_eps = gpt2_edge_layer.ln1_eps
+        self.ln2_eps = gpt2_edge_layer.ln2_eps
+        
+        # 保存LayerNorm参数(不进行SVD)
+        self.ln1_weight = gpt2_edge_layer.ln1_weight
+        self.ln1_bias = gpt2_edge_layer.ln1_bias
+        self.ln2_weight = gpt2_edge_layer.ln2_weight
+        self.ln2_bias = gpt2_edge_layer.ln2_bias
+        
+        # 对所有线性层进行SVD分解
+        self.v_svd = self._create_svd_linear(gpt2_edge_layer.v_weight, gpt2_edge_layer.v_bias)
+        self.proj_svd = self._create_svd_linear(gpt2_edge_layer.proj_weight, gpt2_edge_layer.proj_bias)
+        self.fc_svd = self._create_svd_linear(gpt2_edge_layer.fc_weight, gpt2_edge_layer.fc_bias)
+        self.fc_proj_svd = self._create_svd_linear(gpt2_edge_layer.fc_proj_w, gpt2_edge_layer.fc_proj_b)
     
+    def _create_svd_linear(self, weight, bias):
+        """创建SVD分解的线性层"""
+        # if self.reduce_rate == 0:
+        #     return None
+            
+        # 进行SVD分解
+        U, S, V = torch.linalg.svd(weight)
+        
+        # 按奇异值排序
+        sort_index = torch.argsort(S)
+        U = U[:, sort_index]
+        S = S[sort_index]
+        V = V[sort_index, :]
+        
+        # 计算保留的维度
+        r = int(len(S) * self.reduce_rate)
+        # 保证 0 <= r <= len(S)
+        r = max(0, min(r, len(S)))
+        
+        U = U[:, r:]
+        V = V[r:, :]
+        S = torch.diag(S[r:])
+        
+        # 将奇异值融入V
+        for i in range(min(V.shape[0], V.shape[1])):
+            V[i] = V[i] * S[i][i]
+        
+        # 创建两个线性层
+        linear1 = nn.Linear(U.shape[0], U.shape[1], bias=False).to(self.device)
+        linear1.weight = nn.Parameter(U.t())
+        linear1.weight.requires_grad = False
+        
+        if bias is not None:
+            linear2 = nn.Linear(V.shape[0], V.shape[1], bias=True).to(self.device)
+            linear2.weight = nn.Parameter(V.t())
+            linear2.bias = nn.Parameter(bias)
+        else:
+            linear2 = nn.Linear(V.shape[0], V.shape[1], bias=False).to(self.device)
+            linear2.weight = nn.Parameter(V.t())
+        
+        linear2.weight.requires_grad = False
+        if hasattr(linear2, 'bias') and linear2.bias is not None:
+            linear2.bias.requires_grad = False
+        
+        return (linear1, linear2)
+    
+    def _apply_svd_linear(self, x, svd_layers, original_weight, original_bias):
+        """应用SVD分解的线性变换"""
+        # if self.reduce_rate == 0 or svd_layers is None:
+        #     # 使用原始权重
+        #     result = torch.matmul(x, original_weight)
+        #     if original_bias is not None:
+        #         result = result + original_bias
+        #     return result
+        # else:
+        #     # 使用SVD分解
+        #     linear1, linear2 = svd_layers
+        #     intermediate = linear1(x)
+        #     return linear2(intermediate)
+        linear1, linear2 = svd_layers
+        intermediate = linear1(x)
+        return linear2(intermediate)
+
+
+    
+    def forward_cache(self, x, v_cache, attn_weights):
+        """
+        x: Tensor [batch_size, seq_len, hidden]
+        v_cache: 当前层的V缓存
+        attn_weights: Tensor [batch_size, num_heads, seq_q, seq_k]
+        返回: (更新的v_cache, 层输出)
+        """
+        # ln_1
+        m1 = x.mean(-1, keepdim=True)
+        v1 = x.var(-1, keepdim=True, unbiased=False)
+        x1 = (x - m1) / torch.sqrt(v1 + self.ln1_eps) * self.ln1_weight + self.ln1_bias
+        
+        # V 投影 (使用SVD)
+        v_new = self._apply_svd_linear(x1, self.v_svd, self.original_layer.v_weight, self.original_layer.v_bias)
+        
+        # 更新缓存
+        v_all = torch.cat([v_cache, v_new], dim=1) if v_cache is not None else v_new
+        
+        # reshape & attn
+        b, seq_k, _ = v_all.shape
+        v_h = v_all.view(b, seq_k, self.num_heads, self.head_dim).transpose(1, 2)
+        ctx = torch.matmul(attn_weights, v_h)
+        b2, h2, seq_q, hd = ctx.shape
+        ctx = ctx.transpose(1, 2).contiguous().view(b2, seq_q, h2 * hd)
+        
+        # c_proj + 残差 (使用SVD)
+        attn_out = self._apply_svd_linear(ctx, self.proj_svd, self.original_layer.proj_weight, self.original_layer.proj_bias)
+        x2 = attn_out + x
+        
+        # ln_2 + MLP
+        m2 = x2.mean(-1, keepdim=True)
+        v2 = x2.var(-1, keepdim=True, unbiased=False)
+        x2n = (x2 - m2) / torch.sqrt(v2 + self.ln2_eps) * self.ln2_weight + self.ln2_bias
+        
+        # ffn (使用SVD)
+        hidden = self._apply_svd_linear(x2n, self.fc_svd, self.original_layer.fc_weight, self.original_layer.fc_bias)
+        hidden = torch.nn.functional.gelu(hidden)
+        ffn_out = self._apply_svd_linear(hidden, self.fc_proj_svd, self.original_layer.fc_proj_w, self.original_layer.fc_proj_b)
+        x_out = x2 + ffn_out
+        
+        return v_all, x_out
+    
+    def forward_no_cache(self, x, attn_weights):
+        """
+        无缓存版：仅使用当前 x 计算 V，与 attn_weights 对应。
+        """
+        # ln_1
+        m1 = x.mean(-1, keepdim=True)
+        v1 = x.var(-1, keepdim=True, unbiased=False)
+        x1 = (x - m1) / torch.sqrt(v1 + self.ln1_eps) * self.ln1_weight + self.ln1_bias
+        
+        # V 投影（仅当前 token）(使用SVD)
+        v_new = self._apply_svd_linear(x1, self.v_svd, self.original_layer.v_weight, self.original_layer.v_bias)
+        
+        # reshape & attn
+        b, seq_k, _ = v_new.shape
+        v_h = v_new.view(b, seq_k, self.num_heads, self.head_dim).transpose(1, 2)
+        ctx = torch.matmul(attn_weights, v_h)
+        b2, h2, seq_q, hd = ctx.shape
+        ctx = ctx.transpose(1, 2).contiguous().view(b2, seq_q, h2 * hd)
+        
+        # c_proj + 残差 (使用SVD)
+        attn_out = self._apply_svd_linear(ctx, self.proj_svd, self.original_layer.proj_weight, self.original_layer.proj_bias)
+        x2 = attn_out + x
+        
+        # ln_2 + MLP
+        m2 = x2.mean(-1, keepdim=True)
+        v2 = x2.var(-1, keepdim=True, unbiased=False)
+        x2n = (x2 - m2) / torch.sqrt(v2 + self.ln2_eps) * self.ln2_weight + self.ln2_bias
+        
+        # ffn (使用SVD)
+        hidden = self._apply_svd_linear(x2n, self.fc_svd, self.original_layer.fc_weight, self.original_layer.fc_bias)
+        hidden = torch.nn.functional.gelu(hidden)
+        ffn_out = self._apply_svd_linear(hidden, self.fc_proj_svd, self.original_layer.fc_proj_w, self.original_layer.fc_proj_b)
+        x_out = x2 + ffn_out
+        
+        return v_new, x_out
 
 class Bias_conv(nn.Module):
     def __init__(self,b):
