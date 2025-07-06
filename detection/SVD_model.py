@@ -4,8 +4,21 @@ from torch import vmap
 import time
 from thop import profile
 import torch.nn.functional as F
+from torch.utils.cpp_extension import load
+import os
 
-
+# Load the fused C++ extension
+fused_svd_op = None
+try:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    fused_svd_op = load(
+        name="fused_svd_matmul",
+        sources=[os.path.join(current_dir, "fused_svd_matmul.cpp")],
+        verbose=True,
+    )
+except Exception as e:
+    print(f"Warning: Could not load fused SVD extension: {e}")
+    fused_svd_op = None
 
 class SVDED_GPT2_EDGE_Layer(nn.Module):
     def __init__(self, gpt2_edge_layer, reduce_rate, device):
@@ -26,17 +39,14 @@ class SVDED_GPT2_EDGE_Layer(nn.Module):
         self.ln2_weight = gpt2_edge_layer.ln2_weight
         self.ln2_bias = gpt2_edge_layer.ln2_bias
         
-        # 对所有线性层进行SVD分解
+        # 对所有线性层进行SVD分解，保存U和V矩阵用于fused操作
         self.v_svd = self._create_svd_linear(gpt2_edge_layer.v_weight, gpt2_edge_layer.v_bias)
         self.proj_svd = self._create_svd_linear(gpt2_edge_layer.proj_weight, gpt2_edge_layer.proj_bias)
         self.fc_svd = self._create_svd_linear(gpt2_edge_layer.fc_weight, gpt2_edge_layer.fc_bias)
         self.fc_proj_svd = self._create_svd_linear(gpt2_edge_layer.fc_proj_w, gpt2_edge_layer.fc_proj_b)
     
     def _create_svd_linear(self, weight, bias):
-        """创建SVD分解的线性层"""
-        # if self.reduce_rate == 0:
-        #     return None
-            
+        """创建SVD分解的线性层，返回U、V矩阵和bias"""
         # 进行SVD分解
         U, S, V = torch.linalg.svd(weight)
         
@@ -48,7 +58,6 @@ class SVDED_GPT2_EDGE_Layer(nn.Module):
         
         # 计算保留的维度
         r = int(len(S) * self.reduce_rate)
-        # 保证 0 <= r <= len(S)
         r = max(0, min(r, len(S)))
         
         U = U[:, r:]
@@ -59,41 +68,40 @@ class SVDED_GPT2_EDGE_Layer(nn.Module):
         for i in range(min(V.shape[0], V.shape[1])):
             V[i] = V[i] * S[i][i]
         
-        # 创建两个线性层
-        linear1 = nn.Linear(U.shape[0], U.shape[1], bias=False).to(self.device)
-        linear1.weight = nn.Parameter(U.t())
-        linear1.weight.requires_grad = False
+        # 存储U和V矩阵以及bias用于fused操作
+        U_tensor = U.t().contiguous().to(self.device)
+        V_tensor = V.t().contiguous().to(self.device)
+        bias_tensor = bias.contiguous().to(self.device) if bias is not None else torch.empty(0).to(self.device)
         
-        if bias is not None:
-            linear2 = nn.Linear(V.shape[0], V.shape[1], bias=True).to(self.device)
-            linear2.weight = nn.Parameter(V.t())
-            linear2.bias = nn.Parameter(bias)
-        else:
-            linear2 = nn.Linear(V.shape[0], V.shape[1], bias=False).to(self.device)
-            linear2.weight = nn.Parameter(V.t())
-        
-        linear2.weight.requires_grad = False
-        if hasattr(linear2, 'bias') and linear2.bias is not None:
-            linear2.bias.requires_grad = False
-        
-        return (linear1, linear2)
+        return {
+            'U': U_tensor.t(),
+            'V': V_tensor.t(),
+            'bias': bias_tensor
+        }
     
-    def _apply_svd_linear(self, x, svd_layers, original_weight, original_bias):
-        """应用SVD分解的线性变换"""
-        # if self.reduce_rate == 0 or svd_layers is None:
-        #     # 使用原始权重
-        #     result = torch.matmul(x, original_weight)
-        #     if original_bias is not None:
-        #         result = result + original_bias
-        #     return result
+    def _apply_svd_linear(self, x, svd_data, original_weight, original_bias):
+        """应用SVD分解的线性变换，使用fused操作"""
+        # if fused_svd_op is not None:
+        #     # 使用fused C++ 操作
+        #     return fused_svd_op.fused_svd_matmul(x, svd_data['U'].t(), svd_data['V'], svd_data['bias'])
         # else:
-        #     # 使用SVD分解
-        #     linear1, linear2 = svd_layers
-        #     intermediate = linear1(x)
-        #     return linear2(intermediate)
-        linear1, linear2 = svd_layers
-        intermediate = linear1(x)
-        return linear2(intermediate)
+        #     # 回退到原始的两步操作
+        #     intermediate = torch.matmul(x, svd_data['U'].t())
+        #     result = torch.matmul(intermediate, svd_data['V'].t())
+        #     if svd_data['bias'].numel() > 0:
+        #         result = result + svd_data['bias']
+        #     return result
+
+
+        # intermediate = torch.matmul(x, svd_data['U'])                      # -> (out_dim, r)
+        # result       = F.linear(intermediate, svd_data['V'], svd_data['bias'])
+
+        intermediate = torch.matmul(x, svd_data['U'])
+        result = torch.matmul(intermediate, svd_data['V'])
+        if svd_data['bias'].numel() > 0:
+            result = result + svd_data['bias']
+        return result
+        
 
 
     

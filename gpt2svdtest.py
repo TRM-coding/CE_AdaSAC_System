@@ -19,14 +19,24 @@ class SVD_GPT2_Edge_Model(nn.Module):
         self.svd_layers = nn.ModuleList()
         for i in range(self.num_layers):
             # 获取原始edge层
-            original_edge_layer = original_edge.layers[i]
-            # 创建SVD压缩层
-            svd_layer = SVDED_GPT2_EDGE_Layer(
-                gpt2_edge_layer=original_edge_layer,
-                reduce_rate=svd_reduce_rate,
-                device=device
-            )
-            self.svd_layers.append(svd_layer)
+            if(i%2):
+                original_edge_layer = original_edge.layers[i]
+                # 创建SVD压缩层
+                svd_layer = SVDED_GPT2_EDGE_Layer(
+                    gpt2_edge_layer=original_edge_layer,
+                    reduce_rate=0,
+                    device=device
+                )
+                self.svd_layers.append(svd_layer)
+            else:
+                original_edge_layer = original_edge.layers[i]
+                # 创建SVD压缩层
+                svd_layer = SVDED_GPT2_EDGE_Layer(
+                    gpt2_edge_layer=original_edge_layer,
+                    reduce_rate=svd_reduce_rate,
+                    device=device
+                )
+                self.svd_layers.append(svd_layer)
     
     def forward_all_layers(self, x, attn_weights_list):
         """
@@ -202,7 +212,7 @@ if __name__ == "__main__":
     device_edge  = 'cpu' if torch.cuda.is_available() else 'cpu'
     
     # 可以调整SVD压缩率，0表示不压缩，1表示完全压缩
-    svd_reduce_rate = 0.1  
+    svd_reduce_rate = 0.7
     
     pipeline = GPT2Pipeline(
         model_name=model_name, 
