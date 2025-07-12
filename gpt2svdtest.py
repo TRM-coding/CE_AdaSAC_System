@@ -60,11 +60,11 @@ class SVD_GPT2_Edge_Model(nn.Module):
         return current_x
 
 class GPT2Pipeline:
-    def __init__(self, model_name='gpt2', device_cloud='cuda:3', device_edge='cuda:3', svd_reduce_rate=0.5, use_compile=True):
+    def __init__(self, model_name='gpt2', device_cloud='cuda:0', device_edge='cuda:0', svd_reduce_rate=0.5, use_compile=True):
         # 离线加载 tokenizer
         # self.tokenizer   = GPT2Tokenizer.from_pretrained(model_name, local_files_only=True)
         self.tokenizer = AutoTokenizer.from_pretrained(
-            "/home/tianruiming/sdpcos_2025/code/gpt2/models--openai-community--gpt2/snapshots/607a30d783dfa663caf39e06633721c8d4cfcd7e",
+            "/hy-tmp/sdpcos_2025/code/gpt2/models--openai-community--gpt2/snapshots/607a30d783dfa663caf39e06633721c8d4cfcd7e",
             local_files_only=True
         )
         self.cloud       = gpt2_cloud(model_name=model_name).to(device_cloud)
@@ -208,7 +208,7 @@ class GPT2Pipeline:
     
 if __name__ == "__main__":
     model_name = 'gpt2'
-    device_cloud = 'cuda:3' if torch.cuda.is_available() else 'cpu'
+    device_cloud = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     device_edge  = 'cpu' if torch.cuda.is_available() else 'cpu'
     
     # 可以调整SVD压缩率，0表示不压缩，1表示完全压缩

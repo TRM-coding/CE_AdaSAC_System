@@ -117,7 +117,7 @@ class gpt2_edge(nn.Module):
         super().__init__()
         # 离线加载预训练模型
         self.model = AutoModelForCausalLM.from_pretrained(
-            "/home/tianruiming/sdpcos_2025/code/gpt2/models--openai-community--gpt2/snapshots/607a30d783dfa663caf39e06633721c8d4cfcd7e",
+            "/hy-tmp/sdpcos_2025/code/gpt2/models--openai-community--gpt2/snapshots/607a30d783dfa663caf39e06633721c8d4cfcd7e",
             local_files_only=True,
         )
         

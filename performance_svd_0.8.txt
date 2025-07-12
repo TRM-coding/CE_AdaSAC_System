@@ -1,0 +1,10 @@
+SVD压缩率: 0.8
+处理Token数: 24
+GPU总时间: 1.8379s
+CPU总时间: 22.9798s
+网络总时间: 0.5763s
+内存变化: +669.75MB
+峰值内存: 11128.05MB
+总生成时间: 25.36秒
+生成文本: Once upon a time a
+ on be he can remember what he know'he'd have­'t have really what'
