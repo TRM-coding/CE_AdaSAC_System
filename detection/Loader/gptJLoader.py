@@ -5,6 +5,7 @@ from transformers import AutoTokenizer
 from modelscope.utils.hub import snapshot_download
 from mymodel_file.gptJ_cloud import gptJ_cloud
 from mymodel_file.gptJ_edge import gptJ_edge
+from datasets import load_dataset
 
 class GPTJPipeline:
     def __init__(self, model_name='AI-ModelScope/gpt-j-6b', device_cloud='cuda:0', device_edge='cpu'):
@@ -33,7 +34,52 @@ class GPTJPipeline:
         self.lm_head = self.cloud.model.lm_head
         self.num_layers = len(self.cloud.q_weights)
 
-    def generate(self, prompt, max_length=50, temperature=1.0, top_k=50):
+    def forward(self, input_ids, attention_mask=None):
+        """
+        Forward pass for evaluation.
+        
+        Args:
+            input_ids: Tensor of shape [batch_size, seq_len] containing token IDs
+            attention_mask: Optional tensor of shape [batch_size, seq_len] for padding mask
+            
+        Returns:
+            logits: Tensor of shape [batch_size, seq_len, vocab_size]
+        """
+        device = input_ids.device
+        batch_size, seq_len = input_ids.shape
+        
+        # 移动模型组件到输入设备
+        self.embed = self.embed.to(device)
+        self.ln_f = self.ln_f.to(device)
+        self.lm_head = self.lm_head.to(device)
+        
+        # 获取 token embeddings
+        x = self.embed(input_ids)  # [batch_size, seq_len, hidden_size]
+        
+        # 逐层处理
+        for layer_idx in range(self.num_layers):
+            # Cloud 部分：计算 Q, K 和注意力权重
+            # 使用 forward_no_cache 因为评测时不需要缓存
+            q, k, attn_weights = self.cloud.forward_no_cache(x, layer_idx)
+            
+            # Edge 部分：计算 V 和最终输出
+            # 将数据移动到 CPU (edge device)
+            x_cpu = x.to('cpu')
+            attn_weights_cpu = attn_weights.to('cpu')
+            
+            # 在 CPU 上计算
+            _, x_cpu = self.edge.forward_no_cache(x_cpu, layer_idx, attn_weights_cpu)
+            
+            # 将结果移回原设备
+            x = x_cpu.to(device)
+        
+        # 最终层归一化和语言模型头
+        x = self.ln_f(x)
+        logits = self.lm_head(x)
+        
+        return logits
+
+    def generate(self, prompt, max_length=50, temperature=0.4, top_k=50):
         input_ids = self.tokenizer.encode(prompt, return_tensors='pt')[0].tolist()
         outputs = input_ids.copy()
 
@@ -91,6 +137,7 @@ class GPTJPipeline:
         for _ in range(max_length):
             cur_id = torch.tensor([[outputs[-1]]]).to(self.embed.weight.device)
             x = self.embed(cur_id)
+            # x = self.embed(torch.tensor(outputs).to(self.embed.weight.device))
             
             for layer_idx in range(self.num_layers):
                 # use cache-enabled forward so attention spans all previous tokens
@@ -136,16 +183,123 @@ class GPTJPipeline:
             
         return self.tokenizer.decode(outputs, clean_up_tokenization_spaces=True)
 
+
+from transformers import DataCollatorForLanguageModeling
+from torch.utils.data import DataLoader
+def load_and_tokenize_dataset(cache_dir: str='./minipile_cache', tokenizer=None, batch_size: int = 1):
+    """
+    Loads and tokenizes the MiniPile dataset.
+
+    Args:
+        cache_dir: Directory where MiniPile is cached/downloaded.
+        tokenizer: Tokenizer for tokenizing the dataset.
+        batch_size: Batch size for evaluation.
+
+    Returns:
+        A DataLoader for the tokenized dataset.
+    """
+    # Load dataset
+    ds = load_dataset("JeanKaddour/minipile", split="validation", cache_dir=cache_dir)
+
+    # Tokenize dataset
+    def tokenize_fn(examples):
+        return tokenizer(examples['text'], padding=True, truncation=True, max_length=512)
+    
+    tokenized = ds.map(tokenize_fn, batched=True, remove_columns=["text"])
+
+    # Group the dataset into blocks of block_size (use consistent max_length)
+    block_size = 512  # Use the same as tokenization max_length
+    def group_texts(examples):
+        all_ids = sum(examples["input_ids"], [])
+        total_len = (len(all_ids) // block_size) * block_size
+        blocks = [all_ids[i:i + block_size] for i in range(0, total_len, block_size)]
+        return {"input_ids": blocks}
+
+    lm_dataset = tokenized.map(group_texts, batched=True, remove_columns=["attention_mask"])
+
+    # DataLoader setup
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+    dataloader = DataLoader(lm_dataset, batch_size=batch_size, collate_fn=data_collator)
+
+    return dataloader
+
+from tqdm import tqdm
+import math
+from torch import nn
+def evaluate_minipile_gptj(model, batch_size: int = 1, cache_dir: str = "./minipile_cache", Dataloader=None) -> dict:
+   
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    model.eval()
+
+   
+    tokenizer = model.tokenizer  # already initialized in the pipeline
+    dataloader = None
+    if Dataloader is None:
+        dataloader = load_and_tokenize_dataset(cache_dir, tokenizer, batch_size)
+    else:
+        dataloader = Dataloader
+
+    
+    criterion = nn.CrossEntropyLoss(reduction='mean', ignore_index=-100)
+
+    # Evaluation loop
+    total_loss = 0.0
+    total_batches = 0
+
+    # model.eval()
+    with torch.no_grad():
+        for batch_idx, batch in enumerate(tqdm(dataloader, desc="Evaluating")):
+            # 拿到完整的 input_ids, attention_mask, 和已经被 collator 设好 -100 的 labels
+            input_ids    = batch['input_ids'].to(device)       # [B, T]
+            attention_mask = batch['attention_mask'].to(device)# [B, T]
+            labels       = batch['labels'].to(device)          # [B, T], pad 已经是 -100
+
+            with torch.no_grad():
+                outputs = model(input_ids=input_ids)
+                logits  = outputs                     # [B, T, V]
+
+
+            # 手动 shift：logits 丢掉最后一位，labels 丢掉第一位
+            # shift_logits = logits[:, :-1, :].contiguous()    # [B, T-1, V]
+            # shift_labels = labels[:, 1:].contiguous()        # [B, T-1]
+
+            shift_logits=logits
+            labels=labels
+
+            # 计算交叉熵 loss，ignore_index=-100 会跳过所有 pad 位置
+            loss = criterion(
+                shift_logits.view(-1, shift_logits.size(-1)),  # [(B*(T-1)), V]
+                shift_labels.view(-1)                          # [(B*(T-1))]
+            )
+            
+            # Debug: 打印loss信息
+            if batch_idx < 3:
+                print(f"Batch {batch_idx} loss: {loss.item():.4f}")
+                
+            total_loss   += loss.item()
+            total_batches+= 1
+
+
+
+        avg_loss = total_loss / total_batches
+        perplexity = math.exp(avg_loss)
+
+    return {"avg_loss": avg_loss, "perplexity": perplexity}
+
 if __name__ == "__main__":
     model_name = 'AI-ModelScope/gpt-j-6b'
     device_cloud = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-    device_edge = 'cpu'
+    device_edge = 'cuda:0'
     
     pipeline = GPTJPipeline(model_name=model_name, device_cloud=device_cloud, device_edge=device_edge)
-    prompt = "Once upon a time"
-    generated_text = pipeline.generate(prompt, max_length=50)
-    print(generated_text)
-    prompt = "Once upon a time"
-    generated_text = pipeline.generate(prompt, max_length=50)
-    print(generated_text)
+    dataloader=load_and_tokenize_dataset(tokenizer=pipeline.tokenizer)
+    evaluate_minipile_gptj(model=pipeline,Dataloader=dataloader)
+   
+    # prompt = "Once upon a time"
+    # generated_text = pipeline.generate(prompt, max_length=50)
+    # print(generated_text)
+    # prompt = "China is a"
+    # generated_text = pipeline.generate(prompt, max_length=50)
+    # print(generated_text)
 

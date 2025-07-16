@@ -212,7 +212,7 @@ if __name__ == "__main__":
     device_edge  = 'cpu' if torch.cuda.is_available() else 'cpu'
     
     # 可以调整SVD压缩率，0表示不压缩，1表示完全压缩
-    svd_reduce_rate = 0.7
+    svd_reduce_rate = 0
     
     pipeline = GPT2Pipeline(
         model_name=model_name, 
@@ -221,6 +221,6 @@ if __name__ == "__main__":
         svd_reduce_rate=svd_reduce_rate,
         use_compile=False  # 启用torch.compile优化
     )
-    prompt = "Once upon a time"
+    prompt = "1+1="
     generated_text = pipeline.generate(prompt, max_length=50)
     print(generated_text)

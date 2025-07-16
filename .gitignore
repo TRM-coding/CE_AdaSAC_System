@@ -6,3 +6,8 @@ p_model/
 *.pth
 gpt2/
 gpt-j-6b/
+svd_models/
+
+minipile_cache/
+
+gptj_input_data/

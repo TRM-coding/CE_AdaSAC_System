@@ -22,6 +22,13 @@ except Exception as e:
     fused_svd_op = None
 
 class SVDED_GPTJ_EDGE_Layer(nn.Module):
+
+    def clear(self):
+        # 删除所有实例属性
+        for name in list(self.__dict__.keys()):
+            if hasattr(self,name):
+                delattr(self, name)
+
     def __init__(self, gptj_edge_layer, reduce_rate, device, svd_device='cpu'):
         super(SVDED_GPTJ_EDGE_Layer, self).__init__()
         self.device = device
@@ -81,7 +88,7 @@ class SVDED_GPTJ_EDGE_Layer(nn.Module):
         U_tensor = U.contiguous().to(dtype=original_dtype, device=self.device)
         V_tensor = V.contiguous().to(dtype=original_dtype, device=self.device)
         bias_tensor = bias.to(dtype=original_dtype, device=self.device).contiguous() if bias is not None else torch.empty(0).to(dtype=original_dtype, device=self.device)
-        
+        torch.cuda.empty_cache()
         return {
             'U': U_tensor,
             'V': V_tensor,
@@ -100,16 +107,19 @@ class SVDED_GPTJ_EDGE_Layer(nn.Module):
         #     result = F.linear(intermediate, svd_data['V'].t(), 
         #                      svd_data['bias'] if svd_data['bias'].numel() > 0 else None)
         #     return result
-        tm1=time.time()
+        # tm1=time.time()
         intermediate = torch.matmul(x, svd_data['U'])
-        print("U_time:",time.time()-tm1)
-        tm2=time.time()
-        result = torch.matmul(intermediate, svd_data['V'])
-        print("V_time:",time.time()-tm2)
-        tm3=time.time()
+        # intermediate = F.linear(x,svd_data['U'].t())
+        # print("U_time:",time.time()-tm1)
+        # tm2=time.time()
+        # result = torch.matmul(intermediate, svd_data['V'])
+        result=F.linear(intermediate,svd_data['V'].t(),bias=svd_data['bias'])
+        # print("V_time:",time.time()-tm2)
+        # tm3=time.time()
         if svd_data['bias'].numel() > 0:
             result = result + svd_data['bias']
-        print("bias_time:",time.time()-tm3)
+        # print("bias_time:",time.time()-tm3)
+        torch.cuda.empty_cache()
         return result
     
     def forward_cache(self, x, v_cache, attn_weights):
@@ -138,6 +148,9 @@ class SVDED_GPTJ_EDGE_Layer(nn.Module):
         b, seq_k, _ = v_all.shape
         v_h = v_all.view(b, seq_k, self.num_heads, self.head_dim).transpose(1, 2)
         ctx = torch.matmul(attn_weights, v_h)
+        # ctx = F.linear(attn_weights,v_h.t())
+
+
         b2, h2, seq_q, hd = ctx.shape
         ctx = ctx.transpose(1, 2).contiguous().view(b2, seq_q, h2 * hd)
         
@@ -152,6 +165,7 @@ class SVDED_GPTJ_EDGE_Layer(nn.Module):
         # 残差连接 (GPT-J adds both attention and MLP outputs to input)
         x_out = x + attn_out + mlp_out
         
+        torch.cuda.empty_cache()
         return v_all, x_out
     
     def forward_no_cache(self, x, attn_weights):
@@ -168,7 +182,7 @@ class SVDED_GPTJ_EDGE_Layer(nn.Module):
         x1 = (x - m1) / torch.sqrt(v1 + self.ln1_eps) * self.ln1_weight + self.ln1_bias
         
         # V 投影（仅当前 token）(使用SVD)
-        v_new = self._apply_svd_linear(x1, self.v_svd, self.original_layer.v_weight, self.original_layer.v_bias)
+        v_new = self._apply_svd_linear(x1, self.v_svd)
         
         # reshape & attn
         b, seq_k, _ = v_new.shape
@@ -178,17 +192,17 @@ class SVDED_GPTJ_EDGE_Layer(nn.Module):
         ctx = ctx.transpose(1, 2).contiguous().view(b2, seq_q, h2 * hd)
         
         # attention 输出投影 (使用SVD)
-        attn_out = self._apply_svd_linear(ctx, self.out_proj_svd, self.original_layer.out_proj_weight, self.original_layer.out_proj_bias)
+        attn_out = self._apply_svd_linear(ctx, self.out_proj_svd)
         
         # MLP (parallel to attention in GPT-J, 使用SVD)
-        mlp_hidden = self._apply_svd_linear(x1, self.fc_in_svd, self.original_layer.fc_in_weight, self.original_layer.fc_in_bias)
+        mlp_hidden = self._apply_svd_linear(x1, self.fc_in_svd)
         mlp_hidden = torch.nn.functional.gelu(mlp_hidden)
-        mlp_out = self._apply_svd_linear(mlp_hidden, self.fc_out_svd, self.original_layer.fc_out_weight, self.original_layer.fc_out_bias)
+        mlp_out = self._apply_svd_linear(mlp_hidden, self.fc_out_svd)
         
         # 残差连接 (GPT-J adds both attention and MLP outputs to input)
         x_out = x + attn_out + mlp_out
         
-        return v_new, x_out
+        return  x_out
 
 class SVDED_GPT2_EDGE_Layer(nn.Module):
     def __init__(self, gpt2_edge_layer, reduce_rate, device, svd_device='cpu'):
