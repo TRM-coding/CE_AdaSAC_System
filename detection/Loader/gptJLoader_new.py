@@ -274,7 +274,7 @@ class GPTJCloudEdgeCollaborator(nn.Module):
 # 方便的工厂函数
 def create_gptj_cloud_edge_model(model_name='AI-ModelScope/gpt-j-6b', 
                                  device_cloud='cuda:0', 
-                                 device_edge='cpu'):
+                                 device_edge='cuda:0'):
     """
     创建GPT-J云边协同模型的工厂函数
     
@@ -293,12 +293,117 @@ def create_gptj_cloud_edge_model(model_name='AI-ModelScope/gpt-j-6b',
     )
 
 
+
+from datasets import load_dataset
+from transformers import DataCollatorForLanguageModeling
+from torch.utils.data import DataLoader
+def load_and_tokenize_dataset(cache_dir: str='./minipile_cache', tokenizer=None, batch_size: int = 1):
+    """
+    Loads and tokenizes the MiniPile dataset.
+
+    Args:
+        cache_dir: Directory where MiniPile is cached/downloaded.
+        tokenizer: Tokenizer for tokenizing the dataset.
+        batch_size: Batch size for evaluation.
+
+    Returns:
+        A DataLoader for the tokenized dataset.
+    """
+    # Load dataset
+    ds = load_dataset("JeanKaddour/minipile", split="validation", cache_dir=cache_dir)
+
+    # Tokenize dataset
+    def tokenize_fn(examples):
+        return tokenizer(examples['text'], padding=True, truncation=True, max_length=512)
+    
+    tokenized = ds.map(tokenize_fn, batched=True, remove_columns=["text"])
+
+    # Group the dataset into blocks of block_size (use consistent max_length)
+    block_size = 512  # Use the same as tokenization max_length
+    def group_texts(examples):
+        all_ids = sum(examples["input_ids"], [])
+        total_len = (len(all_ids) // block_size) * block_size
+        blocks = [all_ids[i:i + block_size] for i in range(0, total_len, block_size)]
+        return {"input_ids": blocks}
+
+    lm_dataset = tokenized.map(group_texts, batched=True, remove_columns=["attention_mask"])
+
+    # DataLoader setup
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+    dataloader = DataLoader(lm_dataset, batch_size=batch_size, collate_fn=data_collator)
+
+    return dataloader
+
+from tqdm import tqdm
+import math
+from torch import nn
+def evaluate_minipile_gptj(model, batch_size: int = 1, cache_dir: str = "./minipile_cache", Dataloader=None) -> dict:
+   
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    model.eval()
+
+   
+    tokenizer = model.tokenizer  # already initialized in the pipeline
+    dataloader = None
+    if Dataloader is None:
+        dataloader = load_and_tokenize_dataset(cache_dir, tokenizer, batch_size)
+    else:
+        dataloader = Dataloader
+
+    
+    criterion = nn.CrossEntropyLoss(reduction='mean', ignore_index=-100)
+
+    # Evaluation loop
+    total_loss = 0.0
+    total_batches = 0
+
+    # model.eval()
+    with torch.no_grad():
+        for batch_idx, batch in enumerate(tqdm(dataloader, desc="Evaluating")):
+            # 拿到完整的 input_ids, attention_mask, 和已经被 collator 设好 -100 的 labels
+            input_ids    = batch['input_ids'].to(device)       # [B, T]
+            attention_mask = batch['attention_mask'].to(device)# [B, T]
+            labels       = batch['labels'].to(device)          # [B, T], pad 已经是 -100
+
+            with torch.no_grad():
+                outputs = model(input_ids=input_ids)
+                logits  = outputs                     # [B, T, V]
+
+
+            # 手动 shift：logits 丢掉最后一位，labels 丢掉第一位
+            shift_logits = logits[:, :-1, :].contiguous()    # [B, T-1, V]
+            shift_labels = labels[:, 1:].contiguous()        # [B, T-1]
+
+            # shift_logits=logits
+            # labels=labels
+
+            # 计算交叉熵 loss，ignore_index=-100 会跳过所有 pad 位置
+            loss = criterion(
+                shift_logits.view(-1, shift_logits.size(-1)),  # [(B*(T-1)), V]
+                shift_labels.view(-1)                          # [(B*(T-1))]
+            )
+            
+            # Debug: 打印loss信息
+            if batch_idx < 3:
+                print(f"Batch {batch_idx} loss: {loss.item():.4f}")
+                
+            total_loss   += loss.item()
+            total_batches+= 1
+
+
+
+        avg_loss = total_loss / total_batches
+        perplexity = math.exp(avg_loss)
+
+    return {"avg_loss": avg_loss, "perplexity": perplexity}
+
 # 示例使用
 if __name__ == "__main__":
     # 创建云边协同模型
     model = create_gptj_cloud_edge_model(
         device_cloud='cuda:0',
-        device_edge='cpu'
+        device_edge='cuda:0'
     )
     
     # 生成文本示例 - 使用更保守的参数
@@ -314,17 +419,33 @@ if __name__ == "__main__":
     print(f"\n生成结果:")
     print(f"原始prompt: {prompt}")
     print(f"完整生成文本: {generated_text}")
+
+
+    dataloader=load_and_tokenize_dataset(tokenizer=model.tokenizer)
+    evaluate_minipile_gptj(model=model,Dataloader=dataloader)
+    # prompt='China is a'
+    # generated_text = model.generate(
+    #     prompt=prompt,
+    #     max_length=20,  # 减少长度先测试
+    #     temperature=0.7,  # 降低temperature
+    #     top_p=0.8,       # 降低top_p
+    #     do_sample=False  # 先用贪心解码测试
+    # )
     
-    # 数据集评估示例
-    print(f"\n模型信息: {model.get_model_info()}")
+    # print(f"\n生成结果:")
+    # print(f"原始prompt: {prompt}")
+    # print(f"完整生成文本: {generated_text}")
     
-    # 测试forward方法
-    print(f"\n测试forward方法:")
-    test_input = model.tokenizer.encode(prompt, return_tensors='pt')
-    print(f"输入shape: {test_input.shape}")
-    with torch.no_grad():
-        logits = model.forward(test_input)
-        print(f"输出logits shape: {logits.shape}")
-        print(f"预测下一个token ID: {torch.argmax(logits[0, -1]).item()}")
-        next_token = model.tokenizer.decode([torch.argmax(logits[0, -1]).item()])
-        print(f"预测下一个token: '{next_token}'")
+    # # 数据集评估示例
+    # print(f"\n模型信息: {model.get_model_info()}")
+    
+    # # 测试forward方法
+    # print(f"\n测试forward方法:")
+    # test_input = model.tokenizer.encode(prompt, return_tensors='pt')
+    # print(f"输入shape: {test_input.shape}")
+    # with torch.no_grad():
+    #     logits = model.forward(test_input)
+    #     print(f"输出logits shape: {logits.shape}")
+    #     print(f"预测下一个token ID: {torch.argmax(logits[0, -1]).item()}")
+    #     next_token = model.tokenizer.decode([torch.argmax(logits[0, -1]).item()])
+    #     print(f"预测下一个token: '{next_token}'")
