@@ -8,7 +8,7 @@ class gptJ_edge_layer(nn.Module):
     def __init__(self, block, config):
         super().__init__()
         hidden_size = config.n_embd
-        
+        self.flops=None
         # Get model dtype from the weight
         model_dtype = block.attn.v_proj.weight.dtype
         

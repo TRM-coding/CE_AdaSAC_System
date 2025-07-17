@@ -44,7 +44,7 @@ class SVDED_GPTJ_EDGE_Layer(nn.Module):
         # 保存LayerNorm参数(不进行SVD) - GPT-J只有一个LayerNorm
         self.ln1_weight = gptj_edge_layer.ln1_weight
         self.ln1_bias = gptj_edge_layer.ln1_bias
-
+        self.flops=None
         
         # 对所有线性层进行SVD分解，保存U和V矩阵用于fused操作
         self.v_svd = self._create_svd_linear(gptj_edge_layer.v_weight, gptj_edge_layer.v_bias)
