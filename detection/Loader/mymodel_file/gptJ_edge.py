@@ -113,7 +113,7 @@ class gptJ_edge_layer(nn.Module):
         return v_new, x_out
 
 class gptJ_edge(nn.Module):
-    def __init__(self, model_name='AI-ModelScope/gpt-j-6b'):
+    def __init__(self, model_name='AI-ModelScope/gpt-j-6b',svd=False):
         super().__init__()
         
         # 如果是 HuggingFace 仓库名，使用 ModelScope 下载
@@ -125,8 +125,10 @@ class gptJ_edge(nn.Module):
             )
         else:
             model_path = model_name
-        
+
+        self.layers = nn.ModuleList()
         # 使用本地路径加载预训练模型
+        
         try:
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_path,
@@ -144,33 +146,53 @@ class gptJ_edge(nn.Module):
                 trust_remote_code=True,
                 weights_only=False
             )
-        
-        # 创建层列表
-        self.layers = nn.ModuleList()
         for block in self.model.transformer.h:
             layer = gptJ_edge_layer(block, self.model.config)
             self.layers.append(layer)
         
-        self.num_layers = len(self.layers)
+        # 创建层列表
+        
+        
+        
+        self.num_layers = 28
         # GPT-J 使用 n_positions 而不是 n_ctx
-        self.max_ctx = getattr(self.model.config, 'n_positions', 2048)
-        self.v_cache = [None] * self.num_layers
+        # self.max_ctx = getattr(self.model.config, 'n_positions', 2048)
+        # self.v_cache = [None] * self.num_layers
         
-        # 保存配置信息
-        self.num_heads = self.model.config.n_head
-        hidden_size = self.model.config.n_embd
-        self.head_dim = hidden_size // self.num_heads
+        # # 保存配置信息
+        # self.num_heads = self.model.config.n_head
+        # hidden_size = self.model.config.n_embd
+        # self.head_dim = hidden_size // self.num_heads
     
-    def forward_cache(self, x, layer_idx, attn_weights):
-        # 使用指定层进行前向        
-        v_all, x_out = self.layers[layer_idx].forward_cache(x, self.v_cache[layer_idx], attn_weights)
+    # def forward_cache(self, x, layer_idx, attn_weights):
+    #     # 使用指定层进行前向        
+    #     v_all, x_out = self.layers[layer_idx].forward_cache(x, self.v_cache[layer_idx], attn_weights)
         
-        # 更新缓存，应用sliding window
-        if v_all.size(1) > self.max_ctx:
-            v_all = v_all[:, -self.max_ctx:, :]
-        self.v_cache[layer_idx] = v_all
+    #     # 更新缓存，应用sliding window
+    #     if v_all.size(1) > self.max_ctx:
+    #         v_all = v_all[:, -self.max_ctx:, :]
+    #     self.v_cache[layer_idx] = v_all
         
-        return v_all, x_out
+    #     return v_all, x_out
     
     def forward_no_cache(self, x, layer_idx, attn_weights):
         return self.layers[layer_idx].forward_no_cache(x, attn_weights)
+    
+    # 在 gptJ_edge_layer 类中添加 clear 方法
+
+    def clear(self):
+        """清理层以节省内存"""
+        # 删除所有张量属性
+        attrs_to_clear = [
+            'v_weight', 'v_bias', 'ln1_weight', 'ln1_bias',
+            'out_proj_weight', 'out_proj_bias', 'fc_in_weight', 
+            'fc_in_bias', 'fc_out_weight', 'fc_out_bias'
+        ]
+        
+        for attr in attrs_to_clear:
+            if hasattr(self, attr):
+                delattr(self, attr)
+        
+        # 清理CUDA缓存
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
