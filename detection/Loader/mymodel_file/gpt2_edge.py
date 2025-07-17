@@ -36,46 +36,46 @@ class gpt2_edge_layer(nn.Module):
         self.num_heads = config.n_head
         self.head_dim = hidden_size // config.n_head
         
-    def forward_cache(self, x, v_cache, attn_weights):
-        """
-        x: Tensor [batch_size, seq_len, hidden]
-        v_cache: 当前层的V缓存
-        attn_weights: Tensor [batch_size, num_heads, seq_q, seq_k]
-        返回: (更新的v_cache, 层输出)
-        """
-        # ln_1
-        m1 = x.mean(-1, keepdim=True)
-        v1 = x.var(-1, keepdim=True, unbiased=False)
-        x1 = (x - m1) / torch.sqrt(v1 + self.ln1_eps) * self.ln1_weight + self.ln1_bias
+    # def forward_cache(self, x, v_cache, attn_weights):
+    #     """
+    #     x: Tensor [batch_size, seq_len, hidden]
+    #     v_cache: 当前层的V缓存
+    #     attn_weights: Tensor [batch_size, num_heads, seq_q, seq_k]
+    #     返回: (更新的v_cache, 层输出)
+    #     """
+    #     # ln_1
+    #     m1 = x.mean(-1, keepdim=True)
+    #     v1 = x.var(-1, keepdim=True, unbiased=False)
+    #     x1 = (x - m1) / torch.sqrt(v1 + self.ln1_eps) * self.ln1_weight + self.ln1_bias
         
-        # V 投影
-        v_new = torch.matmul(x1, self.v_weight) + self.v_bias
+    #     # V 投影
+    #     v_new = torch.matmul(x1, self.v_weight) + self.v_bias
         
-        # 更新缓存
-        v_all = torch.cat([v_cache, v_new], dim=1) if v_cache is not None else v_new
+    #     # 更新缓存
+    #     v_all = torch.cat([v_cache, v_new], dim=1) if v_cache is not None else v_new
         
-        # reshape & attn
-        b, seq_k, _ = v_all.shape
-        v_h = v_all.view(b, seq_k, self.num_heads, self.head_dim).transpose(1, 2)
-        ctx = torch.matmul(attn_weights, v_h)
-        b2, h2, seq_q, hd = ctx.shape
-        ctx = ctx.transpose(1, 2).contiguous().view(b2, seq_q, h2 * hd)
+    #     # reshape & attn
+    #     b, seq_k, _ = v_all.shape
+    #     v_h = v_all.view(b, seq_k, self.num_heads, self.head_dim).transpose(1, 2)
+    #     ctx = torch.matmul(attn_weights, v_h)
+    #     b2, h2, seq_q, hd = ctx.shape
+    #     ctx = ctx.transpose(1, 2).contiguous().view(b2, seq_q, h2 * hd)
         
-        # c_proj + 残差
-        attn_out = torch.matmul(ctx, self.proj_weight) + self.proj_bias
-        x2 = attn_out + x
+    #     # c_proj + 残差
+    #     attn_out = torch.matmul(ctx, self.proj_weight) + self.proj_bias
+    #     x2 = attn_out + x
         
-        # ln_2 + MLP
-        m2 = x2.mean(-1, keepdim=True)
-        v2 = x2.var(-1, keepdim=True, unbiased=False)
-        x2n = (x2 - m2) / torch.sqrt(v2 + self.ln2_eps) * self.ln2_weight + self.ln2_bias
+    #     # ln_2 + MLP
+    #     m2 = x2.mean(-1, keepdim=True)
+    #     v2 = x2.var(-1, keepdim=True, unbiased=False)
+    #     x2n = (x2 - m2) / torch.sqrt(v2 + self.ln2_eps) * self.ln2_weight + self.ln2_bias
         
-        # ffn
-        hidden = torch.nn.functional.gelu(torch.matmul(x2n, self.fc_weight) + self.fc_bias)
-        ffn_out = torch.matmul(hidden, self.fc_proj_w) + self.fc_proj_b
-        x_out = x2 + ffn_out
+    #     # ffn
+    #     hidden = torch.nn.functional.gelu(torch.matmul(x2n, self.fc_weight) + self.fc_bias)
+    #     ffn_out = torch.matmul(hidden, self.fc_proj_w) + self.fc_proj_b
+    #     x_out = x2 + ffn_out
         
-        return v_all, x_out
+    #     return v_all, x_out
     
     def forward_no_cache(self, x, attn_weights):
         """

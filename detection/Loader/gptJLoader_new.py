@@ -1,430 +1,330 @@
 import torch
-import torch.nn as nn
+from torch import nn
 from transformers import AutoTokenizer
-from modelscope.utils.hub import snapshot_download
+import time
 from mymodel_file.gptJ_cloud import gptJ_cloud
 from mymodel_file.gptJ_edge import gptJ_edge
-import torch.nn.functional as F
-from datasets import load_dataset
-from transformers import DataCollatorForLanguageModeling
-from torch.utils.data import DataLoader
-from detection.SVD_model import SVDED_GPTJ_EDGE_Layer
 
-class CloudEdgeCollaborativeGPTJ(nn.Module):
+
+class GPTJCloudEdgeCollaborator(nn.Module):
     """
-    云边协同GPTJ-6B推理模块
-    
-    协同计算流程：
-    1. 云侧：计算 Q, K 矩阵以及注意力权重 (Q @ K^T)
-    2. 边侧：计算 V 矩阵和后续的注意力计算
-    3. 云侧将注意力权重传给边侧，边侧完成剩余计算
-    
-    支持两种模式：
-    - forward: 标准前向传播，无缓存机制
-    - generate: 生成模式，带K/V缓存优化
+    GPT-J 云边协同模型
+    云侧：完成Q、K的计算和attention权重计算
+    边侧：完成V的计算和最终的attention输出
     """
     
     def __init__(self, model_name='AI-ModelScope/gpt-j-6b', device_cloud='cuda:0', device_edge='cpu'):
         super().__init__()
         
-        # 下载或加载模型
-        if not torch.cuda.is_available():
-            device_cloud = 'cpu'
-            
-        print(f"📥 使用ModelScope下载模型 {model_name}...")
-        model_dir = snapshot_download(
-            repo_id=model_name,
-            cache_dir='./gpt-j-6b'
-        )
-        print(f"✅ 模型下载完成，路径: {model_dir}")
-        
-        # 加载tokenizer
-        print(f"🔤 加载tokenizer...")
-        self.tokenizer = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True)
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-        
-        # 加载云端和边端模型
-        print(f"☁️  加载云端模型到 {device_cloud}...")
-        self.cloud = gptJ_cloud(model_name=model_dir).to(device_cloud)
-        
-        print(f"🖥️  加载边缘模型到 {device_edge}...")
-        self.edge = gptJ_edge(model_name=model_dir).to(device_edge)
-        
-        # 获取共享组件
-        self.embed = self.cloud.model.transformer.wte
-        self.ln_f = self.cloud.model.transformer.ln_f
-        self.lm_head = self.cloud.model.lm_head
-        self.num_layers = len(self.cloud.q_weights)
-        
-        # 保存设备信息
         self.device_cloud = device_cloud
         self.device_edge = device_edge
         
-        print(f"🎯 云边协同模型初始化完成，共 {self.num_layers} 层")
+        # 初始化云侧和边侧模型
+        print(f"初始化云侧模型 (设备: {device_cloud})...")
+        self.cloud = gptJ_cloud(model_name=model_name).to(device_cloud)
         
-    def reset_cache(self):
-        """重置所有缓存"""
-        self.cloud.k_cache = [None] * self.num_layers
-        self.edge.v_cache = [None] * self.num_layers
-    
+        print(f"初始化边侧模型 (设备: {device_edge})...")
+        self.edge = gptJ_edge(model_name=model_name).to(device_edge)
+        
+        # 获取共享的组件（embedding和输出层）
+        self.embed = self.cloud.model.transformer.wte.to(device_cloud)
+        self.ln_f = self.cloud.model.transformer.ln_f.to(device_cloud)
+        self.lm_head = self.cloud.model.lm_head.to(device_cloud)
+        
+        # 模型配置
+        self.num_layers = len(self.cloud.q_weights)
+        self.vocab_size = self.cloud.model.config.vocab_size
+        
+        # 初始化tokenizer
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        except:
+            # 如果直接加载失败，尝试从本地路径加载
+            self.tokenizer = AutoTokenizer.from_pretrained('./gpt-j-6b/AI-ModelScope/gpt-j-6b')
+            
+        # 设置pad_token
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+
     def forward(self, input_ids, attention_mask=None):
         """
-        标准前向传播（无缓存）
-        
+        前向传播用于数据集评估
         Args:
-            input_ids: [batch_size, seq_len] token序列
-            attention_mask: 可选的注意力掩码
-            
+            input_ids: [batch_size, seq_len] token ids
+            attention_mask: [batch_size, seq_len] attention mask (1=valid, 0=padding)
         Returns:
-            logits: [batch_size, seq_len, vocab_size] 输出logits
+            logits: [batch_size, seq_len, vocab_size] 预测logits
         """
-        device = input_ids.device
+        # 1. Embedding
+        x = self.embed(input_ids.to(self.device_cloud))  # [B, T, D]
+        
         batch_size, seq_len = input_ids.shape
         
-        # 移动嵌入层到输入设备
-        self.embed = self.embed.to(device)
-        self.ln_f = self.ln_f.to(device)
-        self.lm_head = self.lm_head.to(device)
+        # 2. 如果没有提供attention_mask，根据pad_token_id生成
+        if attention_mask is None:
+            if self.tokenizer.pad_token_id is not None:
+                attention_mask = (input_ids != self.tokenizer.pad_token_id).long()
+            else:
+                attention_mask = torch.ones_like(input_ids)
         
-        # Token嵌入
-        x = self.embed(input_ids)  # [batch_size, seq_len, hidden_size]
+        # 创建position_ids
+        position_ids = torch.arange(seq_len, device=self.device_cloud).unsqueeze(0).expand(batch_size, -1)
         
-        # 逐层协同计算
+        # 3. 逐层处理
         for layer_idx in range(self.num_layers):
-            # 1. 云侧计算：Q, K矩阵和注意力权重
-            q, k, attn_weights = self.cloud.forward_no_cache(x, layer_idx)
+            # 云侧：计算Q、K和attention权重（传入attention_mask和position_ids）
+            q, k, attn_weights = self.cloud.forward_no_cache(
+                x, layer_idx, position_ids, attention_mask.to(self.device_cloud)
+            )
             
-            # 2. 将注意力权重传输到边侧 (模拟网络传输)
-            attn_weights_edge = attn_weights.to(self.device_edge)
+            # 将数据传输到边侧设备
             x_edge = x.to(self.device_edge)
+            attn_weights_edge = attn_weights.to(self.device_edge)
             
-            # 3. 边侧计算：V矩阵和后续操作
-            v, x_out = self.edge.forward_no_cache(x_edge, layer_idx, attn_weights_edge)
+            # 边侧：计算V和最终输出
+            _, x_edge = self.edge.forward_no_cache(x_edge, layer_idx, attn_weights_edge)
             
-            # 4. 将结果传回云侧 (或保持在边侧，根据下一层的需要)
-            x = x_out.to(device)
+            # 将结果传回云侧
+            x = x_edge.to(self.device_cloud)
         
-        # 最终层归一化和输出投影
+        # 4. 最终的Layer Norm和LM Head
         x = self.ln_f(x)
         logits = self.lm_head(x)
         
         return logits
     
-    def generate(self, input_ids, max_new_tokens=50, temperature=1.0, top_k=50, do_sample=True):
-        """
-        生成文本（带缓存优化）
+    # def forward(self, input_ids):
+    #     """
+    #     前向传播用于数据集评估
+    #     Args:
+    #         input_ids: [batch_size, seq_len] token ids
+    #     Returns:
+    #         logits: [batch_size, seq_len, vocab_size] 预测logits
+    #     """
+    #     # 1. Embedding
+    #     x = self.embed(input_ids.to(self.device_cloud))  # [B, T, D]
         
-        Args:
-            input_ids: [batch_size, seq_len] 初始token序列
-            max_new_tokens: 最大生成token数
-            temperature: 温度参数
-            top_k: top-k采样
-            do_sample: 是否使用采样
+    #     # 2. 逐层处理
+    #     for layer_idx in range(self.num_layers):
+    #         # 云侧：计算Q、K和attention权重
+    #         q, k, attn_weights = self.cloud.forward_no_cache(x, layer_idx)
             
-        Returns:
-            generated_ids: [batch_size, seq_len + max_new_tokens] 生成的完整序列
-        """
-        device = input_ids.device
-        batch_size, initial_seq_len = input_ids.shape
+    #         # 将数据传输到边侧设备
+    #         x_edge = x.to(self.device_edge)
+    #         attn_weights_edge = attn_weights.to(self.device_edge)
+            
+    #         # 边侧：计算V和最终输出
+    #         _, x_edge = self.edge.forward_no_cache(x_edge, layer_idx, attn_weights_edge)
+            
+    #         # 将结果传回云侧
+    #         x = x_edge.to(self.device_cloud)
         
-        # 重置缓存
-        self.reset_cache()
+    #     # 3. 最终的Layer Norm和LM Head
+    #     x = self.ln_f(x)
+    #     logits = self.lm_head(x)
         
-        # 移动嵌入层到正确设备
-        self.embed = self.embed.to(device)
-        self.ln_f = self.ln_f.to(device)
-        self.lm_head = self.lm_head.to(device)
+    #     return logits
+    
+    def generate(self, prompt, max_length=50, temperature=1.0, top_p=0.9, do_sample=True):
+        """文本生成方法 - 修复版本"""
+        self.eval()
         
-        generated_ids = input_ids.clone()
+        # 编码输入
+        input_ids = self.tokenizer.encode(prompt, return_tensors='pt')[0].tolist()
+        outputs = input_ids.copy()
         
-        # 正确的缓存初始化：逐个token处理完整的prompt
+        print(f"开始生成，初始prompt: '{prompt}'")
+        print(f"目标生成长度: {max_length} tokens")
+        print(f"初始token数: {len(input_ids)}")
+        
+        # 统计时间
+        cloud_time = 0
+        edge_time = 0
+        transfer_time = 0
+        
         with torch.no_grad():
-            for i in range(initial_seq_len):
-                current_token = input_ids[:, i:i+1]  # [batch_size, 1]
-                x = self.embed(current_token)
+            # 逐token生成
+            for step in range(max_length):
+                if step % 5 == 0:
+                    print(f"生成进度: {step}/{max_length}")
                 
-                # 逐层处理，正确更新隐藏状态
+                # 处理完整的序列
+                current_ids = torch.tensor([outputs]).to(self.device_cloud)  # [1, current_seq_len]
+                x = self.embed(current_ids)  # [1, current_seq_len, hidden_size]
+                
+                # 创建position_ids和attention_mask
+                seq_len = len(outputs)
+                position_ids = torch.arange(seq_len, device=self.device_cloud).unsqueeze(0)  # [1, seq_len]
+                
+                # 创建attention_mask（生成时所有token都是有效的）
+                attention_mask = torch.ones_like(current_ids)
+                
+                # 逐层处理
                 for layer_idx in range(self.num_layers):
-                    # 1. 云侧：使用缓存计算Q, K和注意力权重
-                    q, k_all, attn_weights = self.cloud.forward_cache(x, layer_idx)
+                    # 云侧计算（传入position_ids和attention_mask）
+                    t0 = time.time()
+                    q, k, attn_weights = self.cloud.forward_no_cache(
+                        x, layer_idx, position_ids, attention_mask
+                    )
+                    cloud_time += time.time() - t0
                     
-                    # 2. 传输到边侧
+                    # 数据传输到边侧
+                    t1 = time.time()
                     x_edge = x.to(self.device_edge)
-                    attn_weights_to_edge = attn_weights.to(self.device_edge)
+                    attn_weights_edge = attn_weights.to(self.device_edge)
+                    transfer_time += time.time() - t1
                     
-                    # 3. 边侧：使用缓存计算V和后续操作
-                    v_all, x_out = self.edge.forward_cache(x_edge, layer_idx, attn_weights_to_edge)
+                    # 边侧计算
+                    t2 = time.time()
+                    _, x_edge = self.edge.forward_no_cache(x_edge, layer_idx, attn_weights_edge)
+                    edge_time += time.time() - t2
                     
-                    # 4. 传回云侧用于下一层
-                    x = x_out.to(device)
-        
-        # 逐个生成新token
-        for step in range(max_new_tokens):
-            with torch.no_grad():
-                # 只对最后一个token进行前向传播
-                current_token = generated_ids[:, -1:]  # [batch_size, 1]
-                logits = self._forward_with_cache(current_token)
+                    # 数据传回云侧
+                    t3 = time.time()
+                    x = x_edge.to(self.device_cloud)
+                    transfer_time += time.time() - t3
                 
-                # 只取最后一个token的logits
-                next_token_logits = logits[:, -1, :] / temperature  # [batch_size, vocab_size]
+                # 最终处理
+                x = self.ln_f(x)
+                logits = self.lm_head(x)  # [1, current_seq_len, vocab_size]
                 
-                # 生成下一个token
+                # 只使用最后一个位置的logits进行采样
+                next_token_logits = logits[0, -1, :]  # [vocab_size]
+                
+                # 采样下一个token
                 if do_sample:
-                    if top_k > 0:
-                        # Top-k采样
-                        indices_to_remove = next_token_logits < torch.topk(next_token_logits, top_k)[0][..., -1, None]
+                    # 应用temperature
+                    next_token_logits = next_token_logits / temperature
+                    
+                    # Top-p采样
+                    if top_p < 1.0:
+                        sorted_logits, sorted_indices = torch.sort(next_token_logits, descending=True)
+                        cumulative_probs = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
+                        
+                        # 移除累积概率超过top_p的token
+                        sorted_indices_to_remove = cumulative_probs > top_p
+                        if len(sorted_indices_to_remove) > 1:
+                            sorted_indices_to_remove[1:] = sorted_indices_to_remove[:-1].clone()
+                        sorted_indices_to_remove[0] = False
+                        
+                        indices_to_remove = sorted_indices[sorted_indices_to_remove]
                         next_token_logits[indices_to_remove] = float('-inf')
                     
-                    probs = F.softmax(next_token_logits, dim=-1)
-                    next_token = torch.multinomial(probs, num_samples=1)
+                    # 从分布中采样
+                    probs = torch.softmax(next_token_logits, dim=-1)
+                    next_token_id = torch.multinomial(probs, num_samples=1).item()
                 else:
                     # 贪心解码
-                    next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
+                    next_token_id = torch.argmax(next_token_logits, dim=-1).item()
                 
-                # 添加到生成序列
-                generated_ids = torch.cat([generated_ids, next_token], dim=-1)
+                outputs.append(next_token_id)
                 
-                # 检查是否生成了结束符
-                if next_token.item() == self.tokenizer.eos_token_id:
+                # 调试信息：显示生成的token
+                if step < 10:
+                    token_text = self.tokenizer.decode([next_token_id])
+                    print(f"  Step {step}: token_id={next_token_id}, token='{token_text}'")
+                
+                # 检查是否遇到结束token
+                if next_token_id == self.tokenizer.eos_token_id:
+                    print("遇到结束token，停止生成")
                     break
         
-        return generated_ids
-    
-    def _forward_with_cache(self, input_ids):
-        """
-        带缓存的前向传播（用于生成）
+        # 生成完成的处理代码保持不变...
+        generated_text = self.tokenizer.decode(outputs, skip_special_tokens=True)
         
-        Args:
-            input_ids: [batch_size, seq_len] 当前输入token
-            
-        Returns:
-            logits: [batch_size, seq_len, vocab_size]
-        """
-        device = input_ids.device
-        x = self.embed(input_ids)
+        # 输出统计信息
+        total_time = cloud_time + edge_time + transfer_time
+        generated_tokens = len(outputs) - len(input_ids)
         
-        for layer_idx in range(self.num_layers):
-            # 1. 云侧：使用缓存计算Q, K和注意力权重
-            q, k_all, attn_weights = self.cloud.forward_cache(x, layer_idx)
-            
-            # 2. 传输到边侧的数据优化：
-            # 对于生成，我们只需要最新token与所有历史token的注意力权重
-            # attn_weights shape: [batch, num_heads, seq_q, seq_k]
-            x_edge = x.to(self.device_edge)
-            attn_weights_to_edge = attn_weights.to(self.device_edge)
-            
-            # 3. 边侧：使用缓存计算V和后续操作
-            v_all, x_out = self.edge.forward_cache(x_edge, layer_idx, attn_weights_to_edge)
-            
-            # 4. 传回云侧用于下一层
-            x = x_out.to(device)
-        
-        # 最终输出
-        x = self.ln_f(x)
-        logits = self.lm_head(x)
-        
-        return logits
-    
-    def generate_text(self, prompt, max_new_tokens=50, temperature=1.0, top_k=50, do_sample=True):
-        """
-        文本生成的便捷接口
-        
-        Args:
-            prompt: 输入文本提示
-            max_new_tokens: 最大生成token数
-            temperature: 温度参数
-            top_k: top-k采样
-            do_sample: 是否使用采样
-            
-        Returns:
-            generated_text: 生成的完整文本
-        """
-        # 编码输入
-        input_ids = self.tokenizer.encode(prompt, return_tensors='pt')
-        
-        # 移动到云侧设备
-        input_ids = input_ids.to(self.device_cloud)
-        
-        # 生成
-        with torch.no_grad():
-            generated_ids = self.generate(
-                input_ids, 
-                max_new_tokens=max_new_tokens,
-                temperature=temperature,
-                top_k=top_k,
-                do_sample=do_sample
-            )
-        
-        # 解码
-        generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        print(f"\n生成完成!")
+        print(f"总时间: {total_time:.3f}s")
+        if total_time > 0:
+            print(f"云侧时间: {cloud_time:.3f}s ({cloud_time/total_time*100:.1f}%)")
+            print(f"边侧时间: {edge_time:.3f}s ({edge_time/total_time*100:.1f}%)")
+            print(f"传输时间: {transfer_time:.3f}s ({transfer_time/total_time*100:.1f}%)")
+        print(f"生成的token数: {generated_tokens}")
+        if generated_tokens > 0:
+            print(f"平均每token时间: {total_time/generated_tokens:.3f}s")
         
         return generated_text
     
-    def get_transfer_stats(self):
+    def forward_with_cache(self, input_ids, use_cache=True):
         """
-        获取数据传输统计信息（用于分析网络开销）
-        
-        Returns:
-            dict: 包含传输数据量的统计信息
+        带缓存的前向传播（用于生成时的优化）
+        注意：这个方法暂时未实现，因为要求忽略缓存策略
         """
-        # 这里可以添加实际的传输量统计
-        # 主要传输：注意力权重从云到边，最终输出从边到云
-        attention_transfer_size = 0
-        output_transfer_size = 0
-        
+        return self.forward(input_ids)
+    
+    def reset_cache(self):
+        """重置所有缓存"""
+        # 由于我们忽略缓存策略，这个方法为空
+        pass
+    
+    def get_model_info(self):
+        """获取模型信息"""
         return {
-            "attention_transfer_mb": attention_transfer_size / (1024**2),
-            "output_transfer_mb": output_transfer_size / (1024**2),
-            "total_transfer_mb": (attention_transfer_size + output_transfer_size) / (1024**2)
+            'num_layers': self.num_layers,
+            'vocab_size': self.vocab_size,
+            'cloud_device': self.device_cloud,
+            'edge_device': self.device_edge,
+            'model_name': 'GPT-J Cloud-Edge Collaborator'
         }
 
-from tqdm import tqdm
-import math
 
-class EVALER():
-    def load_and_tokenize_dataset(self,cache_dir: str, tokenizer, batch_size: int = 1):
-        """
-        Loads and tokenizes the MiniPile dataset.
-
-        Args:
-            cache_dir: Directory where MiniPile is cached/downloaded.
-            tokenizer: Tokenizer for tokenizing the dataset.
-            batch_size: Batch size for evaluation.
-
-        Returns:
-            A DataLoader for the tokenized dataset.
-        """
-        # Load dataset
-        ds = load_dataset("JeanKaddour/minipile", split="validation", cache_dir=cache_dir)
-
-        # Tokenize dataset
-        def tokenize_fn(examples):
-            return tokenizer(examples['text'], padding=True, truncation=True, max_length=512)
-        
-        tokenized = ds.map(tokenize_fn, batched=True, remove_columns=["text"])
-
-        # Group the dataset into blocks of block_size (use consistent max_length)
-        block_size = 512  # Use the same as tokenization max_length
-        def group_texts(examples):
-            all_ids = sum(examples["input_ids"], [])
-            total_len = (len(all_ids) // block_size) * block_size
-            blocks = [all_ids[i:i + block_size] for i in range(0, total_len, block_size)]
-            return {"input_ids": blocks}
-
-        lm_dataset = tokenized.map(group_texts, batched=True, remove_columns=["attention_mask"])
-
-        # DataLoader setup
-        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-        dataloader = DataLoader(lm_dataset, batch_size=batch_size, collate_fn=data_collator)
-
-        return dataloader
-
-
-    def evaluate_minipile_gptj(self,model, batch_size: int = 1, cache_dir: str = "./minipile_cache", Dataloader=None) -> dict:
-        """
-        Evaluates a GPTJ-6B model instance on the MiniPile dataset.
-
-        Args:
-            model: A transformers.GPTJForCausalLM instance.
-            batch_size: Batch size for evaluation.
-            cache_dir: Directory where MiniPile is cached/downloaded.
-
-        Returns:
-            A dict with keys:
-                - "avg_loss": Average cross-entropy loss.
-                - "perplexity": Exponential of the average loss.
-        """
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model.to(device)
-        model.eval()
-
-        # Load and tokenize dataset
-        tokenizer = model.tokenizer  # already initialized in the pipeline
-        dataloader = None
-        if Dataloader is None:
-            dataloader = self.load_and_tokenize_dataset(cache_dir, tokenizer, batch_size)
-        else:
-            dataloader = Dataloader
-
-        # Initialize loss function with ignore_index=-100 to skip padding tokens
-        criterion = nn.CrossEntropyLoss(reduction='mean', ignore_index=-100)
-
-        # Evaluation loop
-        total_loss = 0.0
-        total_batches = 0
-
-        # model.eval()
-        with torch.no_grad():
-            for batch_idx, batch in enumerate(tqdm(dataloader, desc="Evaluating")):
-                # 拿到完整的 input_ids, attention_mask, 和已经被 collator 设好 -100 的 labels
-                input_ids    = batch['input_ids'].to(device)       # [B, T]
-                attention_mask = batch['attention_mask'].to(device)# [B, T]
-                labels       = batch['labels'].to(device)          # [B, T], pad 已经是 -100
-
-              
-
-                with torch.no_grad():
-                    outputs = model(input_ids=input_ids)
-                    logits  = outputs                     # [B, T, V]
-
-                
-                # 手动 shift：logits 丢掉最后一位，labels 丢掉第一位
-                shift_logits = logits[:, :-1, :].contiguous()    # [B, T-1, V]
-                shift_labels = labels[:, 1:].contiguous()        # [B, T-1]
-
-                # 计算交叉熵 loss，ignore_index=-100 会跳过所有 pad 位置
-                loss = criterion(
-                    shift_logits.view(-1, shift_logits.size(-1)),  # [(B*(T-1)), V]
-                    shift_labels.view(-1)                          # [(B*(T-1))]
-                )
-                
-               
-                total_loss   += loss.item()
-                total_batches+= 1
-
-
-            avg_loss = total_loss / total_batches
-            perplexity = math.exp(avg_loss)
-
-        return {"avg_loss": avg_loss, "perplexity": perplexity}
-
-
-if __name__ == "__main__":
-    # 使用示例
-    model_name = 'AI-ModelScope/gpt-j-6b'
-    device_cloud = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-    device_edge = 'cuda:0'
+# 方便的工厂函数
+def create_gptj_cloud_edge_model(model_name='AI-ModelScope/gpt-j-6b', 
+                                 device_cloud='cuda:0', 
+                                 device_edge='cpu'):
+    """
+    创建GPT-J云边协同模型的工厂函数
     
-    # 创建云边协同模型
-    collaborative_model = CloudEdgeCollaborativeGPTJ(
+    Args:
+        model_name: 模型名称或路径
+        device_cloud: 云侧设备
+        device_edge: 边侧设备
+    
+    Returns:
+        GPTJCloudEdgeCollaborator: 云边协同模型实例
+    """
+    return GPTJCloudEdgeCollaborator(
         model_name=model_name,
         device_cloud=device_cloud,
         device_edge=device_edge
     )
-    
-    # 测试文本生成
-    prompt = "Once upon a time, in a distant galaxy"
-    print(f"🔸 输入提示: {prompt}")
-    
-    generated_text = collaborative_model.generate_text(
-        prompt, 
-        max_new_tokens=30,
-        temperature=0.8,
-        top_k=50
+
+
+# 示例使用
+if __name__ == "__main__":
+    # 创建云边协同模型
+    model = create_gptj_cloud_edge_model(
+        device_cloud='cuda:0',
+        device_edge='cpu'
     )
     
-    print(f"🔸 生成文本: {generated_text}")
+    # 生成文本示例 - 使用更保守的参数
+    prompt = "The future of artificial intelligence is"
+    generated_text = model.generate(
+        prompt=prompt,
+        max_length=20,  # 减少长度先测试
+        temperature=0.7,  # 降低temperature
+        top_p=0.8,       # 降低top_p
+        do_sample=False  # 先用贪心解码测试
+    )
     
-    # 测试标准前向传播
-    input_ids = collaborative_model.tokenizer.encode(prompt, return_tensors='pt')
-    input_ids = input_ids.to(device_cloud)
+    print(f"\n生成结果:")
+    print(f"原始prompt: {prompt}")
+    print(f"完整生成文本: {generated_text}")
     
+    # 数据集评估示例
+    print(f"\n模型信息: {model.get_model_info()}")
+    
+    # 测试forward方法
+    print(f"\n测试forward方法:")
+    test_input = model.tokenizer.encode(prompt, return_tensors='pt')
+    print(f"输入shape: {test_input.shape}")
     with torch.no_grad():
-        logits = collaborative_model.forward(input_ids)
-        print(f"🔸 Forward输出形状: {logits.shape}")
-
-    eval=EVALER()
-
-    dataloader=eval.load_and_tokenize_dataset(cache_dir='./minipile_cache',tokenizer=collaborative_model.tokenizer)
-    eval.evaluate_minipile_gptj(collaborative_model,Dataloader=dataloader)
+        logits = model.forward(test_input)
+        print(f"输出logits shape: {logits.shape}")
+        print(f"预测下一个token ID: {torch.argmax(logits[0, -1]).item()}")
+        next_token = model.tokenizer.decode([torch.argmax(logits[0, -1]).item()])
+        print(f"预测下一个token: '{next_token}'")

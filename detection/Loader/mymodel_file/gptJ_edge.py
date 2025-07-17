@@ -39,45 +39,45 @@ class gptJ_edge_layer(nn.Module):
         self.num_heads = config.n_head
         self.head_dim = hidden_size // config.n_head
         
-    def forward_cache(self, x, v_cache, attn_weights):
-        # Ensure input has correct dtype
-        x = x.to(self.v_weight.dtype)
-        if attn_weights is not None:
-            attn_weights = attn_weights.to(self.v_weight.dtype)
+    # def forward_cache(self, x, v_cache, attn_weights):
+    #     # Ensure input has correct dtype
+    #     x = x.to(self.v_weight.dtype)
+    #     if attn_weights is not None:
+    #         attn_weights = attn_weights.to(self.v_weight.dtype)
         
-        # ln_1 (GPT-J applies LayerNorm to input)
-        m1 = x.mean(-1, keepdim=True)
-        v1 = x.var(-1, keepdim=True, unbiased=False)
-        x1 = (x - m1) / torch.sqrt(v1 + self.ln1_eps) * self.ln1_weight + self.ln1_bias
+    #     # ln_1 (GPT-J applies LayerNorm to input)
+    #     m1 = x.mean(-1, keepdim=True)
+    #     v1 = x.var(-1, keepdim=True, unbiased=False)
+    #     x1 = (x - m1) / torch.sqrt(v1 + self.ln1_eps) * self.ln1_weight + self.ln1_bias
         
-        # V 投影
-        v_new = torch.matmul(x1, self.v_weight.T) + self.v_bias
+    #     # V 投影
+    #     v_new = torch.matmul(x1, self.v_weight.T) + self.v_bias
         
-        # 更新缓存
-        if v_cache is not None:
-            v_cache = v_cache.to(v_new.dtype)
-            v_all = torch.cat([v_cache, v_new], dim=1)
-        else:
-            v_all = v_new
+    #     # 更新缓存
+    #     if v_cache is not None:
+    #         v_cache = v_cache.to(v_new.dtype)
+    #         v_all = torch.cat([v_cache, v_new], dim=1)
+    #     else:
+    #         v_all = v_new
         
-        # reshape & attention
-        b, seq_k, _ = v_all.shape
-        v_h = v_all.view(b, seq_k, self.num_heads, self.head_dim).transpose(1, 2)
-        ctx = torch.matmul(attn_weights, v_h)
-        b2, h2, seq_q, hd = ctx.shape
-        ctx = ctx.transpose(1, 2).contiguous().view(b2, seq_q, h2 * hd)
+    #     # reshape & attention
+    #     b, seq_k, _ = v_all.shape
+    #     v_h = v_all.view(b, seq_k, self.num_heads, self.head_dim).transpose(1, 2)
+    #     ctx = torch.matmul(attn_weights, v_h)
+    #     b2, h2, seq_q, hd = ctx.shape
+    #     ctx = ctx.transpose(1, 2).contiguous().view(b2, seq_q, h2 * hd)
         
-        # attention 输出投影
-        attn_out = torch.matmul(ctx, self.out_proj_weight.T) + self.out_proj_bias
+    #     # attention 输出投影
+    #     attn_out = torch.matmul(ctx, self.out_proj_weight.T) + self.out_proj_bias
         
-        # MLP (parallel to attention in GPT-J)
-        mlp_hidden = torch.nn.functional.gelu(torch.matmul(x1, self.fc_in_weight.T) + self.fc_in_bias)
-        mlp_out = torch.matmul(mlp_hidden, self.fc_out_weight.T) + self.fc_out_bias
+    #     # MLP (parallel to attention in GPT-J)
+    #     mlp_hidden = torch.nn.functional.gelu(torch.matmul(x1, self.fc_in_weight.T) + self.fc_in_bias)
+    #     mlp_out = torch.matmul(mlp_hidden, self.fc_out_weight.T) + self.fc_out_bias
         
-        # 残差连接 (GPT-J adds both attention and MLP outputs to input)
-        x_out = x + attn_out + mlp_out
+    #     # 残差连接 (GPT-J adds both attention and MLP outputs to input)
+    #     x_out = x + attn_out + mlp_out
         
-        return v_all, x_out
+    #     return v_all, x_out
     
     def forward_no_cache(self, x, attn_weights):
         # Ensure input has correct dtype
