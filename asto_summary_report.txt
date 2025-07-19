@@ -1,20 +1,20 @@
 ASTO Algorithm Execution Report
 ==================================================
-Execution Time: 2025-07-20 00:19:28
-Total Runtime: 196.948 seconds
+Execution Time: 2025-07-20 00:27:04
+Total Runtime: 232.817 seconds
 
 Algorithm Parameters:
   - Warm epochs: 2
   - Generate epochs: 2
 
 Warm Phase Analysis:
-  - Total time: 110.182s
+  - Total time: 150.746s
   - Number of iterations: 2
-  - Average time per iteration: 55.091s
-  - Initial best fitness: 0.2332
-  - Final best fitness: 0.7705
-  - Fitness improvement: 0.5371
-  - Average final fitness: 0.5000
+  - Average time per iteration: 75.373s
+  - Initial best fitness: 0.1149
+  - Final best fitness: 0.0126
+  - Fitness improvement: -0.1023
+  - Average final fitness: 0.0119
 
 Generate Phase Analysis:
   Alpha 0.0: No data available
@@ -28,18 +28,18 @@ Generate Phase Analysis:
   Alpha 0.8: No data available
   Alpha 0.9: No data available
   Alpha 1.0:
-    - Total time: 86.749s
+    - Total time: 82.036s
     - Iterations: 2
-    - Final best fitness: 0.9849
+    - Final best fitness: 0.3364
     - Fitness improvement: 0.0000
-    - Best solution: (0.8, 0.8, 0.1, 0.0, 0.4, 0.7, 0.8, 0.5, 0.3, 0.4, 0.7, 0.7, 0.0, 0.2, 0.3, 0.2, 0.3, 0.0, 0.7, 0.8, 0.5, 0.3, 0.7, 0.4, 0.6, 0.4, 0.8, 0.7)
+    - Best solution: (0.3, 0.5, 0.3, 0.2, 0.0, 0.7, 0.7, 0.7, 0.8, 0.4, 0.2, 0.8, 0.6, 0.2, 0.7, 0.5, 0.8, 0.0, 0.7, 0.1, 0.6, 0.1, 0.5, 0.0, 0.5, 0.8, 0.0, 0.5)
 
 Generate Phase Summary:
-  - Total generate time: 86.749s
+  - Total generate time: 82.036s
   - Successful alpha values: 1/11
-  - Average time per alpha: 86.749s
+  - Average time per alpha: 82.036s
 
 Overall Performance:
-  - Warm phase time: 110.182s (55.9%)
-  - Generate phase time: 86.749s (44.0%)
-  - Other time: 0.018s
+  - Warm phase time: 150.746s (64.7%)
+  - Generate phase time: 82.036s (35.2%)
+  - Other time: 0.035s

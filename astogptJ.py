@@ -474,7 +474,7 @@ def warm_asto(warm_epoch,in_queue,out_queue):
     init_species=[]
     species_map={}
     F_map={}
-    init_size=3
+    init_size=6
     # 记录每轮迭代的数据
     warm_log = {
         'iterations': [],
@@ -662,7 +662,7 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_,in_queue,out_queue):
     init_species=init_species_
     species_map=species_map_
     F_map={}
-    init_size=3
+    init_size=6
     
     # 记录每轮迭代的数据
     v2_log = {
@@ -871,9 +871,9 @@ def asto(warm_epoch,generate_epoch,in_queue,out_queue):
             if value==alphai:
                 init_spi.append(key)
         
-        if not init_spi:
-            print(f"No species found for alpha = {alphai:.1f}, skipping...")
-            continue
+        # if not init_spi:
+            # print(f"No species found for alpha = {alphai:.1f}, skipping...")
+            # continue
             
         ans=asto_v2(generate_epoch,alphai,init_spi,species_map,in_queue,out_queue)
         generate_results[alphai] = {
