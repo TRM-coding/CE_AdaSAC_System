@@ -363,7 +363,7 @@ def count_flops(collaboration_model:GPTJCloudEdgeCollaborator):
     edge=0
     for layer in collaboration_model.edge.layers:
         edge+=layer.flops
-    for layer,flops in cloud_flops:
+    for layer,flops in cloud_flops.items():
         cloud+=flops
     return cloud,edge
 
@@ -421,11 +421,13 @@ def get_model(model:GPTJCloudEdgeCollaborator,reduce_list:list):
         newlayer=load_svd_layer(layer_idx=layer_idx,reduce_rate=rate)
         model.edge.add_layer(newlayer)
         layer_idx=layer_idx+1
-# collaboration=GPTJCloudEdgeCollaborator()
+collaboration=GPTJCloudEdgeCollaborator()
 EDGE_DEVICE=1e12
 import numpy as np
 def count_F(specice_i:dict,alpha):
-    return (1-alpha)*np.exp(1-specice_i['edge_time'])-alpha*(np.exp(1-(specice_i['loss']-1)**2)-1)
+    timee=specice_i['edge_time'].to('cpu')
+    loss=specice_i['loss'].to('cpu')
+    return (1-alpha)*np.exp(1-timee)-alpha*(np.exp(1-(loss-1)**2)-1)
 
 def sigmoid(x):
         return (1-np.exp(-x))/(1+np.exp(-x))
@@ -448,10 +450,18 @@ def warm_asto(warm_epoch):
     species_map={}
     F_map={}
     init_size=100
+    # 记录每轮迭代的数据
+    warm_log = {
+        'iterations': [],
+        'total_time': 0
+    }
     for i in range(init_size):
-        listi=[random.randint(0,8) for j,_ in enumerate(range(28))]
+        listi=[round(random.randint(0, 8) * 0.1, 1)for j,_ in enumerate(range(28))]
         init_species.append(tuple(listi))
     for _1 in range(warm_epoch):
+        # 记录当前迭代开始时间
+        iteration_start = time.time()
+        
         alpha=random.randint(0,int(1/0.1))*0.1
         if(len(alpha_cp)<(1//0.1)):
             alpha=len(alpha_cp)*0.1
@@ -477,10 +487,10 @@ def warm_asto(warm_epoch):
                 loss_spi=species_map[tuple(speciesi)]['loss']
                 edge_time=species_map[tuple(speciesi)]['edge_time']
             else:
-                # get_model(collaboration)
-                # loss_spi=get_loss(collaboration)
-                loss_spi=random.randint(1,10)*0.1
-                # cloud_flops,edge_flops=count_flops(collaboration)
+                get_model(collaboration,speciesi)
+                loss_spi=get_loss(collaboration)
+                # loss_spi=random.randint(1,10)*0.1
+                cloud_flops,edge_flops=count_flops(collaboration)
                 edge_flops=random.randint(100000,200000)
                 species_map[tuple(speciesi)]={}
                 species_map[tuple(speciesi)]['loss']=loss_spi
@@ -550,6 +560,41 @@ def warm_asto(warm_epoch):
             son2=father[1][:int(len(father[0])*r)]+father[0][int(len(father[0])*r):]
             init_species.append(son1)
             init_species.append(son2)
+        
+        # 记录当前迭代的数据
+        iteration_end = time.time()
+        iteration_time = iteration_end - iteration_start
+        
+        # 记录当前迭代的种群和适应度
+        current_population = []
+        for i, species in enumerate(init_species):
+            current_population.append({
+                'species': list(species),
+                'fitness': F_score_list[i] if i < len(F_score_list) else 0
+            })
+        
+        iteration_data = {
+            'epoch': _1 + 1,
+            'alpha': alpha,
+            'time': iteration_time,
+            'population_size': len(init_species),
+            'population': current_population,
+            'best_fitness': max(F_score_list) if F_score_list else 0,
+            'avg_fitness': sum(F_score_list) / len(F_score_list) if F_score_list else 0
+        }
+        
+        warm_log['iterations'].append(iteration_data)
+        warm_log['total_time'] += iteration_time
+        
+        print(f"Warm epoch {_1+1}/{warm_epoch}: alpha={alpha:.1f}, time={iteration_time:.3f}s, "
+              f"pop_size={len(init_species)}, best_fitness={max(F_score_list) if F_score_list else 0:.4f}")
+    
+    print(f"Warm phase completed. Total time: {warm_log['total_time']:.3f}s")
+    
+    # 保存warm阶段的日志
+    with open('./warm_asto_log.pkl', 'wb') as f:
+        pickle.dump(warm_log, f)
+    
     alpha_fit={}
     alphas=[0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
     for speciesi in init_species:
@@ -568,10 +613,20 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_):
     species_map=species_map_
     F_map={}
     init_size=30
+    
+    # 记录每轮迭代的数据
+    v2_log = {
+        'alpha': alpha,
+        'iterations': [],
+        'total_time': 0
+    }
     for i in range(init_size-len(init_species)):
-        listi=[random.randint(0,7) for j,_ in enumerate(range(28))]
+        listi=[round(random.randint(0, 8) * 0.1, 1) for j,_ in enumerate(range(28))]
         init_species.append(tuple(listi))
     for _1 in range(generate_epoch):
+        # 记录当前迭代开始时间
+        iteration_start = time.time()
+        
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
         F_score_list=[]
@@ -589,10 +644,10 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_):
                 loss_spi=species_map[tuple(speciesi)]['loss']
                 edge_time=species_map[tuple(speciesi)]['edge_time']
             else:
-                # get_model(collaboration)
-                # loss_spi=get_loss(collaboration)
-                loss_spi = random.randint(1,10)*0.1
-                # cloud_flops,edge_flops=count_flops(collaboration)
+                get_model(collaboration,speciesi)
+                loss_spi=get_loss(collaboration)
+                # loss_spi = random.randint(1,10)*0.1
+                cloud_flops,edge_flops=count_flops(collaboration)
                 edge_flops=random.randint(100000,200000)
                 species_map[tuple(speciesi)]={}
                 species_map[tuple(speciesi)]['loss']=loss_spi
@@ -662,6 +717,40 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_):
             son2=father[1][:int(len(father[0])*r)]+father[0][int(len(father[0])*r):]
             init_species.append(son1)
             init_species.append(son2)
+        
+        # 记录当前迭代的数据
+        iteration_end = time.time()
+        iteration_time = iteration_end - iteration_start
+        
+        # 记录当前迭代的种群和适应度
+        current_population = []
+        for i, species in enumerate(init_species):
+            current_population.append({
+                'species': list(species),
+                'fitness': F_score_list[i] if i < len(F_score_list) else 0
+            })
+        
+        iteration_data = {
+            'epoch': _1 + 1,
+            'time': iteration_time,
+            'population_size': len(init_species),
+            'population': current_population,
+            'best_fitness': max(F_score_list) if F_score_list else 0,
+            'avg_fitness': sum(F_score_list) / len(F_score_list) if F_score_list else 0
+        }
+        
+        v2_log['iterations'].append(iteration_data)
+        v2_log['total_time'] += iteration_time
+        
+        print(f"Generate epoch {_1+1}/{generate_epoch} (alpha={alpha:.1f}): time={iteration_time:.3f}s, "
+              f"pop_size={len(init_species)}, best_fitness={max(F_score_list) if F_score_list else 0:.4f}")
+    
+    print(f"Generate phase completed for alpha={alpha:.1f}. Total time: {v2_log['total_time']:.3f}s")
+    
+    # 保存v2阶段的日志
+    with open(f'./asto_v2_alpha_{alpha:.1f}_log.pkl', 'wb') as f:
+        pickle.dump(v2_log, f)
+    
     ans=0
     max_F=-1000
     for speicei in init_species:
@@ -673,16 +762,209 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_):
             
 
 def asto(warm_epoch,generate_epoch):
+    """
+    asto算法主函数，包含完整的日志记录功能
+    
+    Args:
+        warm_epoch: 热身阶段的迭代次数
+        generate_epoch: 生成阶段的迭代次数
+    
+    Returns:
+        dict: 包含所有阶段日志的完整记录
+    """
+    print("="*50)
+    print("Starting ASTO Algorithm with Logging")
+    print(f"Warm epochs: {warm_epoch}")
+    print(f"Generate epochs: {generate_epoch}")
+    print("="*50)
+    
+    # 记录整个算法的开始时间
+    total_start_time = time.time()
+    
+    # 执行热身阶段
     alpha_fit,species_map=warm_asto(warm_epoch)
+    
+    # 记录生成阶段的结果
+    generate_results = {}
     alpha=[0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
+    
     for alphai in alpha:
+        print(f"\n--- Processing alpha = {alphai:.1f} ---")
         init_spi=[]
         for key,value in alpha_fit.items():
             if value==alphai:
                 init_spi.append(key)
+        
+        if not init_spi:
+            print(f"No species found for alpha = {alphai:.1f}, skipping...")
+            continue
+            
         ans=asto_v2(generate_epoch,alphai,init_spi,species_map)
-        print("ans:",ans)
-    return
+        generate_results[alphai] = {
+            'initial_species': init_spi,
+            'best_solution': ans
+        }
+        print(f"Best solution for alpha {alphai:.1f}:", ans)
+    
+    # 记录总时间
+    total_end_time = time.time()
+    total_time = total_end_time - total_start_time
+    
+    # 创建完整的日志记录
+    complete_log = {
+        'algorithm': 'ASTO',
+        'parameters': {
+            'warm_epochs': warm_epoch,
+            'generate_epochs': generate_epoch,
+        },
+        'total_time': total_time,
+        'warm_results': alpha_fit,
+        'generate_results': generate_results,
+        'timestamp': time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    }
+    
+    # 保存完整的日志
+    with open('./asto_complete_log.pkl', 'wb') as f:
+        pickle.dump(complete_log, f)
+    
+    print("\n" + "="*50)
+    print("ASTO Algorithm Completed")
+    print(f"Total execution time: {total_time:.3f}s")
+    print("Log files saved:")
+    print("  - ./warm_asto_log.pkl (warm phase details)")
+    print("  - ./asto_v2_alpha_X.X_log.pkl (generate phase details for each alpha)")
+    print("  - ./asto_complete_log.pkl (complete algorithm summary)")
+    print("="*50)
+    
+    return complete_log
+
+
+def analyze_asto_logs():
+    """
+    分析ASTO算法的日志数据
+    """
+    try:
+        # 读取完整日志
+        with open('./asto_complete_log.pkl', 'rb') as f:
+            complete_log = pickle.load(f)
+        
+        print("ASTO Algorithm Analysis")
+        print("="*50)
+        print(f"Algorithm: {complete_log['algorithm']}")
+        print(f"Execution time: {complete_log['timestamp']}")
+        print(f"Total runtime: {complete_log['total_time']:.3f}s")
+        print(f"Warm epochs: {complete_log['parameters']['warm_epochs']}")
+        print(f"Generate epochs: {complete_log['parameters']['generate_epochs']}")
+        
+        # 分析热身阶段
+        try:
+            with open('./warm_asto_log.pkl', 'rb') as f:
+                warm_log = pickle.load(f)
+            
+            print("\nWarm Phase Analysis:")
+            print(f"  Total warm time: {warm_log['total_time']:.3f}s")
+            print(f"  Number of iterations: {len(warm_log['iterations'])}")
+            print(f"  Average time per iteration: {warm_log['total_time']/len(warm_log['iterations']):.3f}s")
+            
+            # 分析每轮的最佳适应度变化
+            best_fitness_history = [iter_data['best_fitness'] for iter_data in warm_log['iterations']]
+            print(f"  Best fitness progression: {best_fitness_history[:5]}...{best_fitness_history[-5:]}")
+            
+        except FileNotFoundError:
+            print("Warm phase log not found")
+        
+        # 分析生成阶段
+        print("\nGenerate Phase Analysis:")
+        alpha_values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        
+        for alpha in alpha_values:
+            try:
+                with open(f'./asto_v2_alpha_{alpha:.1f}_log.pkl', 'rb') as f:
+                    v2_log = pickle.load(f)
+                
+                print(f"  Alpha {alpha:.1f}:")
+                print(f"    Total time: {v2_log['total_time']:.3f}s")
+                print(f"    Iterations: {len(v2_log['iterations'])}")
+                if v2_log['iterations']:
+                    final_best = v2_log['iterations'][-1]['best_fitness']
+                    print(f"    Final best fitness: {final_best:.4f}")
+                    
+            except FileNotFoundError:
+                print(f"  Alpha {alpha:.1f}: No log found")
+        
+        return complete_log
+        
+    except FileNotFoundError:
+        print("Complete log file not found. Please run the ASTO algorithm first.")
+        return None
+
+
+def save_detailed_population_history():
+    """
+    保存详细的种群历史数据到CSV文件，便于后续分析
+    """
+    try:
+        import pandas as pd
+    except ImportError:
+        print("pandas not available. Install with: pip install pandas")
+        return
+    
+    try:
+        # 读取热身阶段数据
+        with open('./warm_asto_log.pkl', 'rb') as f:
+            warm_log = pickle.load(f)
+        
+        # 创建热身阶段的详细数据
+        warm_data = []
+        for iter_data in warm_log['iterations']:
+            for i, pop in enumerate(iter_data['population']):
+                warm_data.append({
+                    'phase': 'warm',
+                    'epoch': iter_data['epoch'],
+                    'alpha': iter_data['alpha'],
+                    'individual_id': i,
+                    'species': str(pop['species']),
+                    'fitness': pop['fitness'],
+                    'iteration_time': iter_data['time']
+                })
+        
+        warm_df = pd.DataFrame(warm_data)
+        warm_df.to_csv('./warm_phase_detailed.csv', index=False)
+        print("Warm phase detailed data saved to: ./warm_phase_detailed.csv")
+        
+        # 处理生成阶段数据
+        alpha_values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        
+        for alpha in alpha_values:
+            try:
+                with open(f'./asto_v2_alpha_{alpha:.1f}_log.pkl', 'rb') as f:
+                    v2_log = pickle.load(f)
+                
+                generate_data = []
+                for iter_data in v2_log['iterations']:
+                    for i, pop in enumerate(iter_data['population']):
+                        generate_data.append({
+                            'phase': 'generate',
+                            'alpha': alpha,
+                            'epoch': iter_data['epoch'],
+                            'individual_id': i,
+                            'species': str(pop['species']),
+                            'fitness': pop['fitness'],
+                            'iteration_time': iter_data['time']
+                        })
+                
+                if generate_data:
+                    generate_df = pd.DataFrame(generate_data)
+                    generate_df.to_csv(f'./generate_alpha_{alpha:.1f}_detailed.csv', index=False)
+                    print(f"Generate phase (alpha={alpha:.1f}) data saved to: ./generate_alpha_{alpha:.1f}_detailed.csv")
+                    
+            except FileNotFoundError:
+                continue
+        
+        print("All detailed population history saved successfully!")
+        
+    except Exception as e:
+        print(f"Error saving detailed data: {e}")
 
 
 
@@ -698,6 +980,6 @@ if __name__=="__main__":
     # input()
     # print(cloud_flops)
 
-    asto(20,10)
+    asto(2,2)
 
     
