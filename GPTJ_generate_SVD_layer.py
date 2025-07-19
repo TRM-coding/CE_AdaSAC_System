@@ -164,7 +164,7 @@ class GPTJCloudEdgeCollaborator(nn.Module):
                                         for event in events
                                         if event.flops is not None and event.flops > 0
                                     )
-            cloud_flops_dict[layer_idx]=total_flops_cloud
+            cloud_flops_dict[layer_idx]=total_flops_cloud/batch_size/seq_len/seq_len
             
             net_dict[layer_idx]=x.numel()*x.element_size()+seq_len
             # 将数据传输到边侧设备
@@ -188,7 +188,7 @@ class GPTJCloudEdgeCollaborator(nn.Module):
                                             for event in events
                                             if event.flops is not None and event.flops > 0
                                         )
-            self.edge.layers[layer_idx].flops=total_flops_edge
+            self.edge.layers[layer_idx].flops=total_flops_edge/seq_len/seq_len
 
             with profile(
                 activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],  # 监控 CPU 和 CUDA
@@ -207,14 +207,14 @@ class GPTJCloudEdgeCollaborator(nn.Module):
                                             for event in events
                                             if event.flops is not None and event.flops > 0
                                         )
-            self.origin_layers[layer_idx].flops=total_flops_edge_origin
+            self.origin_layers[layer_idx].flops=total_flops_edge_origin/seq_len/seq_len
             
             if(self.origin_layers[layer_idx].flops<self.edge.layers[layer_idx].flops):
                 print(f"Origin Model Layer SAVED :{layer_idx} in flops:{self.origin_layers[layer_idx].flops}")
-                torch.save(self.origin_layers[layer_idx],f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}.pth")
+                torch.save(self.origin_layers[layer_idx],f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_origin.pth")
             else:
                 print(f"SVDED Model Layer SAVED :{layer_idx} in flops:{self.edge.layers[layer_idx].flops}")
-                torch.save(self.edge.layers[layer_idx],f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}.pth")
+                torch.save(self.edge.layers[layer_idx],f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth")
 
             # 将结果传回云侧
             x = x_edge.to(self.device_cloud)
