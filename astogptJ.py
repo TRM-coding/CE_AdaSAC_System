@@ -54,22 +54,22 @@ class gptJ_edge(nn.Module):
         torch.cuda.synchronize()
         self.layers=nn.ModuleList()
     
-    def add_layer(self,layer):
+    def add_layer(self,layer,device):
         if isinstance(layer,SVDED_GPTJ_EDGE_Layer):
-            layer.v_svd['U']=layer.v_svd['U'].to('cuda:0')
-            layer.v_svd['V']=layer.v_svd['V'].to('cuda:0')
-            layer.v_svd['bias']=layer.v_svd['bias'].to('cuda:0')
-            layer.out_proj_svd['U']=layer.out_proj_svd['U'].to('cuda:0')
-            layer.out_proj_svd['V']=layer.out_proj_svd['V'].to('cuda:0')
-            layer.out_proj_svd['bias']=layer.out_proj_svd['bias'].to('cuda:0')
-            layer.fc_in_svd['U']=layer.fc_in_svd['U'].to('cuda:0')
-            layer.fc_in_svd['V']=layer.fc_in_svd['V'].to('cuda:0')
-            layer.fc_in_svd['bias']=layer.fc_in_svd['bias'].to('cuda:0')
-            layer.fc_out_svd['U']=layer.fc_out_svd['U'].to('cuda:0')            
-            layer.fc_out_svd['V']=layer.fc_out_svd['V'].to('cuda:0')            
-            layer.fc_out_svd['bias']=layer.fc_out_svd['bias'].to('cuda:0')            
+            layer.v_svd['U']=layer.v_svd['U'].to(device)
+            layer.v_svd['V']=layer.v_svd['V'].to(device)
+            layer.v_svd['bias']=layer.v_svd['bias'].to(device)
+            layer.out_proj_svd['U']=layer.out_proj_svd['U'].to(device)
+            layer.out_proj_svd['V']=layer.out_proj_svd['V'].to(device)
+            layer.out_proj_svd['bias']=layer.out_proj_svd['bias'].to(device)
+            layer.fc_in_svd['U']=layer.fc_in_svd['U'].to(device)
+            layer.fc_in_svd['V']=layer.fc_in_svd['V'].to(device)
+            layer.fc_in_svd['bias']=layer.fc_in_svd['bias'].to(device)
+            layer.fc_out_svd['U']=layer.fc_out_svd['U'].to(device)            
+            layer.fc_out_svd['V']=layer.fc_out_svd['V'].to(device)            
+            layer.fc_out_svd['bias']=layer.fc_out_svd['bias'].to(device)            
         
-        self.layers.append(layer.to('cuda:0'))
+        self.layers.append(layer.to(device))
 
 class GPTJCloudEdgeCollaborator(nn.Module):
     """
@@ -396,17 +396,16 @@ def load_batch(filepath="./GPTJ_inputbatch.pkl"):
         print(f"加载失败: {e}")
         raise
 
-batch_input=load_batch()['input_embeds'].half().to('cuda:0')
-batch_output=load_batch()['target'].half().to('cuda:0')
+
 import math
-def get_loss(model:GPTJCloudEdgeCollaborator):
+def get_loss(model:GPTJCloudEdgeCollaborator,input_batch,output_batch):
     criterion = nn.KLDivLoss(reduction='batchmean')
     model.eval()
     with torch.no_grad():
-        outputs = model(input_ids=batch_input,need_embedding=False)
+        outputs = model(input_ids=input_batch,need_embedding=False)
         logits  = torch.log_softmax(outputs, dim=-1)              # [B, T, V]
 
-        loss = criterion(logits,batch_output)
+        loss = criterion(logits,output_batch)
 
     return loss
 import random
@@ -416,16 +415,17 @@ import time
 
 def get_model(model:GPTJCloudEdgeCollaborator,reduce_list:list):
     model.edge.clear()
+    device=model.device_cloud
     layer_idx=0
     for rate in reduce_list:
         newlayer=load_svd_layer(layer_idx=layer_idx,reduce_rate=rate)
-        model.edge.add_layer(newlayer)
+        model.edge.add_layer(newlayer,device)
         layer_idx=layer_idx+1
-collaboration=GPTJCloudEdgeCollaborator()
+
 EDGE_DEVICE=1e12
 import numpy as np
 def count_F(specice_i:dict,alpha):
-    timee=specice_i['edge_time'].to('cpu')
+    timee=specice_i['edge_time']
     loss=specice_i['loss'].to('cpu')
     return (1-alpha)*np.exp(1-timee)-alpha*(np.exp(1-(loss-1)**2)-1)
 
@@ -442,14 +442,39 @@ def ifexpand(max_cut,cut_i,alpha)->bool:
     else:
         return False
 
-def warm_asto(warm_epoch):
+import copy
+N_PROCS = 2
+def taski(out_q,in_q,gpu_usage:int):
+    print(f"创建进程:{gpu_usage}")
+    collaboration=GPTJCloudEdgeCollaborator(device_cloud=f'cuda:{gpu_usage}',device_edge=f'cuda:{gpu_usage}')
+    batch_input=load_batch()['input_embeds'].half().to(f'cuda:{gpu_usage}')
+    batch_output=load_batch()['target'].half().to(f'cuda:{gpu_usage}')
+    while True:
+        tasks = in_q.get()
+        if tasks == None:
+            break
+        loss_map={}
+        for speciesi in tasks:
+            get_model(collaboration,speciesi)
+            loss_spi=get_loss(collaboration,batch_input,batch_output)
+            loss_map[tuple(speciesi)]={}
+            loss_map[tuple(speciesi)]['loss']=loss_spi.to('cpu')
+            cloud_flops,edge_flops=count_flops(collaboration)
+            loss_map[tuple(speciesi)]['edge_time']=edge_flops/EDGE_DEVICE
+        out_q.put(
+            copy.deepcopy(loss_map)
+        )
+        torch.cuda.empty_cache()
+    return
+
+def warm_asto(warm_epoch,in_queue,out_queue):
     print("---------start_warm----------------")
     alpha_cp=[]
     warm_res={}
     init_species=[]
     species_map={}
     F_map={}
-    init_size=100
+    init_size=3
     # 记录每轮迭代的数据
     warm_log = {
         'iterations': [],
@@ -480,22 +505,47 @@ def warm_asto(warm_epoch):
         max_time=0
         min_time=1000000000
         # 计算当前每个个体的时间和loss
+        new_species = [
+            speciesi
+            for speciesi in init_species
+            if tuple(speciesi) not in species_map
+        ]
+
+        # 2. 准备 N_PROCS 个子列表
+        task_sp = [[] for _ in range(N_PROCS)]
+
+        # 3. 按轮询 (round‐robin) 的方式分配
+        for idx, speciesi in enumerate(new_species):
+            proc_id = idx % N_PROCS
+            task_sp[proc_id].append(speciesi)
+        
+        #塞入进程
+        for taski in task_sp:
+            in_queue.put(taski)
+
+        #从进程中拿出
+        for i in range(len(task_sp)):
+            res=out_queue.get()
+            for key,val in res.items():
+                species_map[key]=val
+
         for speciesi in init_species:
             loss_spi=0
             edge_time=0
             if tuple(speciesi) in species_map:
                 loss_spi=species_map[tuple(speciesi)]['loss']
                 edge_time=species_map[tuple(speciesi)]['edge_time']
-            else:
-                get_model(collaboration,speciesi)
-                loss_spi=get_loss(collaboration)
-                # loss_spi=random.randint(1,10)*0.1
-                cloud_flops,edge_flops=count_flops(collaboration)
-                edge_flops=random.randint(100000,200000)
-                species_map[tuple(speciesi)]={}
-                species_map[tuple(speciesi)]['loss']=loss_spi
-                species_map[tuple(speciesi)]['edge_time']=edge_flops/EDGE_DEVICE
-                edge_time=edge_flops/EDGE_DEVICE
+            # else:
+            #     # get_model(collaboration,speciesi)
+                
+            #     # loss_spi=get_loss(collaboration)
+            #     # loss_spi=random.randint(1,10)*0.1
+            #     # cloud_flops,edge_flops=count_flops(collaboration)
+            #     # edge_flops=random.randint(100000,200000)
+            #     species_map[tuple(speciesi)]={}
+            #     species_map[tuple(speciesi)]['loss']=loss_spi
+            #     species_map[tuple(speciesi)]['edge_time']=edge_flops/EDGE_DEVICE
+            #     edge_time=edge_flops/EDGE_DEVICE
 
             max_time=max(max_time,edge_time)
             min_time=min(min_time,edge_time)
@@ -605,14 +655,14 @@ def warm_asto(warm_epoch):
                     alpha_fit[speciesi]=alphai
     return alpha_fit,species_map
 
-def asto_v2(generate_epoch,alpha,init_species_,species_map_):
+def asto_v2(generate_epoch,alpha,init_species_,species_map_,in_queue,out_queue):
     print(f"start{alpha}")
     alpha_cp=[]
     warm_res={}
     init_species=init_species_
     species_map=species_map_
     F_map={}
-    init_size=30
+    init_size=3
     
     # 记录每轮迭代的数据
     v2_log = {
@@ -636,6 +686,31 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_):
         min_loss=1000000000
         max_time=0
         min_time=1000000000
+
+        new_species = [
+            speciesi
+            for speciesi in init_species
+            if tuple(speciesi) not in species_map
+        ]
+
+        # 2. 准备 N_PROCS 个子列表
+        task_sp = [[] for _ in range(N_PROCS)]
+
+        # 3. 按轮询 (round‐robin) 的方式分配
+        for idx, speciesi in enumerate(new_species):
+            proc_id = idx % N_PROCS
+            task_sp[proc_id].append(speciesi)
+        
+        #塞入进程
+        for taski in task_sp:
+            in_queue.put(taski)
+
+        #从进程中拿出
+        for i in range(len(task_sp)):
+            res=out_queue.get()
+            for key,val in res.items():
+                species_map[key]=val
+
         # 计算当前每个个体的时间和loss
         for speciesi in init_species:
             loss_spi=0
@@ -643,16 +718,17 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_):
             if tuple(speciesi) in species_map:
                 loss_spi=species_map[tuple(speciesi)]['loss']
                 edge_time=species_map[tuple(speciesi)]['edge_time']
-            else:
-                get_model(collaboration,speciesi)
-                loss_spi=get_loss(collaboration)
-                # loss_spi = random.randint(1,10)*0.1
-                cloud_flops,edge_flops=count_flops(collaboration)
-                edge_flops=random.randint(100000,200000)
-                species_map[tuple(speciesi)]={}
-                species_map[tuple(speciesi)]['loss']=loss_spi
-                species_map[tuple(speciesi)]['edge_time']=edge_flops/EDGE_DEVICE
-                edge_time=edge_flops/EDGE_DEVICE
+            # else:
+            #     # get_model(collaboration,speciesi)
+                
+            #     # loss_spi=get_loss(collaboration)
+            #     # loss_spi=random.randint(1,10)*0.1
+            #     # cloud_flops,edge_flops=count_flops(collaboration)
+            #     # edge_flops=random.randint(100000,200000)
+            #     species_map[tuple(speciesi)]={}
+            #     species_map[tuple(speciesi)]['loss']=loss_spi
+            #     species_map[tuple(speciesi)]['edge_time']=edge_flops/EDGE_DEVICE
+            #     edge_time=edge_flops/EDGE_DEVICE
 
             max_time=max(max_time,edge_time)
             min_time=min(min_time,edge_time)
@@ -761,7 +837,7 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_):
     return ans
             
 
-def asto(warm_epoch,generate_epoch):
+def asto(warm_epoch,generate_epoch,in_queue,out_queue):
     """
     asto算法主函数，包含完整的日志记录功能
     
@@ -782,7 +858,7 @@ def asto(warm_epoch,generate_epoch):
     total_start_time = time.time()
     
     # 执行热身阶段
-    alpha_fit,species_map=warm_asto(warm_epoch)
+    alpha_fit,species_map=warm_asto(warm_epoch,in_queue,out_queue)
     
     # 记录生成阶段的结果
     generate_results = {}
@@ -799,7 +875,7 @@ def asto(warm_epoch,generate_epoch):
             print(f"No species found for alpha = {alphai:.1f}, skipping...")
             continue
             
-        ans=asto_v2(generate_epoch,alphai,init_spi,species_map)
+        ans=asto_v2(generate_epoch,alphai,init_spi,species_map,in_queue,out_queue)
         generate_results[alphai] = {
             'initial_species': init_spi,
             'best_solution': ans
@@ -966,20 +1042,25 @@ def save_detailed_population_history():
     except Exception as e:
         print(f"Error saving detailed data: {e}")
 
-
+import multiprocessing as mp
 
 if __name__=="__main__":
+    mp.set_start_method('spawn')
     
-    # rates=[0.0 for _ in range(28)]
-    # get_model(collaboration)
-    #     # collaboration.generate("BJTU is a university that")
-    # loss=get_loss(collaboration)
-    # print(loss)
-    # input()
-    # collaboration.edge.clear()
-    # input()
-    # print(cloud_flops)
+    mgr = mp.Manager()
+    in_queue  = mgr.Queue()
+    out_queue = mgr.Queue()
+    lock       = mgr.Lock()
+    procs=[]
+    for i in range(N_PROCS):
+        p = mp.Process(
+            target=taski,
+            args=(out_queue,in_queue, i),
+        )
+        p.daemon = True
+        p.start()
+        procs.append(p)
 
-    asto(2,2)
+    asto(2,2,in_queue,out_queue)
 
     
