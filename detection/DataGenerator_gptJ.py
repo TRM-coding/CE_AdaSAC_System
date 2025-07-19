@@ -4,7 +4,7 @@ from torch.nn.utils import clip_grad_norm_
 from transformers import GPTJForCausalLM
 from modelscope.utils.hub import snapshot_download
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
-
+import os
 
 class PIDDerivativeLRScheduler:
     """
@@ -156,6 +156,68 @@ class InputOptimizer:
                 print(f'[Step {step:4d}/{num_steps}]  Loss = {current_loss:.4f}  LR = {new_lr}')
         return input_embeds,target
 
+    def save_data(self, 
+                  input_embeds: torch.Tensor, 
+                  target: torch.Tensor,
+                  filepath: str = "./GPTJ_inputbatch.pkl",
+                  include_metadata: bool = True):
+        """
+        Save input_embeds and target to a pickle file
+        
+        Args:
+            input_embeds: Optimized input embeddings [B, L, H]
+            target: Target probability distribution [B, L, V]
+            filepath: Path to save the pickle file
+            include_metadata: Whether to include metadata about the generation
+        """
+        # 创建保存目录
+        save_dir = os.path.dirname(filepath)
+        if save_dir and not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        
+        # 准备保存的数据
+        data_dict = {
+            'input_embeds': input_embeds.cpu(),  # 移到CPU以节省内存
+            'target': target.cpu(),
+            'shapes': {
+                'input_embeds': input_embeds.shape,
+                'target': target.shape
+            }
+        }
+        
+        # 添加元数据
+        if include_metadata:
+            data_dict['metadata'] = {
+                'batch_size': self.batch_size,
+                'seq_len': self.seq_len,
+                'hidden_size': self.hidden_size,
+                'vocab_size': self.vocab_size,
+                'device': self.device,
+                'lr': self.lr,
+                'kd': self.kd,
+                'data_types': {
+                    'input_embeds': str(input_embeds.dtype),
+                    'target': str(target.dtype)
+                }
+            }
+        
+        # 保存到pickle文件
+        import pickle
+        try:
+            with open(filepath, 'wb') as f:
+                pickle.dump(data_dict, f)
+            print(f"数据已成功保存到: {filepath}")
+            
+            # 打印保存信息
+            file_size = os.path.getsize(filepath)
+            print(f"文件大小: {file_size / (1024*1024):.2f} MB")
+            print(f"Input embeddings 形状: {input_embeds.shape}")
+            print(f"Target 形状: {target.shape}")
+            
+        except Exception as e:
+            print(f"保存失败: {e}")
+            raise
+
 
 if __name__ == "__main__":
     optimizer = InputOptimizer(
@@ -168,5 +230,7 @@ if __name__ == "__main__":
         kd=1e-3  # example derivative gain
     )
 
-    optimized_input,_ = optimizer.optimize(num_steps=50000, print_every=20)
+    optimized_input,target = optimizer.optimize(num_steps=50000, print_every=20)
+    optimizer.save_data(optimized_input,target)
     # optimized_input.shape == (4, 32, 4096)
+

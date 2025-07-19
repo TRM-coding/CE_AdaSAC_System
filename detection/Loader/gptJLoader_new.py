@@ -297,7 +297,7 @@ def create_gptj_cloud_edge_model(model_name='AI-ModelScope/gpt-j-6b',
 from datasets import load_dataset
 from transformers import DataCollatorForLanguageModeling
 from torch.utils.data import DataLoader
-def load_and_tokenize_dataset(cache_dir: str='./minipile_cache', tokenizer=None, batch_size: int = 1):
+def load_and_tokenize_dataset(cache_dir: str='./minipile_cache', tokenizer=None, batch_size: int = 4):
     """
     Loads and tokenizes the MiniPile dataset.
 
@@ -337,7 +337,7 @@ def load_and_tokenize_dataset(cache_dir: str='./minipile_cache', tokenizer=None,
 from tqdm import tqdm
 import math
 from torch import nn
-def evaluate_minipile_gptj(model, batch_size: int = 1, cache_dir: str = "./minipile_cache", Dataloader=None) -> dict:
+def evaluate_minipile_gptj(model, batch_size: int = 4, cache_dir: str = "./minipile_cache", Dataloader=None) -> dict:
    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
