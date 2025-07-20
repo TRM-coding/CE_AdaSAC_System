@@ -408,13 +408,18 @@ def load_batch(filepath="./GPTJ_inputbatch.pkl"):
 
 import math
 def get_loss(model:GPTJCloudEdgeCollaborator,input_batch,output_batch):
-    criterion = nn.KLDivLoss(reduction='batchmean')
-    model.eval()
-    with torch.no_grad():
-        outputs = model(input_ids=input_batch,need_embedding=False)
-        logits  = torch.log_softmax(outputs, dim=-1)              # [B, T, V]
+    try:
+        criterion = nn.KLDivLoss(reduction='batchmean')
+        model.eval()
+        with torch.no_grad():
+            outputs = model(input_ids=input_batch,need_embedding=False)
+            logits  = torch.log_softmax(outputs, dim=-1)              # [B, T, V]
 
-        loss = criterion(logits,output_batch)
+            loss = criterion(logits,output_batch)
+    except Exception as e:
+        print("Exceptions in get_loss:")
+        print(e)
+        traceback.print_exc()
 
     return loss
 import random
@@ -423,13 +428,18 @@ import time
 
 
 def get_model(model:GPTJCloudEdgeCollaborator,reduce_list:list):
-    model.edge.clear()
-    device=model.device_cloud
-    layer_idx=0
-    for rate in reduce_list:
-        newlayer=load_svd_layer(layer_idx=layer_idx,reduce_rate=rate)
-        model.edge.add_layer(newlayer,device)
-        layer_idx=layer_idx+1
+    try:
+        model.edge.clear()
+        device=model.device_cloud
+        layer_idx=0
+        for rate in reduce_list:
+            newlayer=load_svd_layer(layer_idx=layer_idx,reduce_rate=rate)
+            model.edge.add_layer(newlayer,device)
+            layer_idx=layer_idx+1
+    except Exception as e:
+        print("Exceptions in get_model:")
+        print(e)
+        traceback.print_exc()
     # model.edge.clear()
 
 EDGE_DEVICE=1e12
@@ -469,6 +479,8 @@ def taski(out_q,in_q,gpu_usage:int):
         print(f"GET_TASK_{gpu_usage}")
         loss_map={}
         try:
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
             for speciesi in tasks:
                 get_model(collaboration,speciesi)
                 loss_spi=get_loss(collaboration,batch_input,batch_output)
@@ -476,6 +488,9 @@ def taski(out_q,in_q,gpu_usage:int):
                 loss_map[tuple(speciesi)]['loss']=loss_spi.to('cpu')
                 cloud_flops,edge_flops=count_flops(collaboration)
                 loss_map[tuple(speciesi)]['edge_time']=edge_flops/EDGE_DEVICE
+            out_q.put(
+            copy.deepcopy(loss_map)
+        )
         except Exception as e:
             print("Exceptions in taski:")
             print(e)
@@ -483,21 +498,18 @@ def taski(out_q,in_q,gpu_usage:int):
             out_q.put(
                 None
             )
-        out_q.put(
-            copy.deepcopy(loss_map)
-        )
-        # torch.cuda.empty_cache()
+        
         print(f"FINISH_TASK_{gpu_usage}")
     return
 import queue 
-def warm_asto(warm_epoch,in_queue,out_queue):
+def warm_asto(warm_epoch,in_queue,out_queue,process_list):
     print("---------start_warm----------------")
     alpha_cp=[]
     warm_res={}
     init_species=[]
     species_map={}
     F_map={}
-    init_size=30
+    init_size=20
     # 记录每轮迭代的数据
     warm_log = {
         'iterations': [],
@@ -551,7 +563,7 @@ def warm_asto(warm_epoch,in_queue,out_queue):
 
         #从进程中拿出
         for i in range(len(task_sp)):
-            res = out_queue.get(block=True)
+            res = out_queue.get(block=True,)
             for key,val in res.items():
                 species_map[key]=val
 
