@@ -346,15 +346,21 @@ class GPTJCloudEdgeCollaborator(nn.Module):
         
         return compression_info
 
+svd_layers={}
 
 def load_svd_layer(layer_idx,reduce_rate):
-    print(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth")
+    # print(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth")
+    if((layer_idx,reduce_rate) in svd_layers):
+        return copy.deepcopy(svd_layers[(layer_idx,reduce_rate)])
     if os.path.exists(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_origin.pth"):
         newlayer=torch.load(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_origin.pth",weights_only=False,map_location='cpu')
-        return newlayer
+        svd_layers[(layer_idx,reduce_rate)]=newlayer
+        return copy.deepcopy(newlayer)
     elif os.path.exists(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth"):
+        
         newlayer=torch.load(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth",weights_only=False,map_location='cpu')
-        return newlayer
+        svd_layers[(layer_idx,reduce_rate)]=newlayer
+        return copy.deepcopy(newlayer)
     else :
         return None
 
@@ -362,7 +368,10 @@ def count_flops(collaboration_model:GPTJCloudEdgeCollaborator):
     cloud=0
     edge=0
     for layer in collaboration_model.edge.layers:
-        edge+=layer.flops
+        if hasattr(layer,'flops'):
+            edge+=layer.flops
+        else:
+            edge+=0
     for layer,flops in cloud_flops.items():
         cloud+=flops
     return cloud,edge
@@ -421,6 +430,7 @@ def get_model(model:GPTJCloudEdgeCollaborator,reduce_list:list):
         newlayer=load_svd_layer(layer_idx=layer_idx,reduce_rate=rate)
         model.edge.add_layer(newlayer,device)
         layer_idx=layer_idx+1
+    # model.edge.clear()
 
 EDGE_DEVICE=1e12
 import numpy as np
@@ -443,7 +453,9 @@ def ifexpand(max_cut,cut_i,alpha)->bool:
         return False
 
 import copy
-N_PROCS = 2
+import traceback
+N_PROCS = 4
+from tqdm import tqdm
 def taski(out_q,in_q,gpu_usage:int):
     print(f"创建进程:{gpu_usage}")
     collaboration=GPTJCloudEdgeCollaborator(device_cloud=f'cuda:{gpu_usage}',device_edge=f'cuda:{gpu_usage}')
@@ -452,21 +464,32 @@ def taski(out_q,in_q,gpu_usage:int):
     while True:
         tasks = in_q.get()
         if tasks == None:
+            print("task_out")
             break
+        print(f"GET_TASK_{gpu_usage}")
         loss_map={}
-        for speciesi in tasks:
-            get_model(collaboration,speciesi)
-            loss_spi=get_loss(collaboration,batch_input,batch_output)
-            loss_map[tuple(speciesi)]={}
-            loss_map[tuple(speciesi)]['loss']=loss_spi.to('cpu')
-            cloud_flops,edge_flops=count_flops(collaboration)
-            loss_map[tuple(speciesi)]['edge_time']=edge_flops/EDGE_DEVICE
+        try:
+            for speciesi in tasks:
+                get_model(collaboration,speciesi)
+                loss_spi=get_loss(collaboration,batch_input,batch_output)
+                loss_map[tuple(speciesi)]={}
+                loss_map[tuple(speciesi)]['loss']=loss_spi.to('cpu')
+                cloud_flops,edge_flops=count_flops(collaboration)
+                loss_map[tuple(speciesi)]['edge_time']=edge_flops/EDGE_DEVICE
+        except Exception as e:
+            print("Exceptions in taski:")
+            print(e)
+            traceback.print_exc()
+            out_q.put(
+                None
+            )
         out_q.put(
             copy.deepcopy(loss_map)
         )
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
+        print(f"FINISH_TASK_{gpu_usage}")
     return
-
+import queue 
 def warm_asto(warm_epoch,in_queue,out_queue):
     print("---------start_warm----------------")
     alpha_cp=[]
@@ -474,16 +497,17 @@ def warm_asto(warm_epoch,in_queue,out_queue):
     init_species=[]
     species_map={}
     F_map={}
-    init_size=6
+    init_size=30
     # 记录每轮迭代的数据
     warm_log = {
         'iterations': [],
         'total_time': 0
     }
     for i in range(init_size):
-        listi=[round(random.randint(0, 8) * 0.1, 1)for j,_ in enumerate(range(28))]
+        listi=[round(random.randint(0, 7) * 0.1, 1)for j,_ in enumerate(range(28))]
         init_species.append(tuple(listi))
     for _1 in range(warm_epoch):
+        print(f"------WARM{_1}-----------")
         # 记录当前迭代开始时间
         iteration_start = time.time()
         
@@ -520,12 +544,14 @@ def warm_asto(warm_epoch,in_queue,out_queue):
             task_sp[proc_id].append(speciesi)
         
         #塞入进程
-        for taski in task_sp:
-            in_queue.put(taski)
+        
+        for taskii in task_sp:
+
+            in_queue.put(taskii)
 
         #从进程中拿出
         for i in range(len(task_sp)):
-            res=out_queue.get()
+            res = out_queue.get(block=True)
             for key,val in res.items():
                 species_map[key]=val
 
@@ -653,6 +679,8 @@ def warm_asto(warm_epoch,in_queue,out_queue):
             if speciesi in species_map:
                 if (max_F<count_F(species_map[tuple(speciesi)],alphai)):
                     alpha_fit[speciesi]=alphai
+    # for i in range(N_PROCS):
+        # in_queue.push(None)
     return alpha_fit,species_map
 
 def asto_v2(generate_epoch,alpha,init_species_,species_map_,in_queue,out_queue):
@@ -662,7 +690,7 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_,in_queue,out_queue):
     init_species=init_species_
     species_map=species_map_
     F_map={}
-    init_size=6
+    init_size=30
     
     # 记录每轮迭代的数据
     v2_log = {
@@ -671,9 +699,10 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_,in_queue,out_queue):
         'total_time': 0
     }
     for i in range(init_size-len(init_species)):
-        listi=[round(random.randint(0, 8) * 0.1, 1) for j,_ in enumerate(range(28))]
+        listi=[round(random.randint(0, 7) * 0.1, 1) for j,_ in enumerate(range(28))]
         init_species.append(tuple(listi))
     for _1 in range(generate_epoch):
+        print(f"------------v2{_1}--------------")
         # 记录当前迭代开始时间
         iteration_start = time.time()
         
@@ -708,6 +737,8 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_,in_queue,out_queue):
         #从进程中拿出
         for i in range(len(task_sp)):
             res=out_queue.get()
+            if res==None:
+                print("Some_Bad_Thing_happend")
             for key,val in res.items():
                 species_map[key]=val
 
@@ -834,6 +865,8 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_,in_queue,out_queue):
             F=count_F(species_map[tuple(speciesi)],alpha)
             if(F>max_F):
                 ans=speicei
+    for i in range(N_PROCS):
+        in_queue.push(None)
     return ans
             
 
@@ -1061,6 +1094,6 @@ if __name__=="__main__":
         p.start()
         procs.append(p)
 
-    asto(2,2,in_queue,out_queue)
+    asto(3,5,in_queue,out_queue)
 
     

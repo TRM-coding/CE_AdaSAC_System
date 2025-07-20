@@ -8,22 +8,50 @@ Algorithm Parameters:
   - Generate epochs: 2
 
 Warm Phase Analysis:
-  - Total time: 150.746s
+  - Total time: 170.635s
   - Number of iterations: 2
-  - Average time per iteration: 75.373s
-  - Initial best fitness: 0.1149
-  - Final best fitness: 0.0126
-  - Fitness improvement: -0.1023
-  - Average final fitness: 0.0119
+  - Average time per iteration: 85.317s
+  - Initial best fitness: 0.1770
+  - Final best fitness: 0.1858
+  - Fitness improvement: 0.0088
+  - Average final fitness: 0.0610
 
 Generate Phase Analysis:
-  Alpha 0.0: No data available
-  Alpha 0.1: No data available
-  Alpha 0.2: No data available
-  Alpha 0.3: No data available
-  Alpha 0.4: No data available
-  Alpha 0.5: No data available
-  Alpha 0.6: No data available
+  Alpha 0.0:
+    - Total time: 40.194s
+    - Iterations: 2
+    - Final best fitness: 0.3933
+    - Fitness improvement: 0.0000
+  Alpha 0.1:
+    - Total time: 39.417s
+    - Iterations: 2
+    - Final best fitness: 0.5635
+    - Fitness improvement: 0.0000
+  Alpha 0.2:
+    - Total time: 69.566s
+    - Iterations: 2
+    - Final best fitness: 0.1669
+    - Fitness improvement: -0.1117
+  Alpha 0.3:
+    - Total time: 95.735s
+    - Iterations: 2
+    - Final best fitness: 0.1704
+    - Fitness improvement: -0.1602
+  Alpha 0.4:
+    - Total time: 55.611s
+    - Iterations: 2
+    - Final best fitness: 0.2372
+    - Fitness improvement: 0.1832
+  Alpha 0.5:
+    - Total time: 85.743s
+    - Iterations: 2
+    - Final best fitness: 0.1700
+    - Fitness improvement: -0.0305
+  Alpha 0.6:
+    - Total time: 71.365s
+    - Iterations: 2
+    - Final best fitness: 0.2220
+    - Fitness improvement: 0.0000
   Alpha 0.7: No data available
   Alpha 0.8: No data available
   Alpha 0.9: No data available
@@ -35,11 +63,11 @@ Generate Phase Analysis:
     - Best solution: (0.3, 0.5, 0.3, 0.2, 0.0, 0.7, 0.7, 0.7, 0.8, 0.4, 0.2, 0.8, 0.6, 0.2, 0.7, 0.5, 0.8, 0.0, 0.7, 0.1, 0.6, 0.1, 0.5, 0.0, 0.5, 0.8, 0.0, 0.5)
 
 Generate Phase Summary:
-  - Total generate time: 82.036s
-  - Successful alpha values: 1/11
-  - Average time per alpha: 82.036s
+  - Total generate time: 539.666s
+  - Successful alpha values: 8/11
+  - Average time per alpha: 67.458s
 
 Overall Performance:
-  - Warm phase time: 150.746s (64.7%)
-  - Generate phase time: 82.036s (35.2%)
-  - Other time: 0.035s
+  - Warm phase time: 170.635s (73.3%)
+  - Generate phase time: 539.666s (231.8%)
+  - Other time: -477.484s
