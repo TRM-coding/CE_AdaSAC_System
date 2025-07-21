@@ -94,13 +94,18 @@ class InputOptimizer:
             p.requires_grad = False
 
         self.vocab_size = self.model.config.vocab_size
-        self.loss_fn = nn.KLDivLoss(reduction='batchmean')
+        # self.loss_fn = nn.KLDivLoss(reduction='batchmean')
+        self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
 
     def generate_target(self) -> torch.Tensor:
         """Generate random target probability distribution shape=(B, L, V)"""
-        logits = torch.randn(self.batch_size, self.seq_len, self.vocab_size, device=self.device)
-        target = torch.softmax(logits, dim=-1)
-        return target.clamp(min=1e-6)
+        # target = torch.randint(self.batch_size, self.seq_len, self.vocab_size, device=self.device)
+        target = torch.randint(0, self.vocab_size, (self.batch_size, self.seq_len,), device=self.device)
+        # indices = torch.randint(0, logits.numel(), (20,))
+        # logits.view(-1)[indices] = 100
+        # target = torch.softmax(logits, dim=-1)
+        # return target.clamp(min=1e-6)
+        return target
 
     def init_input(self) -> torch.Tensor:
         """Generate random input embeddings shape=(B, L, H)"""
@@ -127,16 +132,28 @@ class InputOptimizer:
         for step in range(1, num_steps + 1):
             optimizer.zero_grad()
             outputs = self.model(inputs_embeds=input_embeds)
-            log_probs = torch.log_softmax(outputs.logits.float(), dim=-1)
-            loss = self.loss_fn(log_probs, target)
+            # log_probs = torch.log_softmax(outputs.logits.float(), dim=-1)
+            # loss = self.loss_fn(outputs.logits, target)
+            loss = self.loss_fn(
+                outputs.logits.view(-1, outputs.logits.size(-1)),  # [(B*(T-1)), V]
+                target.view(-1)                          # [(B*(T-1))]
+            )
             loss.backward()
             # Gradient clipping
             clip_grad_norm_([input_embeds], max_norm=1.0)
 
             # 当前 loss
             current_loss = loss.item()
-
-            # 调整学习率
+            accuracy=0
+            with torch.no_grad():
+                # 获取预测结果
+                predictions = torch.argmax(torch.softmax(outputs.logits, dim=-1), dim=-1)  # [B, L]
+                correct = (predictions == target).float()
+                accuracy = correct.mean().item()
+            if accuracy >= 1.0:
+                print(f'Early stopping at step {step}: accuracy reached 100%!')
+                break
+                        # 调整学习率
             new_lr = scheduler.step(current_loss)
             optimizer.step()
 
@@ -153,7 +170,7 @@ class InputOptimizer:
                 break
 
             if step % print_every == 0:
-                print(f'[Step {step:4d}/{num_steps}]  Loss = {current_loss:.4f}  LR = {new_lr}')
+                print(f'[Step {step:4d}/{num_steps}]  Loss = {current_loss:.4f} acc = {accuracy:.2f} LR = {new_lr}')
         return input_embeds,target
 
     def save_data(self, 
@@ -223,8 +240,8 @@ if __name__ == "__main__":
     optimizer = InputOptimizer(
         model_name='AI-ModelScope/gpt-j-6b',
         device='cuda:0',
-        batch_size=4,
-        seq_len=32,
+        batch_size=2,
+        seq_len=256,
         hidden_size=4096,
         lr=1.2e-3,
         kd=1e-3  # example derivative gain
