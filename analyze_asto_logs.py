@@ -30,9 +30,56 @@ def plot_fitness_evolution():
             warm_avg_fitness.append(iter_data['avg_fitness'])
             warm_times.append(iter_data['time'])
         
-        # 创建图表
-        fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-        fig.suptitle('ASTO Algorithm Performance Analysis', fontsize=16)
+        # 读取所有alpha值的生成阶段数据
+        alpha_values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        generate_data = {}
+        
+        for alpha in alpha_values:
+            try:
+                with open(f'./asto_v2_alpha_{alpha:.1f}_log.pkl', 'rb') as f:
+                    v2_log = pickle.load(f)
+                
+                if v2_log['iterations']:
+                    epochs = []
+                    best_fitness = []
+                    avg_fitness = []
+                    times = []
+                    
+                    for iter_data in v2_log['iterations']:
+                        epochs.append(iter_data['epoch'])
+                        best_fitness.append(iter_data['best_fitness'])
+                        avg_fitness.append(iter_data['avg_fitness'])
+                        times.append(iter_data['time'])
+                    
+                    generate_data[alpha] = {
+                        'epochs': epochs,
+                        'best_fitness': best_fitness,
+                        'avg_fitness': avg_fitness,
+                        'times': times
+                    }
+                    
+            except FileNotFoundError:
+                print(f"Warning: Log file for alpha {alpha:.1f} not found")
+                continue
+        
+        # 创建图表 - 增加子图数量以容纳生成阶段的详细分析
+        n_generate_plots = len(generate_data)
+        if n_generate_plots > 0:
+            # 计算需要的行数（每行最多3个alpha图）
+            n_cols = min(3, n_generate_plots)
+            n_rows = 2 + (n_generate_plots + n_cols - 1) // n_cols  # 热身阶段2行 + 生成阶段若干行
+            
+            fig, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 4*n_rows))
+            fig.suptitle('ASTO Algorithm Performance Analysis', fontsize=16)
+            
+            # 如果只有一行，确保axes是二维数组
+            if n_rows == 1:
+                axes = axes.reshape(1, -1)
+            elif n_cols == 1:
+                axes = axes.reshape(-1, 1)
+        else:
+            fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+            fig.suptitle('ASTO Algorithm Performance Analysis', fontsize=16)
         
         # 1. 热身阶段适应度变化
         axes[0, 0].plot(warm_epochs, warm_best_fitness, 'b-', label='Best Fitness', marker='o')
@@ -50,59 +97,94 @@ def plot_fitness_evolution():
         axes[0, 1].set_title('Warm Phase: Time per Iteration')
         axes[0, 1].grid(True, alpha=0.3)
         
-        # 3. 生成阶段不同alpha值的比较
-        alpha_values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-        alpha_final_fitness = []
-        alpha_total_times = []
-        
-        for alpha in alpha_values:
-            try:
-                with open(f'./asto_v2_alpha_{alpha:.1f}_log.pkl', 'rb') as f:
-                    v2_log = pickle.load(f)
-                
-                if v2_log['iterations']:
-                    final_fitness = v2_log['iterations'][-1]['best_fitness']
-                    total_time = v2_log['total_time']
+        # 3. 生成阶段总体比较（如果有数据）
+        if generate_data:
+            alpha_final_fitness = []
+            alpha_total_times = []
+            valid_alphas = []
+            
+            for alpha in alpha_values:
+                if alpha in generate_data:
+                    final_fitness = generate_data[alpha]['best_fitness'][-1]
+                    total_time = sum(generate_data[alpha]['times'])
                     alpha_final_fitness.append(final_fitness)
                     alpha_total_times.append(total_time)
-                else:
-                    alpha_final_fitness.append(0)
-                    alpha_total_times.append(0)
-                    
-            except FileNotFoundError:
-                alpha_final_fitness.append(0)
-                alpha_total_times.append(0)
-        
-        # 过滤掉没有数据的alpha值
-        valid_indices = [i for i, fitness in enumerate(alpha_final_fitness) if fitness > 0]
-        valid_alphas = [alpha_values[i] for i in valid_indices]
-        valid_fitness = [alpha_final_fitness[i] for i in valid_indices]
-        valid_times = [alpha_total_times[i] for i in valid_indices]
-        
-        if valid_alphas:
-            axes[1, 0].bar(valid_alphas, valid_fitness, alpha=0.7, color='purple')
-            axes[1, 0].set_xlabel('Alpha Value')
-            axes[1, 0].set_ylabel('Final Best Fitness')
-            axes[1, 0].set_title('Generate Phase: Final Fitness by Alpha')
-            axes[1, 0].grid(True, alpha=0.3)
+                    valid_alphas.append(alpha)
             
-            # 4. 生成阶段时间比较
-            axes[1, 1].bar(valid_alphas, valid_times, alpha=0.7, color='orange')
-            axes[1, 1].set_xlabel('Alpha Value')
-            axes[1, 1].set_ylabel('Total Time (seconds)')
-            axes[1, 1].set_title('Generate Phase: Total Time by Alpha')
-            axes[1, 1].grid(True, alpha=0.3)
+            if len(axes[0]) > 2:  # 如果有第三列
+                axes[0, 2].bar(valid_alphas, alpha_final_fitness, alpha=0.7, color='purple')
+                axes[0, 2].set_xlabel('Alpha Value')
+                axes[0, 2].set_ylabel('Final Best Fitness')
+                axes[0, 2].set_title('Generate Phase: Final Fitness by Alpha')
+                axes[0, 2].grid(True, alpha=0.3)
+            else:
+                # 如果没有第三列，使用第二行第一列
+                axes[1, 0].bar(valid_alphas, alpha_final_fitness, alpha=0.7, color='purple')
+                axes[1, 0].set_xlabel('Alpha Value')
+                axes[1, 0].set_ylabel('Final Best Fitness')
+                axes[1, 0].set_title('Generate Phase: Final Fitness by Alpha')
+                axes[1, 0].grid(True, alpha=0.3)
+                
+                # 时间对比图
+                axes[1, 1].bar(valid_alphas, alpha_total_times, alpha=0.7, color='orange')
+                axes[1, 1].set_xlabel('Alpha Value')
+                axes[1, 1].set_ylabel('Total Time (seconds)')
+                axes[1, 1].set_title('Generate Phase: Total Time by Alpha')
+                axes[1, 1].grid(True, alpha=0.3)
+        
+        # 4. 为每个alpha值绘制详细的适应度进化图
+        if generate_data:
+            start_row = 1 if len(axes[0]) > 2 else 2
+            colors = plt.cm.tab10(np.linspace(0, 1, len(generate_data)))
+            
+            plot_idx = 0
+            for alpha, data in generate_data.items():
+                row = start_row + plot_idx // n_cols
+                col = plot_idx % n_cols
+                
+                if row < len(axes) and col < len(axes[0]):
+                    ax = axes[row, col]
+                    
+                    # 绘制最佳适应度和平均适应度
+                    ax.plot(data['epochs'], data['best_fitness'], 
+                           'b-', label='Best Fitness', marker='o', linewidth=2)
+                    ax.plot(data['epochs'], data['avg_fitness'], 
+                           'r--', label='Average Fitness', marker='s', linewidth=2)
+                    
+                    ax.set_xlabel('Epoch')
+                    ax.set_ylabel('Fitness')
+                    ax.set_title(f'Generate Phase Alpha {alpha:.1f}: Fitness Evolution')
+                    ax.legend()
+                    ax.grid(True, alpha=0.3)
+                    
+                    # 添加适应度改进信息
+                    if len(data['best_fitness']) > 1:
+                        improvement = data['best_fitness'][-1] - data['best_fitness'][0]
+                        ax.text(0.02, 0.98, f'Improvement: {improvement:.4f}', 
+                               transform=ax.transAxes, va='top', ha='left',
+                               bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+                
+                plot_idx += 1
+            
+            # 隐藏多余的子图
+            for i in range(plot_idx, n_cols):
+                row = start_row + plot_idx // n_cols
+                if row < len(axes):
+                    axes[row, i].set_visible(False)
         else:
-            axes[1, 0].text(0.5, 0.5, 'No generate phase data available', 
-                           ha='center', va='center', transform=axes[1, 0].transAxes)
-            axes[1, 1].text(0.5, 0.5, 'No generate phase data available', 
-                           ha='center', va='center', transform=axes[1, 1].transAxes)
+            # 如果没有生成阶段数据，显示提示信息
+            if len(axes) > 1 and len(axes[1]) > 1:
+                axes[1, 0].text(0.5, 0.5, 'No generate phase data available', 
+                               ha='center', va='center', transform=axes[1, 0].transAxes)
+                axes[1, 1].text(0.5, 0.5, 'No generate phase data available', 
+                               ha='center', va='center', transform=axes[1, 1].transAxes)
         
         plt.tight_layout()
         plt.savefig('./asto_analysis.png', dpi=300, bbox_inches='tight')
         plt.show()
         
         print("Analysis plot saved as: ./asto_analysis.png")
+        print(f"Generated detailed fitness evolution plots for {len(generate_data)} alpha values")
         
     except FileNotFoundError:
         print("Log files not found. Please run the ASTO algorithm first.")

@@ -64,10 +64,11 @@ class gptJ_cloud(nn.Module):
         self.ln1_weights = nn.ParameterList()
         self.ln1_bias = nn.ParameterList()
         self.ln1_eps = []
-        
+        # model_dtype=torch.float16
         for block in self.model.transformer.h:
             # Get model dtype
             model_dtype = block.attn.q_proj.weight.dtype
+            # block=block.half()
             
             # GPT-J 使用 q_proj, k_proj, v_proj 分离的投影
             self.q_weights.append(nn.Parameter(block.attn.q_proj.weight.clone(), requires_grad=False))
@@ -92,11 +93,11 @@ class gptJ_cloud(nn.Module):
         self.device = next(self.model.parameters()).device
         
         # 创建旋转位置编码并移动到正确设备
-        self.rotary_emb = self._create_rotary_emb().to(self.device)
+        self.rotary_emb = self._create_rotary_emb()
     
     def _create_rotary_emb(self):
         """Create rotary positional embedding."""
-        inv_freq = 1.0 / (10000 ** (torch.arange(0, self.rotary_dim, 2).float() / self.rotary_dim))
+        inv_freq = 1.0 / (10000 ** (torch.arange(0, self.rotary_dim, 2,device=self.device).half() / self.rotary_dim))
         return inv_freq
     
     def _get_rotary_emb(self, seq_len, device):

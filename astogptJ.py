@@ -49,27 +49,51 @@ class gptJ_edge(nn.Module):
     
     # 在 gptJ_edge_layer 类中添加 clear 方法
     def clear(self):
+        for layeri in self.layers:
+            if isinstance(layeri,gptJ_edge_layer):
+                del layeri
+                continue
+            del layeri.v_svd['U']
+            del layeri.v_svd['V']
+            del layeri.v_svd['bias']
+            del layeri.out_proj_svd['U']
+            del layeri.out_proj_svd['V']
+            del layeri.out_proj_svd['bias']
+            del layeri.fc_in_svd['U']
+            del layeri.fc_in_svd['V']
+            del layeri.fc_in_svd['bias']
+            del layeri.fc_out_svd['U']           
+            del layeri.fc_out_svd['V']        
+            del layeri.fc_out_svd['bias']
+            del layeri
         del self.layers
+        gc.collect()
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
         self.layers=nn.ModuleList()
     
-    def add_layer(self,layer,device):
-        if isinstance(layer,SVDED_GPTJ_EDGE_Layer):
-            layer.v_svd['U']=layer.v_svd['U'].to(device)
-            layer.v_svd['V']=layer.v_svd['V'].to(device)
-            layer.v_svd['bias']=layer.v_svd['bias'].to(device)
-            layer.out_proj_svd['U']=layer.out_proj_svd['U'].to(device)
-            layer.out_proj_svd['V']=layer.out_proj_svd['V'].to(device)
-            layer.out_proj_svd['bias']=layer.out_proj_svd['bias'].to(device)
-            layer.fc_in_svd['U']=layer.fc_in_svd['U'].to(device)
-            layer.fc_in_svd['V']=layer.fc_in_svd['V'].to(device)
-            layer.fc_in_svd['bias']=layer.fc_in_svd['bias'].to(device)
-            layer.fc_out_svd['U']=layer.fc_out_svd['U'].to(device)            
-            layer.fc_out_svd['V']=layer.fc_out_svd['V'].to(device)            
-            layer.fc_out_svd['bias']=layer.fc_out_svd['bias'].to(device)            
+    def add_layer(self,layeri,device):
+        layer=copy.deepcopy(layeri)
         
-        self.layers.append(layer.to(device))
+        if isinstance(layer,SVDED_GPTJ_EDGE_Layer):
+            layer.v_svd['U']=layer.v_svd['U'].to(device=device, dtype=torch.float16)
+            layer.v_svd['V']=layer.v_svd['V'].to(device=device, dtype=torch.float16)
+            layer.v_svd['bias']=layer.v_svd['bias'].to(device=device, dtype=torch.float16)
+            layer.out_proj_svd['U']=layer.out_proj_svd['U'].to(device=device, dtype=torch.float16)
+            layer.out_proj_svd['V']=layer.out_proj_svd['V'].to(device=device, dtype=torch.float16)
+            layer.out_proj_svd['bias']=layer.out_proj_svd['bias'].to(device=device, dtype=torch.float16)
+            layer.fc_in_svd['U']=layer.fc_in_svd['U'].to(device=device, dtype=torch.float16)
+            layer.fc_in_svd['V']=layer.fc_in_svd['V'].to(device=device, dtype=torch.float16)
+            layer.fc_in_svd['bias']=layer.fc_in_svd['bias'].to(device=device, dtype=torch.float16)
+            layer.fc_out_svd['U']=layer.fc_out_svd['U'].to(device=device, dtype=torch.float16)            
+            layer.fc_out_svd['V']=layer.fc_out_svd['V'].to(device=device, dtype=torch.float16)            
+            layer.fc_out_svd['bias']=layer.fc_out_svd['bias'].to(device=device, dtype=torch.float16)
+        
+        # 将整个层移动到设备，并确保数据类型
+        layer = layer.to(device=device, dtype=torch.float16)
+        self.layers.append(layer)
+        gc.collect()
+        return
 
 class GPTJCloudEdgeCollaborator(nn.Module):
     """
@@ -78,23 +102,36 @@ class GPTJCloudEdgeCollaborator(nn.Module):
     边侧：完成V的计算和最终的attention输出
     """
     
-    def __init__(self, model_name='AI-ModelScope/gpt-j-6b', device_cloud='cuda:0', device_edge='cuda:0'):
+    def __init__(self, model_name='AI-ModelScope/gpt-j-6b', device_cloud='cuda:0'):
         super().__init__()
         
         self.device_cloud = device_cloud
-        self.device_edge = device_edge
+        self.device_edge = device_cloud
         
         # 初始化云侧和边侧模型
         print(f"初始化云侧模型 (设备: {device_cloud})...")
-        self.cloud = gptJ_cloud(model_name=model_name).to(device_cloud)
+        # self.cloud = gptJ_cloud(model_name=model_name).to(device_cloud)
+        self.cloud = gptJ_cloud(model_name=model_name)
+        try:
+            # 确保云侧模型是float16并移动到正确设备
+            self.cloud = self.cloud.to(device=device_cloud, dtype=torch.float16)
+        except NotImplementedError as e:
+            if "meta tensor" in str(e):
+                print("检测到meta tensor，使用to_empty()方法...")
+                self.cloud = self.cloud.to_empty(device=device_cloud)
+                # 如果需要，在这里重新加载权重
+                # self.cloud.load_state_dict(state_dict)
+            else:
+                raise e
         
-        print(f"初始化边侧模型 (设备: {device_edge})...")
-        self.edge = gptJ_edge(model_name=model_name,svd=True).to(device_edge)
+        print(f"初始化边侧模型 (设备: {device_cloud})...")
+        self.edge = gptJ_edge(model_name=model_name,svd=True)
+        self.edge=self.edge.to(device=device_cloud, dtype=torch.float16)
         
-        # 获取共享的组件（embedding和输出层）
-        self.embed = self.cloud.model.transformer.wte.to(device_cloud)
-        self.ln_f = self.cloud.model.transformer.ln_f.to(device_cloud)
-        self.lm_head = self.cloud.model.lm_head.to(device_cloud)
+        # 获取共享的组件（embedding和输出层），确保数据类型一致
+        self.embed = self.cloud.model.transformer.wte.to(device=device_cloud, dtype=torch.float16)
+        self.ln_f = self.cloud.model.transformer.ln_f.to(device=device_cloud, dtype=torch.float16)
+        self.lm_head = self.cloud.model.lm_head.to(device=device_cloud, dtype=torch.float16)
         
         # 模型配置
         self.num_layers = len(self.cloud.q_weights)
@@ -346,21 +383,35 @@ class GPTJCloudEdgeCollaborator(nn.Module):
         
         return compression_info
 
+# global svd_layers
 svd_layers={}
-
+import gc
+def init_svd_layer_ram():
+    rates=[0.0,0.1,0.2,0.3,0.4,0.5,0.6]
+    for layer_idx in range(28):
+        for reduce_rate in rates:
+            if os.path.exists(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_origin.pth"):
+                newlayer=torch.load(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_origin.pth",weights_only=False,map_location='cpu')
+                svd_layers[(layer_idx,reduce_rate)]=newlayer
+            elif os.path.exists(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth"):
+                newlayer=torch.load(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth",weights_only=False,map_location='cpu')
+                svd_layers[(layer_idx,reduce_rate)]=newlayer
+            
 def load_svd_layer(layer_idx,reduce_rate):
     # print(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth")
+    gc.collect()
     if((layer_idx,reduce_rate) in svd_layers):
-        return copy.deepcopy(svd_layers[(layer_idx,reduce_rate)])
+        return svd_layers[(layer_idx,reduce_rate)]
     if os.path.exists(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_origin.pth"):
         newlayer=torch.load(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_origin.pth",weights_only=False,map_location='cpu')
+        newlayer=newlayer.half()
         svd_layers[(layer_idx,reduce_rate)]=newlayer
-        return copy.deepcopy(newlayer)
+        return newlayer
     elif os.path.exists(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth"):
-        
         newlayer=torch.load(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth",weights_only=False,map_location='cpu')
+        newlayer=newlayer.half()
         svd_layers[(layer_idx,reduce_rate)]=newlayer
-        return copy.deepcopy(newlayer)
+        return newlayer
     else :
         return None
 
@@ -464,11 +515,12 @@ def ifexpand(max_cut,cut_i,alpha)->bool:
 
 import copy
 import traceback
-N_PROCS = 4
+N_PROCS = 6
 from tqdm import tqdm
 def taski(out_q,in_q,gpu_usage:int):
     print(f"创建进程:{gpu_usage}")
-    collaboration=GPTJCloudEdgeCollaborator(device_cloud=f'cuda:{gpu_usage}',device_edge=f'cuda:{gpu_usage}')
+    # with threading.Lock():
+    collaboration=GPTJCloudEdgeCollaborator(device_cloud=f'cuda:{gpu_usage}')
     batch_input=load_batch()['input_embeds'].half().to(f'cuda:{gpu_usage}')
     batch_output=load_batch()['target'].half().to(f'cuda:{gpu_usage}')
     while True:
@@ -490,7 +542,7 @@ def taski(out_q,in_q,gpu_usage:int):
                 loss_map[tuple(speciesi)]['edge_time']=edge_flops/EDGE_DEVICE
             out_q.put(
             copy.deepcopy(loss_map)
-        )
+        )    
         except Exception as e:
             print("Exceptions in taski:")
             print(e)
@@ -502,14 +554,14 @@ def taski(out_q,in_q,gpu_usage:int):
         print(f"FINISH_TASK_{gpu_usage}")
     return
 import queue 
-def warm_asto(warm_epoch,in_queue,out_queue,process_list):
+def warm_asto(warm_epoch,in_queue,out_queue):
     print("---------start_warm----------------")
     alpha_cp=[]
     warm_res={}
     init_species=[]
     species_map={}
     F_map={}
-    init_size=20
+    init_size=100
     # 记录每轮迭代的数据
     warm_log = {
         'iterations': [],
@@ -676,6 +728,8 @@ def warm_asto(warm_epoch,in_queue,out_queue,process_list):
         
         print(f"Warm epoch {_1+1}/{warm_epoch}: alpha={alpha:.1f}, time={iteration_time:.3f}s, "
               f"pop_size={len(init_species)}, best_fitness={max(F_score_list) if F_score_list else 0:.4f}")
+        with open('./warm_asto_log.pkl', 'wb') as f:
+            pickle.dump(warm_log, f)
     
     print(f"Warm phase completed. Total time: {warm_log['total_time']:.3f}s")
     
@@ -702,7 +756,7 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_,in_queue,out_queue):
     init_species=init_species_
     species_map=species_map_
     F_map={}
-    init_size=30
+    init_size=100
     
     # 记录每轮迭代的数据
     v2_log = {
@@ -863,6 +917,8 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_,in_queue,out_queue):
         
         print(f"Generate epoch {_1+1}/{generate_epoch} (alpha={alpha:.1f}): time={iteration_time:.3f}s, "
               f"pop_size={len(init_species)}, best_fitness={max(F_score_list) if F_score_list else 0:.4f}")
+        with open(f'./asto_v2_alpha_{alpha:.1f}_log.pkl', 'wb') as f:
+            pickle.dump(v2_log, f)
     
     print(f"Generate phase completed for alpha={alpha:.1f}. Total time: {v2_log['total_time']:.3f}s")
     
@@ -877,8 +933,8 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_,in_queue,out_queue):
             F=count_F(species_map[tuple(speciesi)],alpha)
             if(F>max_F):
                 ans=speicei
-    for i in range(N_PROCS):
-        in_queue.push(None)
+    # for i in range(N_PROCS):
+    #     in_queue.put(None)
     return ans
             
 
@@ -1088,24 +1144,32 @@ def save_detailed_population_history():
         print(f"Error saving detailed data: {e}")
 
 import multiprocessing as mp
+import threading
 
-if __name__=="__main__":
-    mp.set_start_method('spawn')
-    
-    mgr = mp.Manager()
-    in_queue  = mgr.Queue()
-    out_queue = mgr.Queue()
-    lock       = mgr.Lock()
-    procs=[]
+if __name__ == "__main__":
+    # 创建线程安全的队列
+    in_queue  = queue.Queue()
+    out_queue = queue.Queue()
+    # 如果你在 taski 里需要锁，打开下一行并在 Thread args 中传入
+    # lock = threading.Lock()
+
+    threads = []
     for i in range(N_PROCS):
-        p = mp.Process(
+        t = threading.Thread(
             target=taski,
-            args=(out_queue,in_queue, i),
+            args=(out_queue, in_queue, i),  # 如需 lock，改为 (out_queue, in_queue, i, lock)
         )
-        p.daemon = True
-        p.start()
-        procs.append(p)
+        t.daemon = True
+        t.start()
+        threads.append(t)
 
-    asto(3,5,in_queue,out_queue)
+    # 启动生产-消费逻辑
+    # asto(3, 5, in_queue, out_queue)
+    asto(15,35,in_queue,out_queue)
+
+    # 等待所有线程结束
+    for t in threads:
+        t.join()
+    
 
     
