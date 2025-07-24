@@ -552,6 +552,65 @@ if __name__=="__main__":
                 loaded_data = pickle.dump(res,file)
             print("loss:",loss," perplexity: ",perplexity)
 
+# def load_batch(filepath="./GPTJ_inputbatch.pkl"):
+#     try:
+#         with open(filepath, 'rb') as f:
+#             data_dict = pickle.load(f)
+        
+#         print(f"数据已成功加载: {filepath}")
+        
+#         # 打印加载信息
+#         if 'metadata' in data_dict:
+#             metadata = data_dict['metadata']
+#             print(f"生成时间: {metadata.get('generation_time', 'Unknown')}")
+#             print(f"批次大小: {metadata.get('batch_size', 'Unknown')}")
+#             print(f"序列长度: {metadata.get('seq_len', 'Unknown')}")
+#             print(f"隐藏层大小: {metadata.get('hidden_size', 'Unknown')}")
+        
+#         print(f"Input embeddings 形状: {data_dict['shapes']['input_embeds']}")
+#         print(f"Target 形状: {data_dict['shapes']['target']}")
+        
+#         return data_dict
+        
+#     except FileNotFoundError:
+#         print(f"文件未找到: {filepath}")
+#         raise
+#     except Exception as e:
+#         print(f"加载失败: {e}")
+#         raise
+
+# def get_loss(model:GPTJCloudEdgeCollaborator,input_batch,output_batch):
+#     try:
+#         criterion = nn.KLDivLoss(reduction='batchmean')
+#         model.eval()
+#         with torch.no_grad():
+#             outputs = model(input_ids=input_batch,need_embedding=False)
+#             logits  = torch.log_softmax(outputs, dim=-1)              # [B, T, V]
+
+#             loss = criterion(logits,output_batch)
+#     except Exception as e:
+#         print("Exceptions in get_loss:")
+#         print(e)
+#         # traceback.print_exc()
+
+#     return loss
+
+# if __name__=="__main__":
+#     collaboration=GPTJCloudEdgeCollaborator()
+#     # dataloader=load_and_tokenize_dataset(tokenizer=collaboration.tokenizer,batch_size=8)
+#     batch_input=load_batch()['input_embeds'].half().to(f'cuda:0')
+#     batch_output=load_batch()['target'].half().to(f'cuda:0')
+#     rate=[0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7]
+#     res={}
+    
+#     for i in range(20):
+#         print(f"------------开始验证第{i}种随机方案-------------")
+#         selected = [random.choice(rate) for _ in range(28)] 
+#         get_model(collaboration,selected)
+#         ans=get_loss(collaboration,batch_input,batch_output)
+#         loss=ans
+#         print("loss:",loss)
+
         
     
 

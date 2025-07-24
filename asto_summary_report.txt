@@ -1,95 +1,95 @@
 ASTO Algorithm Execution Report
 ==================================================
-Execution Time: 2025-07-21 06:45:54
-Total Runtime: 9907.839 seconds
+Execution Time: 2025-07-22 15:46:42
+Total Runtime: 44218.247 seconds
 
 Algorithm Parameters:
-  - Warm epochs: 3
-  - Generate epochs: 5
+  - Warm epochs: 10
+  - Generate epochs: 20
 
 Warm Phase Analysis:
-  - Total time: 1227.730s
-  - Number of iterations: 15
-  - Average time per iteration: 81.849s
-  - Initial best fitness: nan
-  - Final best fitness: nan
-  - Fitness improvement: nan
-  - Average final fitness: nan
+  - Total time: 10884.123s
+  - Number of iterations: 10
+  - Average time per iteration: 1088.412s
+  - Initial best fitness: 0.0128
+  - Final best fitness: 0.1863
+  - Fitness improvement: 0.1736
+  - Average final fitness: 0.0096
 
 Generate Phase Analysis:
   Alpha 0.0:
-    - Total time: 1106.972s
-    - Iterations: 35
-    - Final best fitness: nan
-    - Fitness improvement: nan
-    - Best solution: (0.5, 0.3, 0.3, 0.6, 0.1, 0.4, 0.2, 0.3, 0.1, 0.7, 0.6, 0.3, 0.0, 0.6, 0.5, 0.3, 0.1, 0.5, 0.5, 0.5, 0.6, 0.4, 0.6, 0.0, 0.4, 0.7, 0.1, 0.4)
+    - Total time: 1730.175s
+    - Iterations: 20
+    - Final best fitness: 0.1987
+    - Fitness improvement: 0.1987
+    - Best solution: (0.3, 0.0, 0.5, 0.4, 0.4, 0.5, 0.1, 0.2, 0.3, 0.4, 0.6, 0.0, 0.5, 0.1, 0.4, 0.5, 0.0, 0.5, 0.6, 0.1, 0.2, 0.2, 0.1, 0.5, 0.0, 0.1, 0.2, 0.3)
   Alpha 0.1:
-    - Total time: 543.893s
-    - Iterations: 5
-    - Final best fitness: 0.3145
-    - Fitness improvement: 0.2415
-    - Best solution: (0.2, 0.7, 0.6, 0.5, 0.2, 0.6, 0.6, 0.6, 0.5, 0.2, 0.6, 0.3, 0.2, 0.6, 0.3, 0.5, 0.3, 0.1, 0.7, 0.5, 0.1, 0.2, 0.4, 0.2, 0.6, 0.5, 0.4, 0.2)
+    - Total time: 744.180s
+    - Iterations: 20
+    - Final best fitness: 0.0068
+    - Fitness improvement: 0.0067
+    - Best solution: (0.1, 0.6, 0.2, 0.5, 0.4, 0.1, 0.4, 0.2, 0.0, 0.5, 0.0, 0.1, 0.2, 0.4, 0.0, 0.2, 0.1, 0.3, 0.3, 0.2, 0.1, 0.3, 0.6, 0.1, 0.0, 0.2, 0.5, 0.1)
   Alpha 0.2:
-    - Total time: 742.263s
-    - Iterations: 5
-    - Final best fitness: 0.0667
-    - Fitness improvement: 0.0665
-    - Best solution: (0.3, 0.0, 0.2, 0.2, 0.4, 0.3, 0.7, 0.7, 0.7, 0.0, 0.7, 0.3, 0.3, 0.7, 0.5, 0.6, 0.7, 0.7, 0.0, 0.7, 0.0, 0.7, 0.5, 0.5, 0.6, 0.7, 0.0, 0.7)
+    - Total time: 1965.620s
+    - Iterations: 20
+    - Final best fitness: 0.6410
+    - Fitness improvement: 0.6409
+    - Best solution: (0.1, 0.4, 0.5, 0.5, 0.4, 0.6, 0.3, 0.3, 0.6, 0.0, 0.6, 0.5, 0.5, 0.5, 0.2, 0.0, 0.3, 0.4, 0.6, 0.6, 0.1, 0.5, 0.4, 0.4, 0.2, 0.3, 0.6, 0.5)
   Alpha 0.3:
-    - Total time: 584.828s
-    - Iterations: 5
-    - Final best fitness: 0.1385
-    - Fitness improvement: 0.0153
-    - Best solution: (0.3, 0.0, 0.2, 0.3, 0.4, 0.7, 0.4, 0.4, 0.2, 0.6, 0.0, 0.6, 0.0, 0.5, 0.1, 0.0, 0.7, 0.1, 0.5, 0.6, 0.6, 0.1, 0.0, 0.3, 0.5, 0.3, 0.6, 0.6)
+    - Total time: 2294.315s
+    - Iterations: 20
+    - Final best fitness: 0.1426
+    - Fitness improvement: 0.1386
+    - Best solution: (0.4, 0.2, 0.1, 0.2, 0.3, 0.3, 0.5, 0.0, 0.4, 0.2, 0.0, 0.5, 0.4, 0.4, 0.3, 0.5, 0.1, 0.2, 0.0, 0.4, 0.5, 0.0, 0.3, 0.1, 0.3, 0.1, 0.5, 0.3)
   Alpha 0.4:
-    - Total time: 559.338s
-    - Iterations: 5
-    - Final best fitness: 0.0709
-    - Fitness improvement: 0.0525
-    - Best solution: (0.5, 0.3, 0.7, 0.0, 0.2, 0.7, 0.1, 0.4, 0.0, 0.2, 0.5, 0.4, 0.6, 0.4, 0.6, 0.6, 0.2, 0.7, 0.6, 0.0, 0.4, 0.7, 0.4, 0.2, 0.2, 0.6, 0.1, 0.7)
+    - Total time: 2888.443s
+    - Iterations: 20
+    - Final best fitness: 0.0742
+    - Fitness improvement: 0.0701
+    - Best solution: (0.1, 0.6, 0.1, 0.2, 0.5, 0.4, 0.2, 0.4, 0.6, 0.2, 0.6, 0.0, 0.2, 0.5, 0.5, 0.5, 0.5, 0.1, 0.4, 0.2, 0.2, 0.6, 0.5, 0.5, 0.0, 0.4, 0.4, 0.6)
   Alpha 0.5:
-    - Total time: 1055.907s
-    - Iterations: 5
-    - Final best fitness: 0.0785
-    - Fitness improvement: -0.2759
-    - Best solution: (0.1, 0.1, 0.2, 0.4, 0.4, 0.2, 0.0, 0.0, 0.6, 0.0, 0.2, 0.4, 0.0, 0.1, 0.3, 0.3, 0.4, 0.0, 0.1, 0.1, 0.7, 0.5, 0.7, 0.3, 0.7, 0.2, 0.0, 0.7)
+    - Total time: 4269.481s
+    - Iterations: 20
+    - Final best fitness: 0.1732
+    - Fitness improvement: 0.1063
+    - Best solution: (0.2, 0.0, 0.1, 0.3, 0.5, 0.1, 0.2, 0.2, 0.0, 0.0, 0.4, 0.2, 0.2, 0.3, 0.2, 0.1, 0.1, 0.1, 0.6, 0.1, 0.1, 0.5, 0.2, 0.6, 0.2, 0.4, 0.4, 0.3)
   Alpha 0.6:
-    - Total time: 967.949s
-    - Iterations: 5
-    - Final best fitness: 0.0952
-    - Fitness improvement: 0.7153
-    - Best solution: (0.2, 0.1, 0.5, 0.6, 0.3, 0.1, 0.4, 0.7, 0.0, 0.3, 0.5, 0.4, 0.3, 0.0, 0.1, 0.2, 0.6, 0.1, 0.4, 0.1, 0.1, 0.6, 0.5, 0.0, 0.0, 0.1, 0.6, 0.7)
+    - Total time: 2763.676s
+    - Iterations: 20
+    - Final best fitness: 0.1139
+    - Fitness improvement: 0.1007
+    - Best solution: (0.3, 0.3, 0.3, 0.1, 0.2, 0.1, 0.0, 0.0, 0.3, 0.0, 0.4, 0.4, 0.1, 0.2, 0.0, 0.0, 0.2, 0.1, 0.6, 0.0, 0.2, 0.2, 0.3, 0.1, 0.4, 0.2, 0.2, 0.4)
   Alpha 0.7:
-    - Total time: 1017.619s
-    - Iterations: 5
-    - Final best fitness: 0.3301
-    - Fitness improvement: 0.0000
-    - Best solution: (0.5, 0.7, 0.1, 0.5, 0.7, 0.2, 0.4, 0.1, 0.3, 0.7, 0.7, 0.7, 0.6, 0.4, 0.4, 0.7, 0.6, 0.2, 0.6, 0.5, 0.0, 0.3, 0.7, 0.2, 0.0, 0.1, 0.6, 0.2)
+    - Total time: 4326.355s
+    - Iterations: 20
+    - Final best fitness: 0.1029
+    - Fitness improvement: 0.6366
+    - Best solution: (0.1, 0.2, 0.2, 0.2, 0.4, 0.0, 0.0, 0.3, 0.1, 0.3, 0.6, 0.2, 0.2, 0.1, 0.6, 0.0, 0.1, 0.5, 0.5, 0.6, 0.1, 0.3, 0.0, 0.6, 0.4, 0.2, 0.3, 0.3)
   Alpha 0.8:
-    - Total time: 1143.955s
-    - Iterations: 5
-    - Final best fitness: 0.3838
-    - Fitness improvement: 0.0000
-    - Best solution: (0.3, 0.7, 0.5, 0.7, 0.3, 0.4, 0.5, 0.7, 0.3, 0.5, 0.3, 0.6, 0.0, 0.0, 0.5, 0.7, 0.0, 0.7, 0.4, 0.0, 0.4, 0.5, 0.2, 0.5, 0.3, 0.2, 0.5, 0.2)
+    - Total time: 4734.832s
+    - Iterations: 20
+    - Final best fitness: 0.1104
+    - Fitness improvement: 2.9922
+    - Best solution: (0.3, 0.1, 0.2, 0.3, 0.0, 0.2, 0.1, 0.1, 0.1, 0.3, 0.6, 0.1, 0.0, 0.3, 0.2, 0.2, 0.6, 0.0, 0.5, 0.0, 0.0, 0.0, 0.6, 0.6, 0.1, 0.3, 0.5, 0.4)
   Alpha 0.9:
-    - Total time: 953.796s
-    - Iterations: 5
-    - Final best fitness: 0.9658
-    - Fitness improvement: 1.1709
-    - Best solution: (0.0, 0.7, 0.1, 0.7, 0.0, 0.0, 0.7, 0.7, 0.3, 0.2, 0.3, 0.3, 0.3, 0.3, 0.6, 0.1, 0.5, 0.2, 0.7, 0.1, 0.6, 0.2, 0.7, 0.2, 0.6, 0.2, 0.1, 0.7)
+    - Total time: 3023.334s
+    - Iterations: 20
+    - Final best fitness: 1.8374
+    - Fitness improvement: 24.6141
+    - Best solution: (0.1, 0.3, 0.2, 0.5, 0.2, 0.1, 0.6, 0.4, 0.3, 0.3, 0.1, 0.5, 0.2, 0.4, 0.1, 0.2, 0.3, 0.1, 0.1, 0.2, 0.5, 0.3, 0.0, 0.5, 0.5, 0.1, 0.6, 0.6)
   Alpha 1.0:
-    - Total time: 1064.325s
-    - Iterations: 5
-    - Final best fitness: 0.2617
-    - Fitness improvement: 0.0472
-    - Best solution: (0.6, 0.1, 0.3, 0.7, 0.3, 0.2, 0.7, 0.1, 0.0, 0.0, 0.0, 0.4, 0.6, 0.2, 0.7, 0.0, 0.0, 0.7, 0.4, 0.3, 0.3, 0.6, 0.0, 0.6, 0.4, 0.5, 0.4, 0.4)
+    - Total time: 4590.528s
+    - Iterations: 20
+    - Final best fitness: 0.0593
+    - Fitness improvement: 0.0019
+    - Best solution: (0.4, 0.5, 0.4, 0.1, 0.1, 0.0, 0.3, 0.6, 0.0, 0.0, 0.0, 0.2, 0.1, 0.0, 0.3, 0.4, 0.1, 0.2, 0.4, 0.6, 0.3, 0.0, 0.6, 0.1, 0.2, 0.3, 0.1, 0.4)
 
 Generate Phase Summary:
-  - Total generate time: 9740.847s
+  - Total generate time: 33330.938s
   - Successful alpha values: 11/11
-  - Average time per alpha: 885.532s
+  - Average time per alpha: 3030.085s
 
 Overall Performance:
-  - Warm phase time: 1227.730s (12.4%)
-  - Generate phase time: 9740.847s (98.3%)
-  - Other time: -1060.738s
+  - Warm phase time: 10884.123s (24.6%)
+  - Generate phase time: 33330.938s (75.4%)
+  - Other time: 3.186s

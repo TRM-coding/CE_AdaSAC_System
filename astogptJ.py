@@ -76,21 +76,21 @@ class gptJ_edge(nn.Module):
         layer=copy.deepcopy(layeri)
         
         if isinstance(layer,SVDED_GPTJ_EDGE_Layer):
-            layer.v_svd['U']=layer.v_svd['U'].to(device=device, dtype=torch.float16)
-            layer.v_svd['V']=layer.v_svd['V'].to(device=device, dtype=torch.float16)
-            layer.v_svd['bias']=layer.v_svd['bias'].to(device=device, dtype=torch.float16)
-            layer.out_proj_svd['U']=layer.out_proj_svd['U'].to(device=device, dtype=torch.float16)
-            layer.out_proj_svd['V']=layer.out_proj_svd['V'].to(device=device, dtype=torch.float16)
-            layer.out_proj_svd['bias']=layer.out_proj_svd['bias'].to(device=device, dtype=torch.float16)
-            layer.fc_in_svd['U']=layer.fc_in_svd['U'].to(device=device, dtype=torch.float16)
-            layer.fc_in_svd['V']=layer.fc_in_svd['V'].to(device=device, dtype=torch.float16)
-            layer.fc_in_svd['bias']=layer.fc_in_svd['bias'].to(device=device, dtype=torch.float16)
-            layer.fc_out_svd['U']=layer.fc_out_svd['U'].to(device=device, dtype=torch.float16)            
-            layer.fc_out_svd['V']=layer.fc_out_svd['V'].to(device=device, dtype=torch.float16)            
-            layer.fc_out_svd['bias']=layer.fc_out_svd['bias'].to(device=device, dtype=torch.float16)
+            layer.v_svd['U']=layer.v_svd['U'].to(device=device,)
+            layer.v_svd['V']=layer.v_svd['V'].to(device=device,)
+            layer.v_svd['bias']=layer.v_svd['bias'].to(device=device,  )
+            layer.out_proj_svd['U']=layer.out_proj_svd['U'].to(device=device,  )
+            layer.out_proj_svd['V']=layer.out_proj_svd['V'].to(device=device,  )
+            layer.out_proj_svd['bias']=layer.out_proj_svd['bias'].to(device=device,  )
+            layer.fc_in_svd['U']=layer.fc_in_svd['U'].to(device=device,  )
+            layer.fc_in_svd['V']=layer.fc_in_svd['V'].to(device=device,  )
+            layer.fc_in_svd['bias']=layer.fc_in_svd['bias'].to(device=device,  )
+            layer.fc_out_svd['U']=layer.fc_out_svd['U'].to(device=device,  )            
+            layer.fc_out_svd['V']=layer.fc_out_svd['V'].to(device=device,  )            
+            layer.fc_out_svd['bias']=layer.fc_out_svd['bias'].to(device=device,  )
         
         # 将整个层移动到设备，并确保数据类型
-        layer = layer.to(device=device, dtype=torch.float16)
+        layer = layer.to(device=device,  )
         self.layers.append(layer)
         gc.collect()
         return
@@ -110,28 +110,16 @@ class GPTJCloudEdgeCollaborator(nn.Module):
         
         # 初始化云侧和边侧模型
         print(f"初始化云侧模型 (设备: {device_cloud})...")
-        # self.cloud = gptJ_cloud(model_name=model_name).to(device_cloud)
         self.cloud = gptJ_cloud(model_name=model_name)
-        try:
-            # 确保云侧模型是float16并移动到正确设备
-            self.cloud = self.cloud.to(device=device_cloud, dtype=torch.float16)
-        except NotImplementedError as e:
-            if "meta tensor" in str(e):
-                print("检测到meta tensor，使用to_empty()方法...")
-                self.cloud = self.cloud.to_empty(device=device_cloud)
-                # 如果需要，在这里重新加载权重
-                # self.cloud.load_state_dict(state_dict)
-            else:
-                raise e
+        self.cloud =self.cloud.to(device_cloud)
         
         print(f"初始化边侧模型 (设备: {device_cloud})...")
-        self.edge = gptJ_edge(model_name=model_name,svd=True)
-        self.edge=self.edge.to(device=device_cloud, dtype=torch.float16)
+        self.edge = gptJ_edge(model_name=model_name,svd=True).to(device_cloud)
         
-        # 获取共享的组件（embedding和输出层），确保数据类型一致
-        self.embed = self.cloud.model.transformer.wte.to(device=device_cloud, dtype=torch.float16)
-        self.ln_f = self.cloud.model.transformer.ln_f.to(device=device_cloud, dtype=torch.float16)
-        self.lm_head = self.cloud.model.lm_head.to(device=device_cloud, dtype=torch.float16)
+        # 获取共享的组件（embedding和输出层）
+        self.embed = self.cloud.model.transformer.wte.to(device_cloud)
+        self.ln_f = self.cloud.model.transformer.ln_f.to(device_cloud)
+        self.lm_head = self.cloud.model.lm_head.to(device_cloud)
         
         # 模型配置
         self.num_layers = len(self.cloud.q_weights)
@@ -396,7 +384,7 @@ def init_svd_layer_ram():
             elif os.path.exists(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth"):
                 newlayer=torch.load(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth",weights_only=False,map_location='cpu')
                 svd_layers[(layer_idx,reduce_rate)]=newlayer
-            
+cuda_cache={}   
 def load_svd_layer(layer_idx,reduce_rate):
     # print(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth")
     gc.collect()
@@ -404,11 +392,15 @@ def load_svd_layer(layer_idx,reduce_rate):
         return svd_layers[(layer_idx,reduce_rate)]
     if os.path.exists(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_origin.pth"):
         newlayer=torch.load(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_origin.pth",weights_only=False,map_location='cpu')
+        if hasattr(newlayer,"original_layer"):
+            del newlayer.original_layer
         newlayer=newlayer.half()
         svd_layers[(layer_idx,reduce_rate)]=newlayer
         return newlayer
     elif os.path.exists(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth"):
         newlayer=torch.load(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth",weights_only=False,map_location='cpu')
+        if hasattr(newlayer,"original_layer"):
+            del newlayer.original_layer
         newlayer=newlayer.half()
         svd_layers[(layer_idx,reduce_rate)]=newlayer
         return newlayer
@@ -460,13 +452,16 @@ def load_batch(filepath="./GPTJ_inputbatch.pkl"):
 import math
 def get_loss(model:GPTJCloudEdgeCollaborator,input_batch,output_batch):
     try:
-        criterion = nn.KLDivLoss(reduction='batchmean')
+        criterion = nn.CrossEntropyLoss(reduction='mean')
         model.eval()
         with torch.no_grad():
             outputs = model(input_ids=input_batch,need_embedding=False)
-            logits  = torch.log_softmax(outputs, dim=-1)              # [B, T, V]
+            # logits  = torch.log_softmax(outputs, dim=-1)              # [B, T, V]
 
-            loss = criterion(logits,output_batch)
+            loss = criterion(
+                outputs.view(-1, outputs.size(-1)).to(torch.float32),
+                output_batch.view(-1)
+            )
     except Exception as e:
         print("Exceptions in get_loss:")
         print(e)
@@ -515,20 +510,27 @@ def ifexpand(max_cut,cut_i,alpha)->bool:
 
 import copy
 import traceback
-N_PROCS = 6
+N_PROCS = 2
 from tqdm import tqdm
-def taski(out_q,in_q,gpu_usage:int):
+import threading
+lock = threading.Lock()
+import time
+def taski(out_q,in_q,gpu_usage:int,collaboration,batch_input,batch_output):
+# def taski(out_q,in_q,gpu_usage:int):
     print(f"创建进程:{gpu_usage}")
-    # with threading.Lock():
-    collaboration=GPTJCloudEdgeCollaborator(device_cloud=f'cuda:{gpu_usage}')
-    batch_input=load_batch()['input_embeds'].half().to(f'cuda:{gpu_usage}')
-    batch_output=load_batch()['target'].half().to(f'cuda:{gpu_usage}')
+    # with lock:
+    #     collaboration=GPTJCloudEdgeCollaborator(device_cloud=f'cuda:{gpu_usage}')
+    #     batch_input=load_batch()['input_embeds'].half().to(f'cuda:{gpu_usage}')
+    #     batch_output=load_batch()['target'].half().to(f'cuda:{gpu_usage}')
+    #     model_list.append(collaboration)
+    #     batch_list.append((batch_input,batch_output))
+    # time.sleep(1)
     while True:
         tasks = in_q.get()
         if tasks == None:
             print("task_out")
             break
-        print(f"GET_TASK_{gpu_usage}")
+        # print(f"GET_TASK_{gpu_usage}")
         loss_map={}
         try:
             torch.cuda.empty_cache()
@@ -551,7 +553,7 @@ def taski(out_q,in_q,gpu_usage:int):
                 None
             )
         
-        print(f"FINISH_TASK_{gpu_usage}")
+        # print(f"FINISH_TASK_{gpu_usage}")
     return
 import queue 
 def warm_asto(warm_epoch,in_queue,out_queue):
@@ -568,7 +570,7 @@ def warm_asto(warm_epoch,in_queue,out_queue):
         'total_time': 0
     }
     for i in range(init_size):
-        listi=[round(random.randint(0, 7) * 0.1, 1)for j,_ in enumerate(range(28))]
+        listi=[round(random.randint(0, 6) * 0.1, 1)for j,_ in enumerate(range(28))]
         init_species.append(tuple(listi))
     for _1 in range(warm_epoch):
         print(f"------WARM{_1}-----------")
@@ -600,21 +602,21 @@ def warm_asto(warm_epoch,in_queue,out_queue):
         ]
 
         # 2. 准备 N_PROCS 个子列表
-        task_sp = [[] for _ in range(N_PROCS)]
+        # task_sp = [[] for _ in range(N_PROCS)]
 
-        # 3. 按轮询 (round‐robin) 的方式分配
-        for idx, speciesi in enumerate(new_species):
-            proc_id = idx % N_PROCS
-            task_sp[proc_id].append(speciesi)
+        # # 3. 按轮询 (round‐robin) 的方式分配
+        # for idx, speciesi in enumerate(new_species):
+        #     proc_id = idx % N_PROCS
+        #     task_sp[proc_id].append(speciesi)
         
         #塞入进程
         
-        for taskii in task_sp:
+        for taskii in new_species:
 
-            in_queue.put(taskii)
+            in_queue.put([taskii])
 
         #从进程中拿出
-        for i in range(len(task_sp)):
+        for i in range(len(new_species)):
             res = out_queue.get(block=True,)
             for key,val in res.items():
                 species_map[key]=val
@@ -671,10 +673,25 @@ def warm_asto(warm_epoch,in_queue,out_queue):
         init_species=[x[0] for x in cbsorted]
         F_score_list=[x[1] for x in cbsorted]
 
+        # 处理负数适应度值 - 线性变换到正数范围
+        min_fitness = min(F_score_list)
+        if min_fitness < 0:
+            # 将所有适应度值平移到正数范围
+            F_score_list = [f - min_fitness + 1e-6 for f in F_score_list]
+            print(f"Shifted fitness values by {-min_fitness + 1e-6} to ensure positive values")
+
         # 构造归一化积分函数
         sums=sum(F_score_list)
-        for i,_ in enumerate(F_score_list):
-            F_score_list[i]/=sums
+        # 检查sum是否为0或负数
+        if sums <= 0:
+            # 如果所有适应度相等，给予均等概率
+            F_score_list = [1.0/len(F_score_list)] * len(F_score_list)
+            sums = 1.0
+            print("All fitness values equal, using uniform probability distribution")
+        else:
+            # 正常归一化
+            for i,_ in enumerate(F_score_list):
+                F_score_list[i]/=sums
         F_Integral=[]
         for i in range(len(F_score_list)):
             F_Integral.append(0)
@@ -756,7 +773,7 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_,in_queue,out_queue):
     init_species=init_species_
     species_map=species_map_
     F_map={}
-    init_size=100
+    init_size=6
     
     # 记录每轮迭代的数据
     v2_log = {
@@ -765,7 +782,7 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_,in_queue,out_queue):
         'total_time': 0
     }
     for i in range(init_size-len(init_species)):
-        listi=[round(random.randint(0, 7) * 0.1, 1) for j,_ in enumerate(range(28))]
+        listi=[round(random.randint(0, 6) * 0.1, 1) for j,_ in enumerate(range(28))]
         init_species.append(tuple(listi))
     for _1 in range(generate_epoch):
         print(f"------------v2{_1}--------------")
@@ -789,19 +806,19 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_,in_queue,out_queue):
         ]
 
         # 2. 准备 N_PROCS 个子列表
-        task_sp = [[] for _ in range(N_PROCS)]
+        # task_sp = [[] for _ in range(N_PROCS)]
 
-        # 3. 按轮询 (round‐robin) 的方式分配
-        for idx, speciesi in enumerate(new_species):
-            proc_id = idx % N_PROCS
-            task_sp[proc_id].append(speciesi)
+        # # 3. 按轮询 (round‐robin) 的方式分配
+        # for idx, speciesi in enumerate(new_species):
+        #     proc_id = idx % N_PROCS
+        #     task_sp[proc_id].append(speciesi)
         
         #塞入进程
-        for taski in task_sp:
-            in_queue.put(taski)
+        for taskii in new_species:
+            in_queue.put([taskii])
 
         #从进程中拿出
-        for i in range(len(task_sp)):
+        for i in range(len(new_species)):
             res=out_queue.get()
             if res==None:
                 print("Some_Bad_Thing_happend")
@@ -861,10 +878,25 @@ def asto_v2(generate_epoch,alpha,init_species_,species_map_,in_queue,out_queue):
         init_species=[x[0] for x in cbsorted]
         F_score_list=[x[1] for x in cbsorted]
 
+        # 处理负数适应度值 - 线性变换到正数范围
+        min_fitness = min(F_score_list)
+        if min_fitness < 0:
+            # 将所有适应度值平移到正数范围
+            F_score_list = [f - min_fitness + 1e-6 for f in F_score_list]
+            print(f"Shifted fitness values by {-min_fitness + 1e-6} to ensure positive values")
+
         # 构造归一化积分函数
         sums=sum(F_score_list)
-        for i,_ in enumerate(F_score_list):
-            F_score_list[i]/=sums
+        # 检查sum是否为0或负数
+        if sums <= 0:
+            # 如果所有适应度相等，给予均等概率
+            F_score_list = [1.0/len(F_score_list)] * len(F_score_list)
+            sums = 1.0
+            print("All fitness values equal, using uniform probability distribution")
+        else:
+            # 正常归一化
+            for i,_ in enumerate(F_score_list):
+                F_score_list[i]/=sums
         F_Integral=[]
         for i in range(len(F_score_list)):
             F_Integral.append(0)
@@ -959,7 +991,8 @@ def asto(warm_epoch,generate_epoch,in_queue,out_queue):
     total_start_time = time.time()
     
     # 执行热身阶段
-    alpha_fit,species_map=warm_asto(warm_epoch,in_queue,out_queue)
+    # alpha_fit,species_map=warm_asto(warm_epoch,in_queue,out_queue)
+    species_map={}
     
     # 记录生成阶段的结果
     generate_results = {}
@@ -968,9 +1001,9 @@ def asto(warm_epoch,generate_epoch,in_queue,out_queue):
     for alphai in alpha:
         print(f"\n--- Processing alpha = {alphai:.1f} ---")
         init_spi=[]
-        for key,value in alpha_fit.items():
-            if value==alphai:
-                init_spi.append(key)
+        # for key,value in alpha_fit.items():
+        #     if value==alphai:
+        #         init_spi.append(key)
         
         # if not init_spi:
             # print(f"No species found for alpha = {alphai:.1f}, skipping...")
@@ -1145,19 +1178,27 @@ def save_detailed_population_history():
 
 import multiprocessing as mp
 import threading
-
+model_list=[]
+batch_list=[]
 if __name__ == "__main__":
     # 创建线程安全的队列
     in_queue  = queue.Queue()
     out_queue = queue.Queue()
     # 如果你在 taski 里需要锁，打开下一行并在 Thread args 中传入
     # lock = threading.Lock()
-
+    print("开始显卡加载模型")
+    for gpu_usage in range(N_PROCS):
+        collaboration=GPTJCloudEdgeCollaborator(device_cloud=f'cuda:{gpu_usage}')
+        batch_input=load_batch()['input_embeds'].half().to(f'cuda:{gpu_usage}')
+        batch_output=load_batch()['target'].to(f'cuda:{gpu_usage}')
+        model_list.append(collaboration)
+        batch_list.append((batch_input,batch_output))
     threads = []
     for i in range(N_PROCS):
         t = threading.Thread(
             target=taski,
-            args=(out_queue, in_queue, i),  # 如需 lock，改为 (out_queue, in_queue, i, lock)
+            args=(out_queue, in_queue, i,model_list[i],batch_list[i][0],batch_list[i][1]),  # 如需 lock，改为 (out_queue, in_queue, i, lock)
+            # args=(out_queue, in_queue, i),  # 如需 lock，改为 (out_queue, in_queue, i, lock)
         )
         t.daemon = True
         t.start()
@@ -1165,8 +1206,9 @@ if __name__ == "__main__":
 
     # 启动生产-消费逻辑
     # asto(3, 5, in_queue, out_queue)
-    asto(15,35,in_queue,out_queue)
-
+    asto(10,20,in_queue,out_queue)
+    for i in range(N_PROCS):
+        in_queue.put(None)
     # 等待所有线程结束
     for t in threads:
         t.join()
