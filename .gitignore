@@ -5,3 +5,5 @@ model/
 p_model/
 *.pth
 gpt2/
+gpt-j-6b/
+gptj-6b.tar

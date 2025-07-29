@@ -93,7 +93,7 @@ class train_based_self_detection():
             self.warm_param=highest_lr/int(warm_epoch)
             self.warm_epoch=warm_epoch
             self.current_lr=0
-            super().__init__(optimizer, last_epoch, verbose)
+            super().__init__(optimizer, last_epoch,)
 
         def get_lr(self):
             if self.last_loss is None or self.loss is None:

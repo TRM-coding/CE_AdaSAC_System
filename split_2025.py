@@ -97,8 +97,14 @@ if __name__ == "__main__":
         
         # model,edge_layer_map=searcher.model_reduce([2, 2, 3, 3, 2, 4, 2, 2, 3, 0, 3, 4, 1, 2, 5, 8, 6, 5, 0, 2, 1, 3, 0, 3, 2, 4])
         # model,edge_layer_map=searcher.model_reduce([4, 1, 6, 5, 4, 6, 2, 5, 6, 1, 5, 5, 3, 5, 6, 8, 6, 4, 5, 4, 5, 5, 2, 4, 4, 5])
-        #model,edge_layer_map=searcher.model_reduce([4,4,2,5,3,5,5,1,5,1,4,2,0,5,6,7,5,6,4,2,5,4,0,5,3,4])
-        model,edge_layer_map=searcher.model_reduce([4,1,1,1])
+        # Res50:
+        # model,edge_layer_map=searcher.model_reduce([4,7,5,6,4,7,7,4,6,4,4,2])
+        # model,edge_layer_map=searcher.model_reduce([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+        # VGG16:
+        # model,edge_layer_map=searcher.model_reduce([1,3,2,2,3,5,4,4])
+        # model,edge_layer_map=searcher.model_reduce([5,6,7,7,8,6,7,4])
+        #alex:
+        model,edge_layer_map=searcher.model_reduce([0,0])
         # eA,c,eB=searcher.split(model,len(edge_layer_map))
         # qm=quantiseze_model([eA,c,eB])
         eA,c,eB=searcher.split(model,len(edge_layer_map))
@@ -114,3 +120,36 @@ if __name__ == "__main__":
         
 
         print("CODE:finish")
+import torch
+from torch.profiler import profile, record_function, ProfilerActivity
+# from thop import profile, clever_format
+if __name__=="__main__":
+    eA=torch.load("./clientA_alex.pth",weights_only=False)
+    c=torch.load("./clientB_alex.pth",weights_only=False)
+    input=torch.rand(2,3,224,224).to('cuda:3')
+    
+    with profile(
+        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],  # 如果只测 GPU FLOPs，也可以去掉 CPU
+        record_shapes=True,      # 记录各 op 的输入输出形状，才能估 FLOPs
+        with_flops=True,         # 打开 FLOPs 统计
+        profile_memory=False     # 不统计显存分配，保持输出简洁
+    ) as prof:
+    # 用 record_function 标记你关心的计算区间
+        # out=c(inter)
+        inter=eA(input)
+    # flops, params = profile(eA, inputs=(input,))
+    print("shape_of_inter:",inter.shape)
+    print("edge_flos:---------------------------")
+    # print(flops)
+    print(prof.key_averages().table(sort_by="flops", row_limit=20))
+
+    # with profile(
+    #     activities=[ProfilerActivity.CUDA],  # 如果只测 GPU FLOPs，也可以去掉 CPU
+    #     record_shapes=True,      # 记录各 op 的输入输出形状，才能估 FLOPs
+    #     with_flops=True,         # 打开 FLOPs 统计
+    #     profile_memory=False     # 不统计显存分配，保持输出简洁
+    # ) as proff:
+        
+    print("cloud_flops:-------------------------")
+    # print(proff.key_averages().table(sort_by="flops", row_limit=20))
+    
