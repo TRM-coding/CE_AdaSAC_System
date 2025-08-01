@@ -515,24 +515,12 @@ if __name__ == "__main__":
     )
     
     # 定义每层的压缩率（28层，每层压缩率不同）
-    # reduce_rates = [0.1] *  + [0.0] * 24  # 前14层压缩20%，后14层压缩30%
-    reduce_rates=[]
-    for i in range(28):
-        if(i%3==0):
-            reduce_rates.append(0.6)
-        else:
-            reduce_rates.append(0)
+    reduce_rates=[0.4,0.2,0.1,0.1,0.5,0.3,0.6,0.1,0.5,0.2,0.2,0.2,0.6,0.3,0.5,0.4,0.6,0.2,0.4,0.1,0.1,0.1,0.5,0.1,0.1,0.4,0.1,0.2]
     
     # 应用SVD压缩
     model.apply_svd_compression(reduce_rates, svd_device='cuda:0')
     
-    # # 方法2：直接创建压缩模型
-    # compressed_model = create_compressed_gptj_model(
-    #     device_cloud='cuda:0',
-    #     device_edge='cuda:0',
-    #     reduce_rates=[0.25] * 28,  # 每层压缩25%
-    #     svd_device='cuda:0'
-    # )
+
     
     # 生成文本测试
     prompt = "The future of artificial intelligence is"
@@ -548,6 +536,7 @@ if __name__ == "__main__":
     print(f"生成结果: {generated_text}")
 
     dataloader=load_and_tokenize_dataset(tokenizer=model.tokenizer)
-    evaluate_minipile_gptj(model=model,Dataloader=dataloader)
+    loss,perplexity=evaluate_minipile_gptj(model=model,Dataloader=dataloader)
+    print("loss:",loss,"perplexity:",perplexity)
 
 

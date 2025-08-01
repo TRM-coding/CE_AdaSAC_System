@@ -235,7 +235,7 @@ class InputOptimizer:
             print(f"保存失败: {e}")
             raise
 
-
+import time
 if __name__ == "__main__":
     optimizer = InputOptimizer(
         model_name='AI-ModelScope/gpt-j-6b',
@@ -243,11 +243,13 @@ if __name__ == "__main__":
         batch_size=2,
         seq_len=256,
         hidden_size=4096,
-        lr=1.2e-3,
+        lr=1.2e-2,
         kd=1e-3  # example derivative gain
     )
-
+    time1=time.time()
     optimized_input,target = optimizer.optimize(num_steps=50000, print_every=20)
-    optimizer.save_data(optimized_input,target)
+    time2=time.time()
+    print(time2-time1)
+    # optimizer.save_data(optimized_input,target)
     # optimized_input.shape == (4, 32, 4096)
 

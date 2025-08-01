@@ -261,8 +261,8 @@ def evaluate_minipile_gptj(model, batch_size: int = 1, cache_dir: str = "./minip
 
 
             # 手动 shift：logits 丢掉最后一位，labels 丢掉第一位
-            # shift_logits = logits[:, :-1, :].contiguous()    # [B, T-1, V]
-            # shift_labels = labels[:, 1:].contiguous()        # [B, T-1]
+            shift_logits = logits[:, :-1, :].contiguous()    # [B, T-1, V]
+            shift_labels = labels[:, 1:].contiguous()        # [B, T-1]
 
             shift_logits=logits
             labels=labels

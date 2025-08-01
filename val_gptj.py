@@ -1,8 +1,3 @@
-
-
-
-
-
 import pickle
 import torch
 import os
@@ -15,6 +10,8 @@ from modelscope.utils.hub import snapshot_download
 from transformers import AutoTokenizer
 from detection.SVD_model import SVDED_GPTJ_EDGE_Layer
 import os
+import gc
+import copy
 
 datafolder="./GPTJ_SVD_DATA"
 cloud_flops=0
@@ -49,27 +46,53 @@ class gptJ_edge(nn.Module):
     
     # 在 gptJ_edge_layer 类中添加 clear 方法
     def clear(self):
+        for layeri in self.layers:
+            if isinstance(layeri,gptJ_edge_layer):
+                del layeri
+                continue
+            del layeri.v_svd['U']
+            del layeri.v_svd['V']
+            del layeri.v_svd['bias']
+            del layeri.out_proj_svd['U']
+            del layeri.out_proj_svd['V']
+            del layeri.out_proj_svd['bias']
+            del layeri.fc_in_svd['U']
+            del layeri.fc_in_svd['V']
+            del layeri.fc_in_svd['bias']
+            del layeri.fc_out_svd['U']           
+            del layeri.fc_out_svd['V']        
+            del layeri.fc_out_svd['bias']
+            del layeri
         del self.layers
+        gc.collect()
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
         self.layers=nn.ModuleList()
     
-    def add_layer(self,layer):
-        if isinstance(layer,SVDED_GPTJ_EDGE_Layer):
-            layer.v_svd['U']=layer.v_svd['U'].to('cuda:0')
-            layer.v_svd['V']=layer.v_svd['V'].to('cuda:0')
-            layer.v_svd['bias']=layer.v_svd['bias'].to('cuda:0')
-            layer.out_proj_svd['U']=layer.out_proj_svd['U'].to('cuda:0')
-            layer.out_proj_svd['V']=layer.out_proj_svd['V'].to('cuda:0')
-            layer.out_proj_svd['bias']=layer.out_proj_svd['bias'].to('cuda:0')
-            layer.fc_in_svd['U']=layer.fc_in_svd['U'].to('cuda:0')
-            layer.fc_in_svd['V']=layer.fc_in_svd['V'].to('cuda:0')
-            layer.fc_in_svd['bias']=layer.fc_in_svd['bias'].to('cuda:0')
-            layer.fc_out_svd['U']=layer.fc_out_svd['U'].to('cuda:0')            
-            layer.fc_out_svd['V']=layer.fc_out_svd['V'].to('cuda:0')            
-            layer.fc_out_svd['bias']=layer.fc_out_svd['bias'].to('cuda:0')            
+    def add_layer(self,layeri,device,dtype=torch.float16):
+        layer=copy.deepcopy(layeri)
+        # layer=layer.to(dtype)
         
-        self.layers.append(layer.to('cuda:0'))
+        if isinstance(layer,SVDED_GPTJ_EDGE_Layer):
+            layer.v_svd['U']=layer.v_svd['U'].to(device=device,dtype=dtype)
+            layer.v_svd['V']=layer.v_svd['V'].to(device=device,dtype=dtype)
+            layer.v_svd['bias']=layer.v_svd['bias'].to(device=device,dtype=dtype)
+            layer.out_proj_svd['U']=layer.out_proj_svd['U'].to(device=device,dtype=dtype)
+            layer.out_proj_svd['V']=layer.out_proj_svd['V'].to(device=device,dtype=dtype)
+            layer.out_proj_svd['bias']=layer.out_proj_svd['bias'].to(device=device,dtype=dtype)
+            layer.fc_in_svd['U']=layer.fc_in_svd['U'].to(device=device,dtype=dtype)
+            layer.fc_in_svd['V']=layer.fc_in_svd['V'].to(device=device,dtype=dtype)
+            layer.fc_in_svd['bias']=layer.fc_in_svd['bias'].to(device=device,dtype=dtype)
+            layer.fc_out_svd['U']=layer.fc_out_svd['U'].to(device=device,dtype=dtype)            
+            layer.fc_out_svd['V']=layer.fc_out_svd['V'].to(device=device,dtype=dtype)            
+            layer.fc_out_svd['bias']=layer.fc_out_svd['bias'].to(device=device,dtype=dtype)
+        
+        # 将整个层移动到设备，并确保数据类型
+        layer = layer.to(device=device,  )
+        self.layers.append(layer)
+        gc.collect()
+        return
+from torch.profiler import profile, ProfilerActivity
 
 class GPTJCloudEdgeCollaborator(nn.Module):
     """
@@ -78,18 +101,21 @@ class GPTJCloudEdgeCollaborator(nn.Module):
     边侧：完成V的计算和最终的attention输出
     """
     
-    def __init__(self, model_name='AI-ModelScope/gpt-j-6b', device_cloud='cuda:0', device_edge='cuda:0'):
+    def __init__(self, model_name='AI-ModelScope/gpt-j-6b', device_cloud='cuda:0'):
         super().__init__()
         
         self.device_cloud = device_cloud
-        self.device_edge = device_edge
+        self.device_edge = device_cloud
+        self.flops_edge=0
+        self.flops_cloud=0
         
         # 初始化云侧和边侧模型
         print(f"初始化云侧模型 (设备: {device_cloud})...")
-        self.cloud = gptJ_cloud(model_name=model_name).to(device_cloud)
+        self.cloud = gptJ_cloud(model_name=model_name,dtype=torch.int8)
+        self.cloud =self.cloud.to(device_cloud)
         
-        print(f"初始化边侧模型 (设备: {device_edge})...")
-        self.edge = gptJ_edge(model_name=model_name,svd=True).to(device_edge)
+        print(f"初始化边侧模型 (设备: {device_cloud})...")
+        self.edge = gptJ_edge(model_name=model_name,svd=True).to(device_cloud)
         
         # 获取共享的组件（embedding和输出层）
         self.embed = self.cloud.model.transformer.wte.to(device_cloud)
@@ -116,7 +142,7 @@ class GPTJCloudEdgeCollaborator(nn.Module):
         self.svd_layers = None
         self.origin_layers= []
 
-    def forward(self, input_ids, attention_mask=None,reduce_rate=0,need_embedding=True):
+    def forward(self, input_ids, attention_mask=None,reduce_rate=0,need_embedding=True,flops_eval=False):
         """
         前向传播用于数据集评估
         Args:
@@ -149,26 +175,48 @@ class GPTJCloudEdgeCollaborator(nn.Module):
         # 创建position_ids
         position_ids = torch.arange(seq_len, device=self.device_cloud).unsqueeze(0).expand(batch_size, -1)
         
+        prof_cloud = profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            record_shapes=True,
+            with_flops=True,
+        )
+        prof_edge = profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            record_shapes=True,
+            with_flops=True,
+        )
+
         # 3. 逐层处理
         for layer_idx in range(self.num_layers):
             # 云侧：计算Q、K和attention权重（传入attention_mask和position_ids）
             
+            if(flops_eval):
+                prof_cloud.start()
             q, k, attn_weights = self.cloud.forward_no_cache(
                     x, layer_idx, position_ids, attention_mask.to(self.device_cloud)
             )
+            if flops_eval:
+                prof_cloud.stop()
            
             # 将数据传输到边侧设备
             x_edge = x.to(self.device_edge)
             attn_weights_edge = attn_weights.to(self.device_edge)
             
+
+            if flops_eval:
+                prof_edge.start()
             _, x_edge = self.edge.forward_no_cache(x_edge, layer_idx, attn_weights_edge)
- 
+            if flops_eval:
+                prof_edge.stop()
     
 
             # 将结果传回云侧
             x = x_edge.to(self.device_cloud)
         
         # 4. 最终的Layer Norm和LM Head
+        if flops_eval:
+            self.flops_cloud = sum(evt.flops for evt in prof_cloud.key_averages())
+            self.flops_edge =sum(evt.flops for evt in prof_edge.key_averages())
         x = self.ln_f(x)
         logits = self.lm_head(x)
         return logits
@@ -347,79 +395,13 @@ class GPTJCloudEdgeCollaborator(nn.Module):
         return compression_info
 
 
-def load_svd_layer(layer_idx,reduce_rate):
-    print(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth")
-    if os.path.exists(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_origin.pth"):
-        newlayer=torch.load(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_origin.pth",weights_only=False,map_location='cpu')
-        return newlayer
-    elif os.path.exists(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth"):
-        newlayer=torch.load(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth",weights_only=False,map_location='cpu')
-        return newlayer
-    else :
-        return None
 
-def count_flops(collaboration_model:GPTJCloudEdgeCollaborator):
-    cloud=0
-    edge=0
-    for layer in collaboration_model.edge.layers:
-        edge+=layer.flops
-    for layer,flops in cloud_flops:
-        cloud+=flops
-    return cloud,edge
 
-    
-
-def load_batch(filepath="./GPTJ_inputbatch.pkl"):
-    try:
-        with open(filepath, 'rb') as f:
-            data_dict = pickle.load(f)
-        
-        print(f"数据已成功加载: {filepath}")
-        
-        # 打印加载信息
-        if 'metadata' in data_dict:
-            metadata = data_dict['metadata']
-            print(f"生成时间: {metadata.get('generation_time', 'Unknown')}")
-            print(f"批次大小: {metadata.get('batch_size', 'Unknown')}")
-            print(f"序列长度: {metadata.get('seq_len', 'Unknown')}")
-            print(f"隐藏层大小: {metadata.get('hidden_size', 'Unknown')}")
-        
-        print(f"Input embeddings 形状: {data_dict['shapes']['input_embeds']}")
-        print(f"Target 形状: {data_dict['shapes']['target']}")
-        
-        return data_dict
-        
-    except FileNotFoundError:
-        print(f"文件未找到: {filepath}")
-        raise
-    except Exception as e:
-        print(f"加载失败: {e}")
-        raise
-
-batch_input=load_batch()['input_embeds'].half().to('cuda:0')
-batch_output=load_batch()['target'].to('cuda:0')
-import math
-def get_loss(model:GPTJCloudEdgeCollaborator,input_batch,output_batch):
-    loss=0
-    criterion = nn.CrossEntropyLoss(reduction='mean')
-    model.eval()
-    with torch.no_grad():
-        outputs = model(input_ids=input_batch,need_embedding=False)
-        # logits  = torch.log_softmax(outputs, dim=-1)              # [B, T, V]
-
-        loss = criterion(
-            outputs.view(-1, outputs.size(-1)).to(torch.float32),
-            output_batch.view(-1)
-        )
-        perplexity=torch.exp(loss)
-    return loss,perplexity
-import random
-import time
 
 from datasets import load_dataset
 from transformers import DataCollatorForLanguageModeling
 from torch.utils.data import DataLoader
-def load_and_tokenize_dataset(cache_dir: str='./minipile_cache', tokenizer=None, batch_size: int = 4):
+def load_and_tokenize_dataset(cache_dir: str='./minipile_cache', tokenizer=None, batch_size: int = 1):
     """
     Loads and tokenizes the MiniPile dataset.
 
@@ -459,10 +441,11 @@ def load_and_tokenize_dataset(cache_dir: str='./minipile_cache', tokenizer=None,
 from tqdm import tqdm
 import math
 from torch import nn
-def evaluate_minipile_gptj(model, batch_size: int = 8, cache_dir: str = "./minipile_cache", Dataloader=None) -> dict:
+svd_layers={}
+def evaluate_minipile_gptj(model, batch_size: int = 1, cache_dir: str = "./minipile_cache", Dataloader=None) -> dict:
    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # model.to(device)
+    model.to(device)
     model.eval()
 
    
@@ -479,10 +462,9 @@ def evaluate_minipile_gptj(model, batch_size: int = 8, cache_dir: str = "./minip
     # Evaluation loop
     total_loss = 0.0
     total_batches = 0
-
-    # model.eval()
     avg_loss=0
     perplexity=0
+    # model.eval()
     with torch.no_grad():
         for batch_idx, batch in enumerate(tqdm(dataloader, desc="Evaluating")):
             # 拿到完整的 input_ids, attention_mask, 和已经被 collator 设好 -100 的 labels
@@ -522,101 +504,85 @@ def evaluate_minipile_gptj(model, batch_size: int = 8, cache_dir: str = "./minip
 
     return {"avg_loss": avg_loss, "perplexity": perplexity}
 
+def load_svd_layer(layer_idx,reduce_rate):
+    # print(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth")
+    gc.collect()
+    if((layer_idx,reduce_rate) in svd_layers):
+        return svd_layers[(layer_idx,reduce_rate)]
+    if os.path.exists(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_origin.pth"):
+        newlayer=torch.load(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_origin.pth",weights_only=False,map_location='cpu')
+        if hasattr(newlayer,"original_layer"):
+            del newlayer.original_layer
+        newlayer=newlayer.half()
+        svd_layers[(layer_idx,reduce_rate)]=newlayer
+        return newlayer
+    elif os.path.exists(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth"):
+        newlayer=torch.load(f"./GPTJ_SVD_DATA/gptj_svd_layer{layer_idx}_reduce_rate{reduce_rate}_svd.pth",weights_only=False,map_location='cpu')
+        if hasattr(newlayer,"original_layer"):
+            del newlayer.original_layer
+        newlayer=newlayer.half()
+        svd_layers[(layer_idx,reduce_rate)]=newlayer
+        return newlayer
+    else :
+        return None
+
 def get_model(model:GPTJCloudEdgeCollaborator,reduce_list:list):
-    model.edge.clear()
-    layer_idx=0
-    for rate in reduce_list:
-        newlayer=load_svd_layer(layer_idx=layer_idx,reduce_rate=rate)
-        model.edge.add_layer(newlayer)
-        layer_idx=layer_idx+1
+    try:
+        model.edge.clear()
+        device=model.device_cloud
+        layer_idx=0
+        for rate in reduce_list:
+            newlayer=load_svd_layer(layer_idx=layer_idx,reduce_rate=rate)
+            model.edge.add_layer(newlayer,device,dtype=torch.int8)
+            layer_idx=layer_idx+1
+    except Exception as e:
+        print("Exceptions in get_model:")
+        print(e)
+        # traceback.print_exc()
+    # model.edge.clear()
 
 
-import numpy as np
 
-
-import pickle
-
-if __name__=="__main__":
-    collaboration=GPTJCloudEdgeCollaborator()
-    # dataloader=load_and_tokenize_dataset(tokenizer=collaboration.tokenizer,batch_size=8)
-    rate=[0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]
-    res={}
-    for k in range(1,10):
-        for i in range(20):
-            print(f"------------开始验证第{i}种随机方案-------------")
-            selected = [random.choice(rate[:k+1]) for _ in range(28)] 
-            get_model(collaboration,selected)
-            # ans=evaluate_minipile_gptj(collaboration)
-            loss,perplexity=get_loss(collaboration,batch_input,batch_output)
-            # loss=ans['avg_loss']
-            # perplexity=ans['perplexity']
-            res[tuple(selected)]={}
-            res[tuple(selected)]['loss']=loss
-            res[tuple(selected)]['perplexity']=perplexity
-            with open('GPTJ_ISP_VAL_generated.pkl', 'wb') as file:
-                loaded_data = pickle.dump(res,file)
-            print("loss:",loss," perplexity: ",perplexity)
-
-# def load_batch(filepath="./GPTJ_inputbatch.pkl"):
-#     try:
-#         with open(filepath, 'rb') as f:
-#             data_dict = pickle.load(f)
-        
-#         print(f"数据已成功加载: {filepath}")
-        
-#         # 打印加载信息
-#         if 'metadata' in data_dict:
-#             metadata = data_dict['metadata']
-#             print(f"生成时间: {metadata.get('generation_time', 'Unknown')}")
-#             print(f"批次大小: {metadata.get('batch_size', 'Unknown')}")
-#             print(f"序列长度: {metadata.get('seq_len', 'Unknown')}")
-#             print(f"隐藏层大小: {metadata.get('hidden_size', 'Unknown')}")
-        
-#         print(f"Input embeddings 形状: {data_dict['shapes']['input_embeds']}")
-#         print(f"Target 形状: {data_dict['shapes']['target']}")
-        
-#         return data_dict
-        
-#     except FileNotFoundError:
-#         print(f"文件未找到: {filepath}")
-#         raise
-#     except Exception as e:
-#         print(f"加载失败: {e}")
-#         raise
-
-# def get_loss(model:GPTJCloudEdgeCollaborator,input_batch,output_batch):
-#     try:
-#         criterion = nn.KLDivLoss(reduction='batchmean')
-#         model.eval()
-#         with torch.no_grad():
-#             outputs = model(input_ids=input_batch,need_embedding=False)
-#             logits  = torch.log_softmax(outputs, dim=-1)              # [B, T, V]
-
-#             loss = criterion(logits,output_batch)
-#     except Exception as e:
-#         print("Exceptions in get_loss:")
-#         print(e)
-#         # traceback.print_exc()
-
-#     return loss
-
-# if __name__=="__main__":
-#     collaboration=GPTJCloudEdgeCollaborator()
-#     # dataloader=load_and_tokenize_dataset(tokenizer=collaboration.tokenizer,batch_size=8)
-#     batch_input=load_batch()['input_embeds'].half().to(f'cuda:0')
-#     batch_output=load_batch()['target'].half().to(f'cuda:0')
-#     rate=[0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7]
-#     res={}
+# 示例使用
+if __name__ == "__main__":
+    # 方法1：创建普通模型后手动应用压缩
+    model=GPTJCloudEdgeCollaborator(device_cloud=f'cuda:{0}')
     
-#     for i in range(20):
-#         print(f"------------开始验证第{i}种随机方案-------------")
-#         selected = [random.choice(rate) for _ in range(28)] 
-#         get_model(collaboration,selected)
-#         ans=get_loss(collaboration,batch_input,batch_output)
-#         loss=ans
-#         print("loss:",loss)
-
-        
+    # loss_spi=get_loss(collaboration,batch_input,batch_output)
+    
+    # 定义每层的压缩率（28层，每层压缩率不同）\
+    #alpha=0.9
+    reduce_rates=[0.1,0.2,0.1,0.1,0.3,0.1,0.1,0.1,0.1,0.2,0.2,0.2,0.1,0.3,0.1,0.1,0.1,0.2,0.4,0.1,0.1,0.1,0.3,0.1,0.1,0.4,0.1,0.2]
+    get_model(model,reduce_rates)
+    # 应用SVD压缩
+    # model.apply_svd_compression(reduce_rates, svd_device='cuda:0')
     
 
     
+    # 生成文本测试
+    prompt = "The future of artificial intelligence is"
+    generated_text = model.generate(
+        prompt=prompt,
+        max_length=20,
+        temperature=0.7,
+        top_p=0.8,
+        do_sample=False
+    )
+    
+    print(f"压缩信息: {model.get_compression_info()}")
+    print(f"生成结果: {generated_text}")
+
+    dataloader=load_and_tokenize_dataset(tokenizer=model.tokenizer)
+    loss=evaluate_minipile_gptj(model=model,Dataloader=dataloader)
+    print(loss)
+    first_batch = next(iter(dataloader))
+    # 拿到完整的 input_ids, attention_mask, 和已经被 collator 设好 -100 的 labels
+    input_ids    = first_batch['input_ids'].to('cuda:0')       
+        # [B, T], pad 已经是 -100
+
+    # input=torch.randint(1,100)
+    model.forward(input_ids=input,flops_eval=True)
+    print("flops_edge:",model.flops_edge)
+    print("flops_cloud:",model.flops_cloud)
+
+

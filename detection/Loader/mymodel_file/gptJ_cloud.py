@@ -16,7 +16,7 @@ def apply_rotary_pos_emb(q, k, cos, sin):
     return q_embed, k_embed
 
 class gptJ_cloud(nn.Module):
-    def __init__(self, model_name='AI-ModelScope/gpt-j-6b'):
+    def __init__(self, model_name='AI-ModelScope/gpt-j-6b',dtype=torch.float16):
         super().__init__()
         
         # 如果是 HuggingFace 仓库名，使用 ModelScope 下载
@@ -33,7 +33,7 @@ class gptJ_cloud(nn.Module):
         try:
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_path,
-                torch_dtype=torch.float16,
+                torch_dtype=dtype,
                 trust_remote_code=True,
                 weights_only=False
             )

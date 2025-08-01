@@ -17,9 +17,9 @@ if __name__ == '__main__':
 
     mp.set_start_method('spawn', force=True)
     print("CODE:loading_alex")
-    # model=VGG16Loader().load()
+    model=VGG16Loader().load()
     # model=AlexnetLoader().load()
-    model=Resnet50Loader().load()
+    # model=Resnet50Loader().load()
     print("CODE:loading_finished")
     device=CONFIG.DEFAULT_DEVICE
     back_device=CONFIG.DEFAULT_DEVICE
@@ -186,7 +186,7 @@ if __name__ == '__main__':
             init_specise=mapp,
             alpha_step=CONFIG.ALPHASTEP,
         )
-        np.savez("np_task_number_change.npy",
+        np.savez("np_task_number_change_vgg.npy",
                 np_task_number_change=np_task_number_change,
                 np_f_change=np_f_change
         )

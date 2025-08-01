@@ -113,7 +113,7 @@ class gptJ_edge_layer(nn.Module):
         return v_new, x_out
 
 class gptJ_edge(nn.Module):
-    def __init__(self, model_name='AI-ModelScope/gpt-j-6b',svd=False):
+    def __init__(self, model_name='AI-ModelScope/gpt-j-6b',svd=False,dtype=torch.float16):
         super().__init__()
         
         # 如果是 HuggingFace 仓库名，使用 ModelScope 下载
@@ -132,7 +132,7 @@ class gptJ_edge(nn.Module):
         try:
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_path,
-                torch_dtype=torch.float16,
+                torch_dtype=dtype,
                 trust_remote_code=True,
             )
         except Exception as e:

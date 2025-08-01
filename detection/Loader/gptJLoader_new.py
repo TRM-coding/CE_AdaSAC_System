@@ -6,6 +6,7 @@ from mymodel_file.gptJ_cloud import gptJ_cloud
 from mymodel_file.gptJ_edge import gptJ_edge
 
 
+
 class GPTJCloudEdgeCollaborator(nn.Module):
     """
     GPT-J 云边协同模型
@@ -21,10 +22,10 @@ class GPTJCloudEdgeCollaborator(nn.Module):
         
         # 初始化云侧和边侧模型
         print(f"初始化云侧模型 (设备: {device_cloud})...")
-        self.cloud = gptJ_cloud(model_name=model_name).to(device_cloud)
+        self.cloud = gptJ_cloud(model_name=model_name,dtype=torch.int8).to(device_cloud)
         
         print(f"初始化边侧模型 (设备: {device_edge})...")
-        self.edge = gptJ_edge(model_name=model_name).to(device_edge)
+        self.edge = gptJ_edge(model_name=model_name,dtype=torch.int8).to(device_edge)
         
         # 获取共享的组件（embedding和输出层）
         self.embed = self.cloud.model.transformer.wte.to(device_cloud)
@@ -420,9 +421,11 @@ if __name__ == "__main__":
     print(f"原始prompt: {prompt}")
     print(f"完整生成文本: {generated_text}")
 
+    # torch.randint(1,100)
 
     dataloader=load_and_tokenize_dataset(tokenizer=model.tokenizer)
-    evaluate_minipile_gptj(model=model,Dataloader=dataloader)
+    loss=evaluate_minipile_gptj(model=model,Dataloader=dataloader)
+    print(loss)
     # prompt='China is a'
     # generated_text = model.generate(
     #     prompt=prompt,

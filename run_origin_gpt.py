@@ -12,8 +12,10 @@ model_path = snapshot_download(
 
 model = AutoModelForCausalLM.from_pretrained(
                 model_path,
-                torch_dtype=torch.float32,
+                # torch_dtype=torch.float32,
+                load_in_8bit=True,
                 trust_remote_code=True,
+                device_map="cuda:0", 
                 weights_only=False
 )
 
@@ -66,7 +68,7 @@ dataloader=load_and_tokenize_dataset("./minipile_cache",tokenizer,1)
 
 prompt='China is a'
 inputs = tokenizer(prompt, return_tensors='pt')
-model=model.to('cuda:0')
+# model=model.to('cuda:0')
 output=model(input_ids=inputs['input_ids'].to('cuda:0'))
 logits=output.logits
 predicted_ids = torch.argmax(logits, dim=-1)
@@ -117,4 +119,5 @@ with torch.no_grad():
         total_batches+= 1
 
 avg_loss = total_loss / total_batches
+print(avg_loss)
 # perplexity = math.exp(avg_loss)

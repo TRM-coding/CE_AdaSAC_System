@@ -6,8 +6,8 @@ CONFIG = Namespace(
     GPU_AVAILABLE                 = (0,7),
     UNAVAILABLE                   = [0,1],
     DEFAULT_DEVICE                = "cuda:3",
-    CUT_STEP                      =0.1,
-    MODEL_LAYER_NUMBER            =50,
+    CUT_STEP                      =0.3,
+    MODEL_LAYER_NUMBER            =16,
     ALPHA                         =0.9,# alpha ->time
     QUANTISIZED_TYPE              =torch.qint8,
 
@@ -30,11 +30,11 @@ CONFIG = Namespace(
 
     GENERATE_EPOCH_WARM=15,
     INIT_SIZE_WARM=300,
-    WORKERNUMBER=15,
+    WORKERNUMBER=4,
     ASTOEPOCH=30,
     ALPHASTEP=0.1,
 
-    SAVE_PATH_SCHEME="./cloud_pi_res.txt_",
+    SAVE_PATH_SCHEME="./cloud_pi_res_vgg16.txt_",
     LOAD_NUMBER=12,
     CLOUD_PORT=5000,
     CLOUDIP='10.126.59.25',
