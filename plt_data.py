@@ -224,9 +224,9 @@ plt.title('Performance Comparison: Cloud Throughput vs Edge Computing Load\nAcro
 plt.tight_layout()
 
 # 保存高质量图片
-plt.savefig('infocom_performance_analysis.png', dpi=300, bbox_inches='tight', 
+plt.savefig('overhead_througput.png', dpi=300, bbox_inches='tight', 
             facecolor='white', edgecolor='none')
-plt.savefig('infocom_performance_analysis.pdf', bbox_inches='tight', 
+plt.savefig('overhead_througput.pdf', bbox_inches='tight', 
             facecolor='white', edgecolor='none')
 
 # 显示图片

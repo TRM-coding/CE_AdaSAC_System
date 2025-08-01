@@ -34,8 +34,8 @@ CONFIG = Namespace(
     ASTOEPOCH=30,
     ALPHASTEP=0.1,
 
-    SAVE_PATH_SCHEME="./cloud_pi_res.txt_",
-    LOAD_NUMBER=12,
+    SAVE_PATH_SCHEME="./asto_res50.txt",
+    LOAD_NUMBER=64,
     CLOUD_PORT=5000,
     CLOUDIP='10.126.59.25',
     TIMEOUT=60,

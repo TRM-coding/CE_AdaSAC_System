@@ -563,7 +563,7 @@ class Recrusively_reduce_search:
 
     def searcer_GA_V2(self,init_specise,alpha_step):
         task_number_change=[]
-        f_change=[]
+        f_change={}
         species=[tuple(x) for x in init_specise]
         species_map={(x[0],round(x[1],1)):y for x,y in init_specise.items()}
         # species_map={}
@@ -606,6 +606,8 @@ class Recrusively_reduce_search:
             generate_epoch=CONFIG.ASTOEPOCH
             init_species=[]
             for x in species:
+                # if x not in init_species:
+                #     continue
                 if init_specise[x][0]>=avege_alpha[alpha]:
                     init_species.append(x[0]) 
             while(generate_epoch):
@@ -691,8 +693,10 @@ class Recrusively_reduce_search:
                 cbsorted=cbsorted[:self.init_size]
                 init_species=[x[0] for x in cbsorted]
                 F_score_list=[x[1] for x in cbsorted]
-                if(alpha==0.5):
-                    f_change.append(max(F_score_list))
+                if(alpha not in f_change):
+                    f_change[alpha]=[]
+                
+                f_change[alpha].append(max(F_score_list))
                 # 构造归一化积分函数
                 sums=sum(F_score_list)
                 for i,_ in enumerate(F_score_list):

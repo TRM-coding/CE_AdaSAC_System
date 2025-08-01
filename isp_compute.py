@@ -49,7 +49,7 @@ if __name__ == "__main__":
     )
 
 
-    inputs_img=datamaker.make_data_img()
+    # inputs_img=datamaker.make_data_img()
     inputs_maked,output_label,label,highest_loss,lowest_loss= datamaker.make_data_pid(
             total_number=CONFIG.TEST_DATA_TOTAL_NUMBER,
             batch_size=CONFIG.TEST_DATA_BATCH_SIZE,
@@ -66,17 +66,19 @@ if __name__ == "__main__":
     )
     # inputs_maked=(inputs_maked.to(device),label.to(device))
     # inputs_maked=[(inputs_maked[i].to(device),label[i].to(device)) for i in range(len(inputs_maked))]
-
-    little_batch=inputs_img[0][0]
+    inputs_random=torch.rand_like(inputs_maked)
+    output_label_random=torch.rand_like(output_label)
+    label_random = torch.randint_like(label, low=1, high=1001)
+    # little_batch=inputs_img[0][0]
     torch.cuda.empty_cache()
 
     with torch.no_grad():
         searcher=detection.Spliter.Recrusively_reduce_search(
                 model=model,
                 no_weight=True,
-                input_data=inputs_maked,
-                output_label=output_label,
-                label=label,
+                input_data=inputs_random,
+                output_label=output_label_random,
+                label=label_random,
                 device=device,
                 back_device=back_device,
                 highest_loss=0,
@@ -101,21 +103,28 @@ if __name__ == "__main__":
         #评估自生成数据
         maked_acc=[]
         maked_loss=[]
+        import random
         print("start eval maked_data")
-        number_of_layer_reduce=CONFIG.EVAL_REDUCE_NUMBER
-        for i in number_of_layer_reduce:
+        number_of_layer_reduce=15
+        eval_list=[]
+        for max_reduce_rate in range(10):
+            for numbers in range(20):
+                reduce_rate=[random.randint(0,max_reduce_rate) for _ in range(number_of_layer_reduce)]
+                eval_list.append(reduce_rate)
+
+        for reduce_scheme in eval_list:
             with torch.no_grad():
                 tmp_acc=[]
                 tmp_loss=[]
-                for j in range(10):
-                    model,edge_layer_map=searcher.model_reduce([j for _ in range(i)])
-                    eA,c,eB=searcher.split(model,len(edge_layer_map))
-                    qm=quantiseze_model([eA,c,eB])
-                    # elaver=eval(inputs_maked,qm)
-                    # loss,acc=elaver.eval()
-                    acc,loss=searcher.acc_loss_evaluate(qm)
-                    tmp_acc.append(acc)
-                    tmp_loss.append(loss)
+                
+                model,edge_layer_map=searcher.model_reduce(reduce_scheme)
+                eA,c,eB=searcher.split(model,len(edge_layer_map))
+                qm=quantiseze_model([eA,c,eB])
+                # elaver=eval(inputs_maked,qm)
+                # loss,acc=elaver.eval()
+                acc,loss=searcher.acc_loss_evaluate(qm)
+                tmp_acc.append(acc)
+                tmp_loss.append(loss)
                     
             maked_acc.append(tmp_acc)
             maked_loss.append(tmp_loss)
@@ -123,30 +132,28 @@ if __name__ == "__main__":
 
         img_acc=[]
         img_loss=[]
-        print("start eval img_data")
-        model_len=CONFIG.MODEL_LAYER_NUMBER
-        for i in number_of_layer_reduce:
-            with torch.no_grad():
-                tmp_acc=[]
-                tmp_loss=[]
-                for j in range(10):
-                    model,edge_layer_map=searcher.model_reduce([j for _ in range(i)])
-                    eA,c,eB=searcher.split(model,len(edge_layer_map))
-                    qm=quantiseze_model([eA,c,eB])
-                    elaver=eval(inputs_img,qm)
-                    loss,acc=elaver.eval()
-                    tmp_acc.append(acc)
-                    tmp_loss.append(loss)
-                    print("start eval")
+        # print("start eval img_data")
+        # model_len=CONFIG.MODEL_LAYER_NUMBER
+        # for reduce_scheme in eval_list:
+        #     with torch.no_grad():
+        #         tmp_acc=[]
+        #         tmp_loss=[]
+        #         model,edge_layer_map=searcher.model_reduce(reduce_scheme)
+        #         eA,c,eB=searcher.split(model,len(edge_layer_map))
+        #         qm=quantiseze_model([eA,c,eB])
+        #         elaver=eval(inputs_img,qm)
+        #         loss,acc=elaver.eval()
+        #         tmp_acc.append(acc)
+        #         tmp_loss.append(loss)
+        #         print("start eval")
                     
-            img_acc.append(tmp_acc)
-            img_loss.append(tmp_loss)
+        #     img_acc.append(tmp_acc)
+        #     img_loss.append(tmp_loss)
         
-        np.savez('./data_arrays_res50.npz',
-            maked_acc=maked_acc,
-            maked_loss=maked_loss,
-            img_acc=img_acc,
-            img_loss=img_loss)
+        np.savez('./ISP_RES50_EVAL_RANDOM.npz',
+            random_acc=maked_acc,
+            random_loss=maked_loss,
+            eval_list=eval_list)
 
         # x = np.arange(len(maked_acc))
         # x=list[i for i in range]
