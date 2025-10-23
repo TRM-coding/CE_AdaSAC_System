@@ -1,3 +1,7 @@
-python convert_hf_to_gguf.py ../models/tinyllama_1_1b/ --outfile ../gguf_models/tinyllama.gguf --outtype f16
-./build/bin/llama-eval-callback -m ../gguf_models/qwen.gguf -p "hello" -n 1 > ../gguf_models/qwen_out.txt
-python get_ops.py gguf_models/tiny_out.txt
+# 能耗测量实验
+
+* 主分支：main，用于更新实验数据和实验模板
+* 使用方法：拉取main分支到本地，创建新分支，每个分支独立负责一个推理框架的测试数据，提交pr合并到main分支
+* ops_time为第一个实验，具体描述见**测量项与测量细节.md**
+* 实验数据保存位置：ops_time下每一个算子给出了一个输出csv文件的模板result.csv,每个框架在该文件夹下独立保存,如：result_llama.csv
+* src用于保存每个框架实验所需的源码
