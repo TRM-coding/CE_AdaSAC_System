@@ -7,7 +7,12 @@ namespace py = pybind11;
 #define ENUM_VAL(e) .value(#e, e)
 
 PYBIND11_MODULE(opslib, m) {
-    // 1) 直接导出 ggml 的枚举类型与值（名字=头文件里的 token）
+    // 1) 导出 OPS_INFO 结构体
+    py::class_<OPS_INFO>(m, "OPS_INFO")
+        .def(py::init<>())
+        .def_readwrite("time_per_op_ms", &OPS_INFO::time_per_op_ms);
+
+    // 2) 直接导出 ggml 的枚举类型与值（名字=头文件里的 token）
     py::class_<ggml_tensor>(m, "ggml_tensor");
     py::enum_<ggml_prec>(m, "ggml_prec")
         ENUM_VAL(GGML_PREC_DEFAULT)
@@ -21,18 +26,22 @@ PYBIND11_MODULE(opslib, m) {
         /* … */
         .export_values();
 
-    // 2) 绑定 run_add
+    // 3) 绑定 run_add - 返回 OPS_INFO
     m.def("run_add", [](int times, ggml_type type, const std::array<int64_t, 4UL>& ne) {
-        RUN_ADD(times, type, ne);
+        OPS_INFO info;
+        RUN_ADD(times, type, ne, info);
+        return info;  // 返回性能信息
     },
         py::arg("times"),
         py::arg("type"),
         py::arg("ne"),
         "Run ggml add operation");
 
-    // 3) 绑定 run_cpy
+    // 4) 绑定 run_cpy - 返回 OPS_INFO
     m.def("run_cpy", [](int times, ggml_type type_src, ggml_type type_dst, const std::array<int64_t, 4UL>& ne) {
-        RUN_CPY(times, type_src, type_dst, ne);
+        OPS_INFO info;
+        RUN_CPY(times, type_src, type_dst, ne, info);
+        return info;  // 返回性能信息
     },
         py::arg("times"),
         py::arg("type_src"),
@@ -40,7 +49,7 @@ PYBIND11_MODULE(opslib, m) {
         py::arg("ne"),
         "Run ggml copy operation");
 
-    // 4) 绑定 run_flash_attn_ext
+    // 5) 绑定 run_flash_attn_ext - 返回 OPS_INFO
     m.def("run_flash_attn_ext", [](
         int times,
         int64_t hsk,
@@ -55,7 +64,9 @@ PYBIND11_MODULE(opslib, m) {
         float logit_softcap = 0.0f,
         ggml_prec prec = GGML_PREC_F32,
         ggml_type type_KV = GGML_TYPE_F16) {
-        RUN_FLASH_ATTN_EXT(times, hsk, hsv, nh, nr23, kv, nb, mask, sinks, max_bias, logit_softcap, prec, type_KV);
+        OPS_INFO info;
+        RUN_FLASH_ATTN_EXT(times, hsk, hsv, nh, nr23, kv, nb, info, mask, sinks, max_bias, logit_softcap, prec, type_KV);
+        return info;  // 返回性能信息
     },
         py::arg("times"),
         py::arg("hsk"),
@@ -73,7 +84,6 @@ PYBIND11_MODULE(opslib, m) {
         "Run Flash Attention ext operation");
 
     // 可选：把枚举量同时曝为模块常量（同名，便于旧代码）
-    // 需要将枚举转换为 int 类型
     m.attr("GGML_PREC_F32") = py::int_(static_cast<int>(GGML_PREC_F32));
     m.attr("GGML_TYPE_F16") = py::int_(static_cast<int>(GGML_TYPE_F16));
 }
