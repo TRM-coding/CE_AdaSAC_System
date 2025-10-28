@@ -1,6 +1,7 @@
 #include <ggml.h>
 #include<array>
-void RUN_ADD(int times,
+#include<ggml-cpu.h>
+ggml_tensor * RUN_ADD(int times,
              ggml_type type,
              const std::array<int64_t, 4UL>& ne,
              ggml_context * ctx);
