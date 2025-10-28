@@ -1,1 +1,0 @@
-/usr/bin/c++ -fPIC -O3 -DNDEBUG -shared -Wl,-soname,libggml.so -o ../../bin/libggml.so "CMakeFiles/ggml.dir/ggml-backend-reg.cpp.o"  -Wl,-rpath,/home/tianruiming/InfraPowerTest/llamacpp/build/bin: -ldl ../../bin/libggml-cpu.so ../../bin/libggml-base.so 

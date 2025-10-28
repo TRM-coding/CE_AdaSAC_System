@@ -1,6 +1,4 @@
 #include "../ops.h"
-#include<iostream>
-#include<vector>
 
 void ADD(ggml_tensor * a,
          ggml_tensor * b, 
@@ -12,20 +10,31 @@ void ADD(ggml_tensor * a,
 
 ggml_tensor * RUN_ADD(int times,
              ggml_type type,
-             const std::array<int64_t, 4UL>& ne,
-             ggml_context * ctx)
+             const std::array<int64_t, 4UL>& ne)
 {
+    ggml_init_params params{};
+    params.mem_size = 16 * 1024 * 1024;
+    params.no_alloc = true;
+    ggml_context * ctx = ggml_init(params);
+    
+
+    if(!ctx)
+    {
+        std::cout<<"ggml_init failed!"<<std::endl;
+        return nullptr;
+    }
     const int64_t N = ne[0]*ne[1]*ne[2]*ne[3];
     
     // 步骤1: 先创建 tensor (只是定义,还没有内存)
     ggml_tensor * a = ggml_new_tensor(ctx, type, 4, ne.data());
     ggml_tensor * b = ggml_new_tensor_1d(ctx, type, 1);
     
-    // 创建 out tensor (在分配内存之前)
     ggml_tensor * out = nullptr;
+
+    //步骤2 ：创建计算图到context中
     ADD(a, b, out, ctx);
     
-    // 步骤2: 创建 backend 并分配内存 (这会为 ctx 中所有 tensor 分配内存,包括 out)
+    // 步骤3：创建 backend 并分配内存 (这会为 ctx 中所有 tensor 分配内存,包括 out)
     ggml_backend_t be = ggml_backend_cpu_init();       
     ggml_backend_buffer_t buf = ggml_backend_alloc_ctx_tensors(ctx, be);
     if (!buf) 
@@ -35,7 +44,7 @@ ggml_tensor * RUN_ADD(int times,
         return nullptr;
     }
     
-    // 步骤3: 现在才能设置数据 (内存已分配)
+    // 步骤4：设置数据 (内存已分配)
     std::vector<float> h(N);
     
     // init a with elements = 1
@@ -46,7 +55,7 @@ ggml_tensor * RUN_ADD(int times,
     h[0] = float(2);  // b 只有1个元素
     ggml_backend_tensor_set(b, h.data(), 0, sizeof(float));
 
-    // 步骤4: 执行计算
+    // 步骤5: 执行计算
     for(int i=0; i<times; i++)
     {
         ggml_cgraph* gf = ggml_new_graph(ctx);
@@ -60,5 +69,6 @@ ggml_tensor * RUN_ADD(int times,
     
     ggml_backend_buffer_free(buf);
     ggml_backend_free(be);
+    ggml_free(ctx);
     return out;
 }
