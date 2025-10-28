@@ -3,7 +3,7 @@
 * ./ops为提取的算子和实现
 
 # 使用方法
-
+* 请保证当前处于 /InfraPowerTest/src/llama.cpp 目录下
 ```bash
 mkdir build
 cd build

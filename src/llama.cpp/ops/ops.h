@@ -1,5 +1,4 @@
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>     // 支持 std::array/std::vector 映射
+
 #include <ggml.h>
 #include <ggml-cpu.h>
 #include <array>
@@ -7,7 +6,8 @@
 #include <vector>
 #include <cmath>
 
-namespace py = pybind11;
+
+
 
 // 你的已有声明
 ggml_tensor * RUN_ADD(int times,
@@ -34,6 +34,8 @@ void RUN_FLASH_ATTN_EXT(
     float logit_softcap = 0.0f,
     ggml_prec prec = GGML_PREC_F32,
     ggml_type type_KV = GGML_TYPE_F16);
+
+
 
 
     
