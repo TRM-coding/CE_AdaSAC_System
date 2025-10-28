@@ -10,6 +10,15 @@ cd build
 cmake ..
 cmake --build .
 ```
+运行：
+```bash
+./ops_test
+```
+python :
+```bash
+cd exp1
+python main.py
+```
 # 可能报错排查：
 
 * ./ops_test: /home/tianruiming/miniconda3/envs/power/lib/libstdc++.so.6: version `GLIBCXX_3.4.32' not found (required by ./ops_test)
@@ -38,7 +47,7 @@ python3 -c "import sysconfig; print(sysconfig.get_config_var('INCLUDEPY'))"
 "${workspaceFolder}/llamacpp/ggml/include",
 "/path/to/miniconda/envs/xxx/include/python3.x"
 ```
-1
+
 
 # 附：算子提取方法：
-llamacpp/test/test-backend-ops.cpp中给出了各个算子的调用示例，必须要写buildgraph
+llamacpp/test/test-backend-ops.cpp中给出了各个算子的调用示例
