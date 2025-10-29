@@ -96,19 +96,48 @@ PYBIND11_MODULE(opslib, m) {
     py::arg("ne"),
     "Run GELU operation");
 
-    m.def("run_mul", [](int times, ggml_type type, const std::array<int64_t, 4UL>& ne) {
+    m.def("run_mul", [](int times,
+                    ggml_type type,
+                    const std::array<int64_t, 4UL>& ne) {
         OPS_INFO info;
         RUN_MUL(times, type, ne, info);
+        return info;  // 返回性能信息
+    },
+    py::arg("times"),
+    py::arg("type"),
+    py::arg("ne"),
+    "Run ggml MUL operation");
+
+    
+    // 12) 绑定 run_scale - 返回 OPS_INFO
+    m.def("run_scale", [](int times, ggml_type type, const std::array<int64_t, 4UL>& ne, float scale, float bias) {
+        OPS_INFO info;
+        RUN_SCALE(times, type, ne, scale, bias, info);
         return info;  // 返回性能信息
     },
         py::arg("times"),
         py::arg("type"),
         py::arg("ne"),
-        "Run ggml MUL operation");
+        py::arg("scale"),
+        py::arg("bias"),
+        "Run ggml SCALE operation");
     
-    m.def("run_mul_mat", [](int times, ggml_type type, const std::array<int64_t, 4UL>& ne) {
+    m.def("run_mul_mat", [](int times,
+                        ggml_type type,
+                        const std::array<int64_t, 4UL>& ne) {
         OPS_INFO info;
         RUN_MUL_MAT(times, type, ne, info);
+        return info;  // 返回性能信息
+    },
+    py::arg("times"),
+    py::arg("type"),
+    py::arg("ne"),
+    "Run ggml MUL_MAT operation");
+
+    // 13) 绑定 run_swiglu - 返回 OPS_INFO
+    m.def("run_swiglu", [](int times, ggml_type type, const std::array<int64_t, 4UL>& ne) {
+        OPS_INFO info;
+        RUN_SWIGLU(times, type, ne, info);
         return info;  // 返回性能信息
     },
         py::arg("times"),
@@ -232,6 +261,20 @@ PYBIND11_MODULE(opslib, m) {
         py::arg("ne"),
         py::arg("view_axes"),
         "Run ggml VIEW_4D operation");
+
+    // 14) 绑定 run_swiglu_oai - 返回 OPS_INFO
+    m.def("run_swiglu_oai", [](int times, ggml_type type, const std::array<int64_t, 4UL>& ne_a, float alpha, float limit) {
+        OPS_INFO info;
+        RUN_SWIGLU_OAI(times, type, ne_a, alpha, limit, info);
+        return info;  // 返回性能信息
+    },
+        py::arg("times"),
+        py::arg("type"),
+        py::arg("ne_a"),
+        py::arg("alpha"),
+        py::arg("limit"),
+        "Run ggml siwglu oai operation");
+
 
     // 可选：把枚举量同时曝为模块常量（同名，便于旧代码）
     m.attr("GGML_PREC_F32") = py::int_(static_cast<int>(GGML_PREC_F32));
