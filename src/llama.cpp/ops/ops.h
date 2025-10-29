@@ -42,7 +42,26 @@ ggml_tensor * RUN_FLASH_ATTN_EXT(
     ggml_prec prec = GGML_PREC_F32,
     ggml_type type_KV = GGML_TYPE_F16);
 
+ggml_tensor * RUN_SCALE(int times,
+    ggml_type type,
+    const std::array<int64_t, 4UL> ne,
+    float scale,
+    float bias,
+    OPS_INFO& info);
 
+ggml_tensor * RUN_SWIGLU(
+    int times,
+    ggml_type type,
+    const std::array<int64_t, 4UL>& ne,
+    OPS_INFO& info);
+
+ggml_tensor * RUN_SWIGLU_OAI(
+    int times,
+    ggml_type type,
+    const std::array<int64_t, 4UL>& ne_a,
+    float alpha,
+    float limit,
+    OPS_INFO& info);
 
 
     

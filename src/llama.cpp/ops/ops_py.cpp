@@ -83,6 +83,44 @@ PYBIND11_MODULE(opslib, m) {
         py::arg("type_KV") = GGML_TYPE_F16,
         "Run Flash Attention ext operation");
 
+    // 12) 绑定 run_scale - 返回 OPS_INFO
+    m.def("run_scale", [](int times, ggml_type type, const std::array<int64_t, 4UL>& ne, float scale, float bias) {
+        OPS_INFO info;
+        RUN_SCALE(times, type, ne, scale, bias, info);
+        return info;  // 返回性能信息
+    },
+        py::arg("times"),
+        py::arg("type"),
+        py::arg("ne"),
+        py::arg("scale"),
+        py::arg("bias"),
+        "Run ggml scale operation");
+
+    // 13) 绑定 run_swiglu - 返回 OPS_INFO
+    m.def("run_swiglu", [](int times, ggml_type type, const std::array<int64_t, 4UL>& ne) {
+        OPS_INFO info;
+        RUN_SWIGLU(times, type, ne, info);
+        return info;  // 返回性能信息
+    },
+        py::arg("times"),
+        py::arg("type"),
+        py::arg("ne"),
+        "Run ggml siwglu oai operation");
+
+    // 14) 绑定 run_swiglu_oai - 返回 OPS_INFO
+    m.def("run_swiglu_oai", [](int times, ggml_type type, const std::array<int64_t, 4UL>& ne_a, float alpha, float limit) {
+        OPS_INFO info;
+        RUN_SWIGLU_OAI(times, type, ne_a, alpha, limit, info);
+        return info;  // 返回性能信息
+    },
+        py::arg("times"),
+        py::arg("type"),
+        py::arg("ne_a"),
+        py::arg("alpha"),
+        py::arg("limit"),
+        "Run ggml siwglu oai operation");
+
+
     // 可选：把枚举量同时曝为模块常量（同名，便于旧代码）
     m.attr("GGML_PREC_F32") = py::int_(static_cast<int>(GGML_PREC_F32));
     m.attr("GGML_TYPE_F16") = py::int_(static_cast<int>(GGML_TYPE_F16));

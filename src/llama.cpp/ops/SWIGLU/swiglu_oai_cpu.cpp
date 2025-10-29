@@ -1,16 +1,21 @@
 #include "../ops.h"
 #include <cstdint>
 
-void SWIGLU(ggml_tensor * a,
+void SWIGLU_OAI(ggml_tensor * a,
+         ggml_tensor * b, 
+         float alpha,
+         float limit,
          ggml_tensor *& c,
          ggml_context * ctx) {
 
-    c = ggml_swiglu(ctx, a);
+    c = ggml_swiglu_oai(ctx, a, b, alpha, limit);
 }
 
-ggml_tensor * RUN_SWIGLU(int times,
+ggml_tensor * RUN_SWIGLU_OAI(int times,
              ggml_type type,
-             const std::array<int64_t, 4UL>& ne,
+             const std::array<int64_t, 4UL>& ne_a,
+             float alpha,
+             float limit,
              OPS_INFO& info)
 {
     ggml_init_params params{};
@@ -24,12 +29,13 @@ ggml_tensor * RUN_SWIGLU(int times,
         return nullptr;
     }
     
-    const int64_t N = ne[0]*ne[1]*ne[2]*ne[3];
+    const int64_t N = ne_a[0]*ne_a[1]*ne_a[2]*ne_a[3];
 
-    ggml_tensor * a = ggml_new_tensor(ctx, type, 4, ne.data());
+    ggml_tensor * a = ggml_new_tensor(ctx, type, 4, ne_a.data());
+    ggml_tensor * b = ggml_new_tensor(ctx, type, 4, ne_a.data());
     ggml_tensor * out = nullptr;
 
-    SWIGLU(a, out, ctx);
+    SWIGLU_OAI(a, b, alpha, limit, out, ctx);
 
     ggml_backend_t be = ggml_backend_cpu_init();       
     ggml_backend_buffer_t buf = ggml_backend_alloc_ctx_tensors(ctx, be);
@@ -45,6 +51,7 @@ ggml_tensor * RUN_SWIGLU(int times,
     for (int64_t i = 0; i < N; ++i)
         h[i] = -5.0f + 10.0f * float(i) / float(N - 1);
     ggml_backend_tensor_set(a, h.data(), 0, N*sizeof(float));
+    ggml_backend_tensor_set(b, h.data(), 0, N*sizeof(float));
 
     double avg_excute_time=0;
     struct timespec start, end;
