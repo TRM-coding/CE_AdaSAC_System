@@ -131,6 +131,7 @@ PYBIND11_MODULE(opslib, m) {
     py::arg("permute_axes"),
     "Run Permute operation");
 
+
     m.def("run_reshape", [](
         int times,
         ggml_type type_src,
@@ -146,6 +147,91 @@ PYBIND11_MODULE(opslib, m) {
     py::arg("shape_size"),
     "Run Reshape operation");
 
+    m.def("run_norm", [](int times,
+                     ggml_type type_src,
+                     const std::array<int64_t, 4UL>& ne) {
+        OPS_INFO info;
+        RUN_NORM(times, type_src, ne, info);
+        return info;  // 返回性能信息
+    },
+    py::arg("times"),
+    py::arg("type_src"),
+    py::arg("ne"),
+    "Run ggml NORM operation");
+
+    m.def("run_rms_norm", [](int times,
+                     ggml_type type_src,
+                     const std::array<int64_t, 4UL>& ne) {
+        OPS_INFO info;
+        RUN_RMS_NORM(times, type_src, ne, info);
+        return info;  // 返回性能信息
+    },
+    py::arg("times"),
+    py::arg("type_src"),
+    py::arg("ne"),
+    "Run ggml RMS operation");
+
+    m.def("run_view_1d", [](int times,
+                            ggml_type type_src,
+                            const std::array<int64_t, 4UL>& ne,
+                            const std::array<int, 1UL>& view_axes) {
+            OPS_INFO info;
+            RUN_VIEW_1D(times, type_src, ne, view_axes, info);
+            return info;
+        },
+        py::arg("times"),
+        py::arg("type_src"),
+        py::arg("ne"),
+        py::arg("view_axes"),
+        "Run ggml VIEW_1D operation");
+
+
+    // VIEW_2D
+    m.def("run_view_2d", [](int times,
+                            ggml_type type_src,
+                            const std::array<int64_t, 4UL>& ne,
+                            const std::array<int, 2UL>& view_axes) {
+            OPS_INFO info;
+            RUN_VIEW_2D(times, type_src, ne, view_axes, info);
+            return info;
+        },
+        py::arg("times"),
+        py::arg("type_src"),
+        py::arg("ne"),
+        py::arg("view_axes"),
+        "Run ggml VIEW_2D operation");
+
+
+    // VIEW_3D
+    m.def("run_view_3d", [](int times,
+                            ggml_type type_src,
+                            const std::array<int64_t, 4UL>& ne,
+                            const std::array<int, 3UL>& view_axes) {
+            OPS_INFO info;
+            RUN_VIEW_3D(times, type_src, ne, view_axes, info);
+            return info;
+        },
+        py::arg("times"),
+        py::arg("type_src"),
+        py::arg("ne"),
+        py::arg("view_axes"),
+        "Run ggml VIEW_3D operation");
+
+
+    // VIEW_4D
+    m.def("run_view_4d", [](int times,
+                            ggml_type type_src,
+                            const std::array<int64_t, 4UL>& ne,
+                            const std::array<int, 4UL>& view_axes) {
+            OPS_INFO info;
+            RUN_VIEW_4D(times, type_src, ne, view_axes, info);
+            return info;
+        },
+        py::arg("times"),
+        py::arg("type_src"),
+        py::arg("ne"),
+        py::arg("view_axes"),
+        "Run ggml VIEW_4D operation");
 
     // 可选：把枚举量同时曝为模块常量（同名，便于旧代码）
     m.attr("GGML_PREC_F32") = py::int_(static_cast<int>(GGML_PREC_F32));

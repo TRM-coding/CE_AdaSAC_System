@@ -1,19 +1,22 @@
 #include "ops.h"
 
-void RMS_NORM(
+void VIEW_2D(
     ggml_tensor * input,
     ggml_tensor *&out,
-    float eps,
+    int ne0,
+    int ne1,
+    int offset, 
     ggml_context *ctx)
 {
-    out = ggml_rms_norm(ctx,input,eps);
+    out = ggml_view_2d(ctx,input,ne0,ne1,input->nb[0],offset);
     return;
 }
 
-ggml_tensor * RUN_RMS_NORM(
+ggml_tensor * RUN_VIEW_2D(
     int times,
     ggml_type type_src,
     const std::array<int64_t, 4UL> &ne,
+    const std::array<int,2UL> &view_axes,
     OPS_INFO &info)
 {
     ggml_init_params params{};
@@ -32,9 +35,8 @@ ggml_tensor * RUN_RMS_NORM(
     auto N = 1;
     for (auto x : ne)
         N *= x;
-    auto eps = 1e-5f;
 
-    RMS_NORM(src, out, eps,ctx);
+    VIEW_2D(src, out, view_axes[0],view_axes[1], 0, ctx);
 
     ggml_backend_t be = ggml_backend_cpu_init();
     ggml_backend_buffer_t buf = ggml_backend_alloc_ctx_tensors(ctx, be);
@@ -65,7 +67,6 @@ ggml_tensor * RUN_RMS_NORM(
     }
     avg_excute_time /= times;
     info.time_per_op_ms = avg_excute_time;
-    // std::printf("CPY avg execution time over %d iterations: %.3f ms\n ", times, avg_excute_time);
     ggml_backend_buffer_free(buf);  
     ggml_backend_free(be);
     ggml_free(ctx);

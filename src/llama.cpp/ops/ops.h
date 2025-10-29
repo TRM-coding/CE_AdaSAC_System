@@ -69,9 +69,44 @@ ggml_tensor *RUN_PERMUTE(
     const std::array<int, 4UL> &permute_axes,
     OPS_INFO &info);
 
-ggml_tensor * RUN_RESHAPE(
+ggml_tensor *RUN_RESHAPE(
     int times,
     ggml_type type_src,
     const std::array<int64_t, 4UL> &ne,
-    const std::array<int64_t,4UL> &shape_size,
+    const std::array<int64_t, 4UL> &shape_size,
     OPS_INFO &info);
+
+ggml_tensor *RUN_RMS_NORM(
+    int times,
+    ggml_type type_src,
+    const std::array<int64_t, 4UL> &ne,
+    OPS_INFO &info);
+
+ggml_tensor * RUN_VIEW_1D(
+    int times,
+    ggml_type type_src,
+    const std::array<int64_t, 4UL> &ne,
+    const std::array<int,1UL> &view_axes,
+    OPS_INFO &info);
+
+ggml_tensor * RUN_VIEW_2D(
+    int times,
+    ggml_type type_src,
+    const std::array<int64_t, 4UL> &ne,
+    const std::array<int,2UL> &view_axes,
+    OPS_INFO &info);
+
+ggml_tensor * RUN_VIEW_3D(
+    int times,
+    ggml_type type_src,
+    const std::array<int64_t, 4UL> &ne,
+    const std::array<int,3UL> &view_axes,
+    OPS_INFO &info);
+
+ggml_tensor * RUN_VIEW_4D(
+    int times,
+    ggml_type type_src,
+    const std::array<int64_t, 4UL> &ne,
+    const std::array<int,4UL> &view_axes,
+    OPS_INFO &info);
+
