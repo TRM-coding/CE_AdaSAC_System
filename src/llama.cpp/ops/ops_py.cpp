@@ -83,6 +83,70 @@ PYBIND11_MODULE(opslib, m) {
         py::arg("type_KV") = GGML_TYPE_F16,
         "Run Flash Attention ext operation");
 
+    m.def("run_gelu", [](
+        int times,
+        ggml_type type_src,
+        std::array<int64_t, 4UL> ne) {
+        OPS_INFO info;
+        ggml_tensor * out = RUN_GELU(times, type_src, ne, info);
+        return info;  // 返回性能信息
+    },
+    py::arg("times"),
+    py::arg("type_src"),
+    py::arg("ne"),
+    "Run GELU operation");
+
+    m.def("run_mul", [](int times, ggml_type type, const std::array<int64_t, 4UL>& ne) {
+        OPS_INFO info;
+        RUN_MUL(times, type, ne, info);
+        return info;  // 返回性能信息
+    },
+        py::arg("times"),
+        py::arg("type"),
+        py::arg("ne"),
+        "Run ggml MUL operation");
+    
+    m.def("run_mul_mat", [](int times, ggml_type type, const std::array<int64_t, 4UL>& ne) {
+        OPS_INFO info;
+        RUN_MUL_MAT(times, type, ne, info);
+        return info;  // 返回性能信息
+    },
+        py::arg("times"),
+        py::arg("type"),
+        py::arg("ne"),
+        "Run ggml MUL_MAT operation");
+    
+    m.def("run_permute", [](
+        int times,
+        ggml_type type_src,
+        std::array<int64_t, 4UL> ne,
+        std::array<int, 4UL> permute_axes) {
+        OPS_INFO info;
+        ggml_tensor * out = RUN_PERMUTE(times, type_src, ne, permute_axes, info);
+        return info;  // 返回性能信息
+    },
+    py::arg("times"),
+    py::arg("type_src"),
+    py::arg("ne"),
+    py::arg("permute_axes"),
+    "Run Permute operation");
+
+    m.def("run_reshape", [](
+        int times,
+        ggml_type type_src,
+        std::array<int64_t, 4UL> ne,
+        std::array<int64_t, 4UL> shape_size) {
+        OPS_INFO info;
+        ggml_tensor * out = RUN_RESHAPE(times, type_src, ne, shape_size, info);
+        return info;  // 返回性能信息
+    },
+    py::arg("times"),
+    py::arg("type_src"),
+    py::arg("ne"),
+    py::arg("shape_size"),
+    "Run Reshape operation");
+
+
     // 可选：把枚举量同时曝为模块常量（同名，便于旧代码）
     m.attr("GGML_PREC_F32") = py::int_(static_cast<int>(GGML_PREC_F32));
     m.attr("GGML_TYPE_F16") = py::int_(static_cast<int>(GGML_TYPE_F16));
