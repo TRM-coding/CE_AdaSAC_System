@@ -8734,6 +8734,9 @@ struct llm_build_qwen : public llm_graph_context {
         res->t_logits = cur;
 
         ggml_build_forward_expand(gf, cur);
+        // 生成.dot文件
+        // ggml_graph_print(gf);
+        // ggml_graph_dump_dot(gf, nullptr, "qwen2.dot");
     }
 };
 
@@ -8856,6 +8859,9 @@ struct llm_build_qwen2 : public llm_graph_context {
         res->t_logits = cur;
 
         ggml_build_forward_expand(gf, cur);
+        // / 生成.dot文件
+        // ggml_graph_print(gf);
+        // ggml_graph_dump_dot(gf, nullptr, "qwen2.dot");
     }
 };
 
@@ -9182,6 +9188,9 @@ struct llm_build_qwen2vl : public llm_graph_context {
         res->t_logits = cur;
 
         ggml_build_forward_expand(gf, cur);
+        // 生成.dot文件
+        // ggml_graph_print(gf);
+        // ggml_graph_dump_dot(gf, nullptr, "qwen2.dot");
     }
 };
 
