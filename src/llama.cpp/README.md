@@ -4,12 +4,43 @@
 
 # 使用方法
 * 请保证当前处于 /InfraPowerTest/src/llama.cpp 目录下
+
+电脑端编译命令：
 ```bash
 mkdir build
 cd build
 cmake ..
 cmake --build .
 ```
+
+安卓库编译命令：
+在编译之前请确认已经安装了Android NDK
+
+```bash
+# 1) 设置 SDK/NDK 路径（按你本机实际版本改）
+export ANDROID_SDK_ROOT=$HOME/Android/Sdk
+# 查看 NDK 版本目录
+ls $ANDROID_SDK_ROOT/ndk
+# 假设看到 26.3.11579264
+export ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/26.3.11579264
+```
+
+```bash
+# 1. 创建构建目录
+mkdir build-android
+cd build-android
+
+# 2. 使用 Android NDK 配置 CMake
+cmake .. \
+  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=arm64-v8a \
+  -DANDROID_PLATFORM=android-28 \
+  -DGGML_OPENMP=OFF
+
+# 3. 编译
+cmake --build .
+```
+
 运行：
 ```bash
 ./ops_test
