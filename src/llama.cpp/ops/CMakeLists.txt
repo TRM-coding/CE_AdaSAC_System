@@ -9,8 +9,8 @@ list(FILTER SRC_COMMON EXCLUDE REGEX "ops_jni\\.cpp$")
 
 # 根据平台选择编译目标
 if(ANDROID)
-    # 安卓版：包含 ops_jni.cpp，不含 ops_py.cpp
-    add_library(opslib SHARED ${SRC_COMMON} ops_jni.cpp)
+    # 安卓版：编译为静态库，包含 ops_jni.cpp
+    add_library(opslib STATIC ${SRC_COMMON} ops_jni.cpp)
     
     target_include_directories(opslib PUBLIC 
         ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/include 
@@ -24,7 +24,7 @@ if(ANDROID)
     target_link_libraries(opslib PRIVATE ggml ${log-lib})
     
 else()
-    # 桌面版：包含 ops_py.cpp，不含 ops_jni.cpp
+    # 桌面版：编译为动态库，包含 ops_py.cpp
     add_library(opslib SHARED ${SRC_COMMON} ops_py.cpp)
     
     find_package(Python3 REQUIRED COMPONENTS Interpreter Development Development.Module)
@@ -42,8 +42,12 @@ else()
     )
 endif()
 
-# 设置输出名称，去掉 lib 前缀
+# 设置输出名称
 set_target_properties(opslib PROPERTIES 
-    PREFIX ""
     OUTPUT_NAME "opslib"
 )
+
+# 仅桌面版去掉 lib 前缀
+if(NOT ANDROID)
+    set_target_properties(opslib PROPERTIES PREFIX "")
+endif()
