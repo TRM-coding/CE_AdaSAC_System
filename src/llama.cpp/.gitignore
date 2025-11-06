@@ -1,2 +1,5 @@
 .vscode/
 **/build/
+**/build-android/
+**/node_modules/
+**/dist/

@@ -3,14 +3,55 @@
 * ./ops为提取的算子和实现
 
 # 使用方法
-* 请保证当前处于 /InfraPowerTest/src/llama.cpp 目录下
+* 请保证当前处于 InfraPowerTest/src/llama.cpp 目录下
+
+电脑端编译命令：
 ```bash
 mkdir build
 cd build
 cmake ..
 cmake --build .
 ```
+
+安卓库编译命令：
+在编译之前请确认已经安装了Android NDK
+
+```bash
+# 1) 设置 SDK/NDK 路径（按你本机实际版本改）
+export ANDROID_SDK_ROOT=$HOME/Android/Sdk
+# 查看 NDK 版本目录
+ls $ANDROID_SDK_ROOT/ndk
+# 假设看到 26.3.11579264
+export ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/26.3.11579264
+```
+确认好后创建编译目录：
+```bash
+# 1. 创建构建目录
+mkdir build-android
+cd build-android
+
+# 2. 使用 Android NDK 配置 CMake
+# x86_64指令集安卓设备：
+cmake .. \
+  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=x86_64 \
+  -DANDROID_PLATFORM=android-29 \
+  -DGGML_OPENMP=OFF
+
+# arm指令集安卓设备：
+cmake .. \
+  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=arm64-v8a \
+  -DANDROID_PLATFORM=android-29 \
+  -DGGML_OPENMP=OFF
+
+# 3. 编译
+cmake --build .
+```
+
 运行：
+
+电脑端：
 ```bash
 ./ops_test
 ```
@@ -18,6 +59,27 @@ python :
 ```bash
 cd exp1
 python main.py
+```
+
+安卓端：
+```
+#虚拟机启动（若使用真机调试，跳过这一步）
+#列出虚拟机：
+avdmanager list avd
+#启动虚拟机：
+emulator -avd <虚拟机名字>
+#adb 检查是否能够识别到虚拟机
+adb devices
+```
+
+```
+#先进入到build-android目录，然后执行：
+adb push ops_test /data/local/tmp/#将编译好的可执行文件传到安卓设备上
+#进入安卓设备的命令行界面，找到刚刚传入的文件位置并运行
+adb shell
+cd /data/local/tmp
+chmod +x ops_test
+./ops_test
 ```
 # 可能报错排查：
 
