@@ -24,6 +24,7 @@ static const std::map<llm_arch, const char *> LLM_ARCH_NAMES = {
     { LLM_ARCH_STABLELM,         "stablelm"         },
     { LLM_ARCH_QWEN,             "qwen"             },
     { LLM_ARCH_QWEN2,            "qwen2"            },
+    { LLM_ARCH_QWEN2_SVD,        "qwen2_svd"            },
     { LLM_ARCH_QWEN2MOE,         "qwen2moe"         },
     { LLM_ARCH_QWEN2VL,          "qwen2vl"          },
     { LLM_ARCH_QWEN3,            "qwen3"            },
@@ -558,6 +559,27 @@ static const std::map<llm_arch, std::map<llm_tensor, const char *>> LLM_TENSOR_N
             { LLM_TENSOR_FFN_NORM,        "blk.%d.ffn_norm" },
             { LLM_TENSOR_FFN_GATE,        "blk.%d.ffn_gate" },
             { LLM_TENSOR_FFN_DOWN,        "blk.%d.ffn_down" },
+            { LLM_TENSOR_FFN_UP,          "blk.%d.ffn_up" },
+        },
+    },
+    {
+        LLM_ARCH_QWEN2_SVD,
+        {
+            { LLM_TENSOR_TOKEN_EMBD,      "token_embd" },
+            { LLM_TENSOR_OUTPUT_NORM,     "output_norm" },
+            { LLM_TENSOR_OUTPUT,          "output" },
+            { LLM_TENSOR_ATTN_NORM,       "blk.%d.attn_norm" },
+            { LLM_TENSOR_ATTN_Q,          "blk.%d.attn_q" },
+            { LLM_TENSOR_ATTN_K,          "blk.%d.attn_k" },
+            { LLM_TENSOR_ATTN_V,          "blk.%d.attn_v" },
+            { LLM_TENSOR_ATTN_OUT,        "blk.%d.attn_output" },
+            { LLM_TENSOR_FFN_NORM,        "blk.%d.ffn_norm" },
+            { LLM_TENSOR_FFN_GATE,        "blk.%d.ffn_gate" },
+            { LLM_TENSOR_FFN_DOWN,        "blk.%d.ffn_down" },
+            { LLM_TENSOR_FFN_DOWN_SVD_U,  "blk.%d.ffn_down_svd_u" },
+            { LLM_TENSOR_FFN_DOWN_SVD_V,  "blk.%d.ffn_down_svd_v" },
+            { LLM_TENSOR_FFN_UP_SVD_U,    "blk.%d.ffn_up_svd_u" },
+            { LLM_TENSOR_FFN_UP_SVD_V,    "blk.%d.ffn_up_svd_v" },
             { LLM_TENSOR_FFN_UP,          "blk.%d.ffn_up" },
         },
     },
@@ -1558,7 +1580,11 @@ static const std::map<llm_tensor, llm_tensor_info> LLM_TENSOR_INFOS = {
     {LLM_TENSOR_ATTN_QKV,                   {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
     {LLM_TENSOR_ATTN_OUT,                   {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
     {LLM_TENSOR_FFN_GATE,                   {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
+    {LLM_TENSOR_FFN_DOWN_SVD_U,                   {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},//TODO:replace with GGML_OP_MUL_MAT_SVD_U
+    {LLM_TENSOR_FFN_DOWN_SVD_V,                   {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},//TODO:replace with GGML_OP_MUL_MAT_SVD_V
     {LLM_TENSOR_FFN_DOWN,                   {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
+    {LLM_TENSOR_FFN_UP_SVD_U,                     {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},//TODO:replace with GGML_OP_MUL_MAT_SVD_U
+    {LLM_TENSOR_FFN_UP_SVD_V,                     {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},//TODO:replace with GGML_OP_MUL_MAT_SVD_V
     {LLM_TENSOR_FFN_UP,                     {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
     {LLM_TENSOR_FFN_DOWN_SHEXP,             {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
     {LLM_TENSOR_FFN_GATE_SHEXP,             {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},

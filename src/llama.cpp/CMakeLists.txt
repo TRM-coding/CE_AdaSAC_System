@@ -15,6 +15,9 @@ else()
 endif()
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/3dparty/llamacpp)
+include_directories(${CMAKE_SOURCE_DIR}/3dparty/llamacpp/src)
+include_directories(${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common)
+include_directories(${CMAKE_SOURCE_DIR}/3dparty/llamacpp/include)
 
 
 # 桌面版需要 Python
@@ -27,21 +30,23 @@ include_directories(${CMAKE_SOURCE_DIR}/ops)
 add_subdirectory(ops)
 
 if(IS_ANDROID)
-    add_executable(ops_test exp1/main.cpp)
-    target_link_libraries(ops_test PRIVATE 
-        opslib
-        llama
-    )
+    # add_executable(ops_test exp1/main.cpp)
+    # target_link_libraries(ops_test PRIVATE 
+    #     opslib
+    #     llama
+    # )
     # 强制静态链接所有库和 C++ 运行时
-    target_link_options(ops_test PRIVATE 
-        -static-libgcc 
-        -static-libstdc++
-    )
+    # target_link_options(ops_test PRIVATE 
+    #     -static-libgcc 
+    #     -static-libstdc++
+    # )
 endif()
 
 # 桌面版才编译 ops_test
 if(NOT IS_ANDROID)
-    add_executable(ops_test exp1/main.cpp)
-    target_link_libraries(ops_test PRIVATE Python3::Python llama opslib)
+    # add_executable(ops_test exp1/main.cpp)
+    add_executable(load_test exp3_load_svd_to_llamacpp/load_llamacpp.cpp)
+    # target_link_libraries(ops_test PRIVATE Python3::Python llama opslib)
+    target_link_libraries(load_test PRIVATE llama)
 endif()
 

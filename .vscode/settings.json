@@ -76,7 +76,10 @@
         "valarray": "cpp",
         "variant": "cpp",
         "format": "cpp",
-        "__nullptr": "cpp"
+        "__nullptr": "cpp",
+        "barrier": "cpp",
+        "complex": "cpp",
+        "typeindex": "cpp"
     },
     "remote.extensionKind": {
         
