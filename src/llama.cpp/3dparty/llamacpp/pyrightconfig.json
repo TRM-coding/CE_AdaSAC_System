@@ -15,7 +15,7 @@
     },
     {
       // uses match expressions in steps.py
-      "root": "tools/server/tests",
+      "root": "examples/server/tests",
       "pythonVersion": "3.10",
     },
   ],

@@ -7,8 +7,8 @@ llama_add_compile_flags()
 # Build info header
 #
 
-if(EXISTS "${PROJECT_SOURCE_DIR}/.git")
-    set(GIT_DIR "${PROJECT_SOURCE_DIR}/.git")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../.git")
+    set(GIT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../.git")
 
     # Is git submodule
     if(NOT IS_DIRECTORY "${GIT_DIR}")
@@ -18,26 +18,34 @@ if(EXISTS "${PROJECT_SOURCE_DIR}/.git")
         if (SLASH_POS EQUAL 0)
             set(GIT_DIR "${REAL_GIT_DIR}")
         else()
-            set(GIT_DIR "${PROJECT_SOURCE_DIR}/${REAL_GIT_DIR}")
+            set(GIT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../${REAL_GIT_DIR}")
         endif()
     endif()
 
     if(EXISTS "${GIT_DIR}/index")
-        # For build-info.cpp below
-        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${GIT_DIR}/index")
+        set(GIT_INDEX "${GIT_DIR}/index")
     else()
         message(WARNING "Git index not found in git repository.")
+        set(GIT_INDEX "")
     endif()
 else()
     message(WARNING "Git repository not found; to enable automatic generation of build info, make sure Git is installed and the project is a Git repository.")
+    set(GIT_INDEX "")
 endif()
 
-set(TEMPLATE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/build-info.cpp.in")
-set(OUTPUT_FILE   "${CMAKE_CURRENT_BINARY_DIR}/build-info.cpp")
-configure_file(${TEMPLATE_FILE} ${OUTPUT_FILE})
-
+# Add a custom command to rebuild build-info.cpp when .git/index changes
+add_custom_command(
+    OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/build-info.cpp"
+    COMMENT "Generating build details from Git"
+    COMMAND ${CMAKE_COMMAND} -DMSVC=${MSVC} -DCMAKE_C_COMPILER_VERSION=${CMAKE_C_COMPILER_VERSION}
+            -DCMAKE_C_COMPILER_ID=${CMAKE_C_COMPILER_ID} -DCMAKE_VS_PLATFORM_NAME=${CMAKE_VS_PLATFORM_NAME}
+            -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/build-info-gen-cpp.cmake"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/build-info.cpp.in" ${GIT_INDEX}
+    VERBATIM
+)
 set(TARGET build_info)
-add_library(${TARGET} OBJECT ${OUTPUT_FILE})
+add_library(${TARGET} OBJECT build-info.cpp)
 if (BUILD_SHARED_LIBS)
     set_target_properties(${TARGET} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif()
@@ -48,25 +56,21 @@ add_library(${TARGET} STATIC
     arg.cpp
     arg.h
     base64.hpp
-    chat-parser.cpp
-    chat-parser.h
     chat.cpp
     chat.h
     common.cpp
     common.h
     console.cpp
     console.h
-    http.h
-    json-partial.cpp
-    json-partial.h
     json-schema-to-grammar.cpp
+    json.hpp
     llguidance.cpp
     log.cpp
     log.h
+    minja/chat-template.hpp
+    minja/minja.hpp
     ngram-cache.cpp
     ngram-cache.h
-    regex-partial.cpp
-    regex-partial.h
     sampling.cpp
     sampling.h
     speculative.cpp
@@ -87,44 +91,9 @@ if (LLAMA_CURL)
     endif()
     target_compile_definitions(${TARGET} PUBLIC LLAMA_USE_CURL)
     include_directories(${CURL_INCLUDE_DIRS})
-    set(LLAMA_COMMON_EXTRA_LIBS ${LLAMA_COMMON_EXTRA_LIBS} ${CURL_LIBRARIES})
-endif()
-
-if (LLAMA_OPENSSL)
-    find_package(OpenSSL)
-    if (OpenSSL_FOUND)
-        include(CheckCSourceCompiles)
-        set(SAVED_CMAKE_REQUIRED_INCLUDES ${CMAKE_REQUIRED_INCLUDES})
-        set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
-        check_c_source_compiles("
-        #include <openssl/opensslv.h>
-        #if defined(OPENSSL_IS_BORINGSSL) || defined(LIBRESSL_VERSION_NUMBER)
-        #    if OPENSSL_VERSION_NUMBER < 0x1010107f
-        #        error bad version
-        #    endif
-        #else
-        #    if OPENSSL_VERSION_NUMBER < 0x30000000L
-        #        error bad version
-        #    endif
-        #endif
-        int main() { return 0; }
-        " OPENSSL_VERSION_SUPPORTED)
-        set(CMAKE_REQUIRED_INCLUDES ${SAVED_CMAKE_REQUIRED_INCLUDES})
-        if (OPENSSL_VERSION_SUPPORTED)
-            message(STATUS "OpenSSL found: ${OPENSSL_VERSION}")
-            target_compile_definitions(${TARGET} PUBLIC CPPHTTPLIB_OPENSSL_SUPPORT)
-            target_link_libraries(${TARGET} PUBLIC OpenSSL::SSL OpenSSL::Crypto)
-            if (APPLE AND CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-                target_compile_definitions(${TARGET} PUBLIC CPPHTTPLIB_USE_CERTS_FROM_MACOSX_KEYCHAIN)
-                find_library(CORE_FOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
-                find_library(SECURITY_FRAMEWORK Security REQUIRED)
-                target_link_libraries(${TARGET} PUBLIC ${CORE_FOUNDATION_FRAMEWORK} ${SECURITY_FRAMEWORK})
-            endif()
-        endif()
-    else()
-        message(STATUS "OpenSSL not found, SSL support disabled")
-    endif()
-endif()
+    find_library(CURL_LIBRARY curl REQUIRED)
+    set(LLAMA_COMMON_EXTRA_LIBS ${LLAMA_COMMON_EXTRA_LIBS} ${CURL_LIBRARY})
+endif ()
 
 if (LLAMA_LLGUIDANCE)
     include(ExternalProject)
@@ -148,13 +117,13 @@ if (LLAMA_LLGUIDANCE)
 
     ExternalProject_Add(llguidance_ext
         GIT_REPOSITORY https://github.com/guidance-ai/llguidance
-        # v1.0.1:
-        GIT_TAG d795912fedc7d393de740177ea9ea761e7905774
+        # v0.7.10:
+        GIT_TAG 0309d2a6bf40abda35344a362edc71e06d5009f8
         PREFIX ${CMAKE_BINARY_DIR}/llguidance
         SOURCE_DIR ${LLGUIDANCE_SRC}
         BUILD_IN_SOURCE TRUE
         CONFIGURE_COMMAND ""
-        BUILD_COMMAND cargo build --release --package llguidance
+        BUILD_COMMAND cargo build --release
         INSTALL_COMMAND ""
         BUILD_BYPRODUCTS ${LLGUIDANCE_PATH}/${LLGUIDANCE_LIB_NAME} ${LLGUIDANCE_PATH}/llguidance.h
         UPDATE_COMMAND ""
@@ -170,30 +139,6 @@ if (LLAMA_LLGUIDANCE)
     set(LLAMA_COMMON_EXTRA_LIBS ${LLAMA_COMMON_EXTRA_LIBS} llguidance ${LLGUIDANCE_PLATFORM_LIBS})
 endif ()
 
-target_include_directories(${TARGET} PUBLIC . ../vendor)
+target_include_directories(${TARGET} PUBLIC .)
 target_compile_features   (${TARGET} PUBLIC cxx_std_17)
 target_link_libraries     (${TARGET} PRIVATE ${LLAMA_COMMON_EXTRA_LIBS} PUBLIC llama Threads::Threads)
-
-
-#
-# copy the license files
-#
-
-# Check if running in GitHub Actions
-if (DEFINED ENV{GITHUB_ACTIONS} AND "$ENV{GITHUB_ACTIONS}" STREQUAL "true")
-    message(STATUS "Running inside GitHub Actions - copying license files")
-
-    # Copy all files from licenses/ to build/bin/
-    file(GLOB LICENSE_FILES "${CMAKE_SOURCE_DIR}/licenses/*")
-    foreach(LICENSE_FILE ${LICENSE_FILES})
-        get_filename_component(FILENAME ${LICENSE_FILE} NAME)
-        add_custom_command(
-            POST_BUILD
-            TARGET ${TARGET}
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${LICENSE_FILE}"
-                "$<TARGET_FILE_DIR:llama>/${FILENAME}"
-            COMMENT "Copying ${FILENAME} to ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
-        message(STATUS "Copying ${LICENSE_FILE} to ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${FILENAME}")
-    endforeach()
-endif()

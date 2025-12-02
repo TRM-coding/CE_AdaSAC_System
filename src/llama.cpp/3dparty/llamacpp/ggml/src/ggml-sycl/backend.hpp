@@ -14,30 +14,23 @@
 #define GGML_SYCL_BACKEND_HPP
 
 #include "binbcast.hpp"
-#include "common.hpp"
 #include "concat.hpp"
+#include "common.hpp"
 #include "conv.hpp"
 #include "convert.hpp"
-#include "count-equal.hpp"
-#include "cpy.hpp"
 #include "dequantize.hpp"
 #include "dmmv.hpp"
-#include "element_wise.hpp"
-#include "gla.hpp"
-#include "im2col.hpp"
 #include "mmq.hpp"
 #include "mmvq.hpp"
-#include "norm.hpp"
-#include "outprod.hpp"
-#include "pad.hpp"
-#include "quantize.hpp"
-#include "quants.hpp"
 #include "rope.hpp"
-#include "set_rows.hpp"
+#include "norm.hpp"
 #include "softmax.hpp"
 #include "tsembd.hpp"
+#include "im2col.hpp"
 #include "wkv.hpp"
-#include "pad_reflect_1d.hpp"
+#include "outprod.hpp"
+#include "element_wise.hpp"
+#include "cpy.hpp"
+#include "gla.hpp"
 
-
-#endif  // GGML_SYCL_BACKEND_HPP
+#endif // GGML_SYCL_BACKEND_HPP

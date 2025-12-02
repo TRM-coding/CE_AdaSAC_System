@@ -47,7 +47,6 @@ let
   inherit (lib)
     cmakeBool
     cmakeFeature
-    optionalAttrs
     optionals
     strings
     ;
@@ -128,6 +127,10 @@ effectiveStdenv.mkDerivation (finalAttrs: {
   };
 
   postPatch = ''
+    substituteInPlace ./ggml/src/ggml-metal/ggml-metal.m \
+      --replace '[bundle pathForResource:@"ggml-metal" ofType:@"metal"];' "@\"$out/bin/ggml-metal.metal\";"
+    substituteInPlace ./ggml/src/ggml-metal/ggml-metal.m \
+      --replace '[bundle pathForResource:@"default" ofType:@"metallib"];' "@\"$out/bin/default.metallib\";"
   '';
 
   # With PR#6015 https://github.com/ggml-org/llama.cpp/pull/6015,
@@ -194,7 +197,7 @@ effectiveStdenv.mkDerivation (finalAttrs: {
     ];
 
   # Environment variables needed for ROCm
-  env = optionalAttrs useRocm {
+  env = optionals useRocm {
     ROCM_PATH = "${rocmPackages.clr}";
     HIP_DEVICE_LIB_PATH = "${rocmPackages.rocm-device-libs}/amdgcn/bitcode";
   };

@@ -1,0 +1,103 @@
+from gguf.gguf_reader import GGUFReader
+from gguf.gguf_writer import GGUFWriter
+from gguf import GGUFType
+from gguf import GGMLQuantizationType   # 如果你要显式指定 F32 等
+import torch
+from gguf import GGUFWriter, GGUFValueType, ReaderField, OrderedDict
+import numpy as np
+
+def copy_metadata(reader, writer):
+    for key, field in reader.fields.items():
+        # 这几个是由 writer 自己负责写的，通常跳过
+        if key in ["general.architecture", "GGUF.version", "GGUF.tensor_count", "GGUF.kv_count"]:
+            continue
+
+        # field.types 是一个列表，取 [0] 即字段类型
+        ftype = field.types[0]
+
+        if ftype == GGUFValueType.STRING:
+            # STRING 的值在 parts[field.data[0]] 里，是一串 int，需要转回字符
+            s = ''.join(chr(i) for i in field.parts[field.data[0]])
+            writer.add_string(key=key, val=s)
+
+        elif ftype == GGUFValueType.ARRAY:
+            # ARRAY 直接用 contents()
+            writer.add_array(key=key, val=field.contents())
+
+        else:
+            # 其他标量类型：INT / FLOAT / BOOL ...
+            v = field.parts[field.data[0]][0]
+            writer.add_key_value(key=key, val=v, vtype=ftype)
+
+gguf_path = "/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/gguf_models/qwen.gguf"
+
+reader = GGUFReader(gguf_path)
+writer = GGUFWriter(gguf_path + ".svd","qwen2_5_svd")
+copy_metadata(reader, writer)
+
+need_svd = ['ffn_up', 'ffn_down']
+
+
+def convert_to_torch(gguf_tensor):
+    W_np = np.array(gguf_tensor.data, copy=False).astype("float32", copy=False)
+    return torch.from_numpy(W_np)
+
+def svd_factorize_torch(torch_tensor: torch.Tensor, device='cuda:1'):
+    # device = "cuda" 或 "cpu"
+    if device is None:
+        device = torch_tensor.device  # 默认跟随输入
+
+    # 确保在 2D
+    if torch_tensor.ndim != 2:
+        torch_tensor = torch_tensor.view(torch_tensor.shape[0], -1)
+
+    # 移到 GPU
+    torch_tensor = torch_tensor.to(device)
+
+    # SVD on GPU
+    U, S, Vh = torch.linalg.svd(torch_tensor, full_matrices=False)
+
+    s_sqrt = torch.sqrt(S)
+
+    U_factor = U * s_sqrt.unsqueeze(0)
+    V_factor = s_sqrt.unsqueeze(1) * Vh
+
+    return U_factor.cpu(), V_factor.cpu()
+
+
+# 先复制 KV（下一节详细），再写 tensor
+# 这里先只演示 tensor 部分
+for t in reader.tensors:
+    name = t.name
+    do_svd = any(sub in name for sub in need_svd)
+
+    if do_svd:
+        torch_tensor = convert_to_torch(t)
+        U, V = svd_factorize_torch(torch_tensor)
+
+        writer.add_tensor(
+            name=name + "_svd_u",
+            tensor=U.detach().cpu().numpy().astype("float32"),
+            raw_shape=tuple(U.shape),
+            raw_dtype=GGMLQuantizationType.F32,  # 新的 U/V 用 F32
+        )
+        writer.add_tensor(
+            name=name + "_svd_v",
+            tensor=V.detach().cpu().numpy().astype("float32"),
+            raw_shape=tuple(V.shape),
+            raw_dtype=GGMLQuantizationType.F32,
+        )
+    else:
+        # 未改动张量：完全按原始信息写回
+        writer.add_tensor(
+            name=name,
+            tensor=t.data,              # 原样写回
+            raw_shape=tuple(t.shape), # 原始形状
+            raw_dtype=t.tensor_type,  # 原始量化类型/精度
+        )
+
+# 写文件
+writer.write_header_to_file()
+writer.write_kv_data_to_file()
+writer.write_tensors_to_file()
+writer.close()

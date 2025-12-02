@@ -82,7 +82,6 @@ models/*
 models-mnt
 !models/.editorconfig
 !models/ggml-vocab-*.gguf*
-!models/templates
 
 # Zig
 zig-out/
@@ -97,11 +96,11 @@ perf-*.txt
 # Examples
 
 examples/jeopardy/results.txt
-tools/server/*.css.hpp
-tools/server/*.html.hpp
-tools/server/*.js.hpp
-tools/server/*.mjs.hpp
-tools/server/*.gz.hpp
+examples/server/*.css.hpp
+examples/server/*.html.hpp
+examples/server/*.js.hpp
+examples/server/*.mjs.hpp
+examples/server/*.gz.hpp
 !build_64.sh
 !examples/*.bat
 !examples/*/*.kts
@@ -111,7 +110,7 @@ tools/server/*.gz.hpp
 
 # Server Web UI temporary files
 node_modules
-tools/server/webui/dist
+examples/server/webui/dist
 
 # Python
 
@@ -147,8 +146,3 @@ poetry.toml
 # Local scripts
 /run-vim.sh
 /run-chat.sh
-.ccache/
-
-# IDE
-*.code-workspace
-.windsurf/

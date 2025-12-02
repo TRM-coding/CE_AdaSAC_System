@@ -22,15 +22,8 @@ AllowShortIfStatementsOnASingleLine: Never
 AllowShortLambdasOnASingleLine: Inline
 AllowShortLoopsOnASingleLine: false
 AlwaysBreakBeforeMultilineStrings: true
-# Treat CUDA keywords/attributes as "attribute macros" and avoid breaking lines inside them
-AttributeMacros:
-  - __host__
-  - __device__
-  - __global__
-  - __forceinline__
-  - __launch_bounds__
 BinPackArguments: true
-BinPackParameters: false # OnePerLine
+BinPackParameters: true # OnePerLine
 BitFieldColonSpacing: Both
 BreakBeforeBraces: Custom # Attach
 BraceWrapping:
@@ -77,17 +70,14 @@ ExperimentalAutoDetectBinPacking: false
 FixNamespaceComments: true
 IncludeBlocks:   Regroup
 IncludeCategories:
-  - Regex:           '".*"'
+  - Regex:           '^<.*\.h>'
     Priority:        1
     SortPriority:    0
-  - Regex:           '^<.*\.h>'
+  - Regex:           '^<.*'
     Priority:        2
     SortPriority:    0
-  - Regex:           '^<.*'
-    Priority:        3
-    SortPriority:    0
   - Regex:           '.*'
-    Priority:        4
+    Priority:        3
     SortPriority:    0
 IncludeIsMainRegex: '([-_](test|unittest))?$'
 IncludeIsMainSourceRegex: ''

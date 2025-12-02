@@ -1,5 +1,4 @@
 #include "ggml.h"
-#include "ggml-cpu.h"
 #include "llama.h"
 #include "common.h"
 

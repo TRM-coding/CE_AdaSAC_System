@@ -33,13 +33,13 @@ git clone https://huggingface.co/openai/clip-vit-large-patch14-336
 2. Use `llava_surgery.py` to split the LLaVA model to LLaMA and multimodel projector constituents:
 
 ```sh
-python ./tools/mtmd/llava_surgery.py -m path/to/MobileVLM-1.7B
+python ./examples/llava/llava_surgery.py -m path/to/MobileVLM-1.7B
 ```
 
 3. Use `convert_image_encoder_to_gguf.py` with `--projector-type ldp` (for **V2** please use `--projector-type ldpv2`) to convert the LLaVA image encoder to GGUF:
 
 ```sh
-python ./tools/mtmd/convert_image_encoder_to_gguf.py \
+python ./examples/llava/convert_image_encoder_to_gguf.py \
     -m path/to/clip-vit-large-patch14-336 \
     --llava-projector path/to/MobileVLM-1.7B/llava.projector \
     --output-dir path/to/MobileVLM-1.7B \
@@ -47,7 +47,7 @@ python ./tools/mtmd/convert_image_encoder_to_gguf.py \
 ```
 
 ```sh
-python ./tools/mtmd/convert_image_encoder_to_gguf.py \
+python ./examples/llava/convert_image_encoder_to_gguf.py \
     -m path/to/clip-vit-large-patch14-336 \
     --llava-projector path/to/MobileVLM-1.7B_V2/llava.projector \
     --output-dir path/to/MobileVLM-1.7B_V2 \
@@ -69,10 +69,10 @@ Now both the LLaMA part and the image encoder is in the `MobileVLM-1.7B` directo
 
 ## Android compile and run
 ### compile
-refer to `tools/mtmd/android/build_64.sh`
+refer to `examples/llava/android/build_64.sh`
 ```sh
-mkdir tools/mtmd/android/build_64
-cd tools/mtmd/android/build_64
+mkdir examples/llava/android/build_64
+cd examples/llava/android/build_64
 ../build_64.sh
 ```
 ### run on Android
@@ -194,7 +194,7 @@ llama_print_timings:       total time =   44411.01 ms /   377 tokens
 ## Orin compile and run
 ### compile
 ```sh
-make GGML_CUDA=1 CUDA_DOCKER_ARCH=sm_87 -j 32
+make GGML_CUDA=1 CUDA_DOCKER_ARCH=sm_87 GGML_CUDA_F16=1 -j 32
 ```
 ### run on Orin
 ### case 1
