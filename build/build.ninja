@@ -109,6 +109,40 @@ build run_svd_test: CXX_EXECUTABLE_LINKER__run_svd_test_Debug CMakeFiles/run_svd
   TARGET_PDB = run_svd_test.dbg
 
 # =============================================================================
+# Object build statements for EXECUTABLE target decode_svd_test
+
+
+#############################################
+# Order-only phony target for decode_svd_test
+
+build cmake_object_order_depends_target_decode_svd_test: phony || cmake_object_order_depends_target_ggml cmake_object_order_depends_target_ggml-base cmake_object_order_depends_target_ggml-cpu cmake_object_order_depends_target_llama
+
+build CMakeFiles/decode_svd_test.dir/exp6_decode_svd_model/decode_svd_model.cpp.o: CXX_COMPILER__decode_svd_test_unscanned_Debug /home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp6_decode_svd_model/decode_svd_model.cpp || cmake_object_order_depends_target_decode_svd_test
+  DEFINES = -DGGML_BACKEND_SHARED -DGGML_SHARED -DGGML_USE_CPU -DLLAMA_SHARED
+  DEP_FILE = CMakeFiles/decode_svd_test.dir/exp6_decode_svd_model/decode_svd_model.cpp.o.d
+  FLAGS = -g
+  INCLUDES = -I/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/src -I/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/common -I/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/include -I/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml -I/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/include -I/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/ops -I/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/src/../include -I/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/../include
+  OBJECT_DIR = CMakeFiles/decode_svd_test.dir
+  OBJECT_FILE_DIR = CMakeFiles/decode_svd_test.dir/exp6_decode_svd_model
+
+
+# =============================================================================
+# Link build statements for EXECUTABLE target decode_svd_test
+
+
+#############################################
+# Link the executable decode_svd_test
+
+build decode_svd_test: CXX_EXECUTABLE_LINKER__decode_svd_test_Debug CMakeFiles/decode_svd_test.dir/exp6_decode_svd_model/decode_svd_model.cpp.o | bin/libllama.so bin/libggml.so bin/libggml-cpu.so bin/libggml-base.so || bin/libggml-base.so bin/libggml-cpu.so bin/libggml.so bin/libllama.so
+  FLAGS = -g
+  LINK_LIBRARIES = -Wl,-rpath,/home/tianruiming/CE_ADA_LLAMA/build/bin  bin/libllama.so  bin/libggml.so  bin/libggml-cpu.so  bin/libggml-base.so
+  OBJECT_DIR = CMakeFiles/decode_svd_test.dir
+  POST_BUILD = :
+  PRE_LINK = :
+  TARGET_FILE = decode_svd_test
+  TARGET_PDB = decode_svd_test.dbg
+
+# =============================================================================
 # Object build statements for EXECUTABLE target simple
 
 
@@ -1390,7 +1424,7 @@ build opslib.so: phony ops/opslib.so
 #############################################
 # Folder: /home/tianruiming/CE_ADA_LLAMA/build
 
-build all: phony load_test run_svd_test simple llama-bench 3dparty/llamacpp/all 3dparty/pybind11/all ops/all
+build all: phony load_test run_svd_test decode_svd_test simple llama-bench 3dparty/llamacpp/all 3dparty/pybind11/all ops/all
 
 # =============================================================================
 

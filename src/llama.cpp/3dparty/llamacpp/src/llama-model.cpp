@@ -2388,17 +2388,17 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
 
                         layer.ffn_norm = create_tensor(tn(LLM_TENSOR_FFN_NORM, "weight", i), {n_embd}, 0);
 
-                        layer.ffn_gate = create_tensor(tn(LLM_TENSOR_FFN_GATE, "weight", i), {n_embd,   n_ff}, 0);
+                        layer.ffn_gate = create_tensor(tn(LLM_TENSOR_FFN_GATE, "weight", i), {n_embd,   n_ff}, TENSOR_NOT_REQUIRED);
                         layer.ffn_gate_svd_u = create_tensor(tn(LLM_TENSOR_FFN_GATE_SVD_U, "weight", i), {n_embd,   n_ff}, 0);
                         layer.ffn_gate_svd_v = create_tensor(tn(LLM_TENSOR_FFN_GATE_SVD_V, "weight", i), {n_embd,   n_embd}, 0);
 
                         layer.ffn_down_svd_u = create_tensor(tn(LLM_TENSOR_FFN_DOWN_SVD_U, "weight", i), {  n_embd, n_embd}, 0);
                         layer.ffn_down_svd_v = create_tensor(tn(LLM_TENSOR_FFN_DOWN_SVD_V, "weight", i), {  n_ff, n_embd}, 0);
-                        layer.ffn_down = create_tensor(tn(LLM_TENSOR_FFN_DOWN, "weight", i), {  n_ff, n_embd}, 0);
+                        layer.ffn_down = create_tensor(tn(LLM_TENSOR_FFN_DOWN, "weight", i), {  n_ff, n_embd}, TENSOR_NOT_REQUIRED);
 
                         layer.ffn_up_svd_u = create_tensor(tn(LLM_TENSOR_FFN_UP_SVD_U, "weight", i), {n_embd,   n_ff}, 0);
                         layer.ffn_up_svd_v = create_tensor(tn(LLM_TENSOR_FFN_UP_SVD_V, "weight", i), {n_embd,   n_embd}, 0);
-                        layer.ffn_up   = create_tensor(tn(LLM_TENSOR_FFN_UP,   "weight", i), {n_embd,   n_ff}, 0);
+                        layer.ffn_up   = create_tensor(tn(LLM_TENSOR_FFN_UP,   "weight", i), {n_embd,   n_ff}, TENSOR_NOT_REQUIRED);
                     }
                 } break;
             case LLM_ARCH_QWEN2MOE:

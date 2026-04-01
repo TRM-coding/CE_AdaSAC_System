@@ -1,133 +1,132 @@
+import argparse
+import re
+
+import numpy as np
+import torch
+
+from gguf import GGMLQuantizationType, GGUFValueType
 from gguf.gguf_reader import GGUFReader
 from gguf.gguf_writer import GGUFWriter
-from gguf import GGUFType
-from gguf import GGMLQuantizationType   # 如果你要显式指定 F32 等
-import torch
-from gguf import GGUFWriter, GGUFValueType, ReaderField, OrderedDict
-import numpy as np
+from gguf.quants import dequantize
 
-def copy_metadata(reader, writer):
-    for keyi, field in reader.fields.items():
-        # 这几个是由 writer 自己负责写的，通常跳过
-        if keyi in ["general.architecture", "GGUF.version", "GGUF.tensor_count", "GGUF.kv_count"]:
+
+NEED_SVD = ("ffn_up", "ffn_down", "ffn_gate")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Generate qwen2_svd GGUF from a dense or quantized GGUF model.")
+    parser.add_argument("input", help="input GGUF path")
+    parser.add_argument("output", nargs="?", help="output GGUF path, defaults to <input>.sort_svd.gguf")
+    parser.add_argument(
+        "--device",
+        default="cuda:5" if torch.cuda.is_available() and torch.cuda.device_count() > 5 else ("cuda" if torch.cuda.is_available() else "cpu"),
+        help="torch device used for SVD",
+    )
+    return parser.parse_args()
+
+
+def copy_metadata(reader: GGUFReader, writer: GGUFWriter) -> None:
+    for key_in, field in reader.fields.items():
+        if key_in in ["general.architecture", "GGUF.version", "GGUF.tensor_count", "GGUF.kv_count"]:
             continue
 
-        key=keyi
-        if 'rope' not in keyi:
-            key=keyi.replace("qwen2", "qwen2_svd")
-
-        # field.types 是一个列表，取 [0] 即字段类型
+        key_out = key_in if "rope" in key_in else key_in.replace("qwen2", "qwen2_svd")
         ftype = field.types[0]
 
         if ftype == GGUFValueType.STRING:
-            # STRING 的值在 parts[field.data[0]] 里，是一串 int，需要转回字符
-            s = ''.join(chr(i) for i in field.parts[field.data[0]])
-            writer.add_string(key=key, val=s)
-
+            value = "".join(chr(i) for i in field.parts[field.data[0]])
+            writer.add_string(key=key_out, val=value)
         elif ftype == GGUFValueType.ARRAY:
-            # ARRAY 直接用 contents()
-            writer.add_array(key=key, val=field.contents())
-
+            writer.add_array(key=key_out, val=field.contents())
         else:
-            # 其他标量类型：INT / FLOAT / BOOL ...
-            v = field.parts[field.data[0]][0]
-            writer.add_key_value(key=key, val=v, vtype=ftype)
-
-gguf_path = "/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/gguf_models/qwen7b.gguf"
-
-reader = GGUFReader(gguf_path)
-writer = GGUFWriter(gguf_path + ".sort_svd"+".gguf","qwen2_svd")
-copy_metadata(reader, writer)
-
-need_svd = ['ffn_up', 'ffn_down','ffn_gate']
+            value = field.parts[field.data[0]][0]
+            writer.add_key_value(key=key_out, val=value, vtype=ftype)
 
 
-def convert_to_torch(gguf_tensor):
-    # 读出 numpy 一维数组（不转置）
-    W_np = np.array(gguf_tensor.data, copy=False).astype("float32", copy=False)
+def tensor_to_float32_matrix(tensor) -> np.ndarray:
+    raw = np.array(tensor.data, copy=False)
+    shape = tuple(int(x) for x in tensor.shape[::-1])
 
-    # 按 GGUF 的维度 reshape （C-order）
-    true_shape = np.flip(gguf_tensor.shape)
-    W_np = W_np.reshape(true_shape)
+    if tensor.tensor_type in (GGMLQuantizationType.F32, GGMLQuantizationType.F16):
+        matrix = raw.astype(np.float32, copy=False).reshape(shape)
+    else:
+        matrix = dequantize(raw, tensor.tensor_type).reshape(shape)
 
-    return torch.from_numpy(W_np)
+    if matrix.ndim != 2:
+        matrix = matrix.reshape(matrix.shape[0], -1)
 
-def svd_factorize_torch(torch_tensor: torch.Tensor, device='cuda:5'):
-    # device = "cuda" 或 "cpu"
-    if device is None:
-        device = torch_tensor.device  # 默认跟随输入
-
-    # 确保在 2D
-    if torch_tensor.ndim != 2:
-        torch_tensor = torch_tensor.view(torch_tensor.shape[0], -1)
-
-    # 移到 GPU
-    torch_tensor = torch_tensor.to(device)
-
-    # SVD on GPU
-    U, S, Vh = torch.linalg.svd(torch_tensor, full_matrices=False)#Vh 是V的转置
-
-    # 按奇异值从大到小排序对应行/列
-    sort_idx = torch.argsort(S, descending=True)
-    U = U[:, sort_idx]
-    S = S[sort_idx]
-    Vh = Vh[sort_idx, :]
-
-    # print(S)
-    # input()
-    s_sqrt = torch.sqrt(S)
-
-    U_factor = U * s_sqrt.unsqueeze(0)
-    V_factor = s_sqrt.unsqueeze(1) * Vh
-
-    return U_factor.cpu(), V_factor.cpu()
+    return np.ascontiguousarray(matrix)
 
 
-# 先复制 KV（下一节详细），再写 tensor
-# 这里先只演示 tensor 部分
-import re
-for t in reader.tensors:
-    name = t.name
-    do_svd = any(sub in name for sub in need_svd)
+def svd_factorize_torch(matrix: np.ndarray, device: str) -> tuple[np.ndarray, np.ndarray]:
+    weight = torch.from_numpy(matrix).to(device)
+    u, s, vh = torch.linalg.svd(weight, full_matrices=False)
 
-    if do_svd:
-        torch_tensor = convert_to_torch(t)
-        U, V = svd_factorize_torch(torch_tensor)
-        out1=None
-        out2=None
-        if "ffn_down" in name:
-            out1 = re.sub(r'ffn_down', r'ffn_down_svd_u', name)
-            out2 = re.sub(r'ffn_down', r'ffn_down_svd_v', name)
-        if "ffn_up" in name:
-            out1 = re.sub(r'ffn_up', r'ffn_up_svd_u', name)
-            out2 = re.sub(r'ffn_up', r'ffn_up_svd_v', name)
-        if "ffn_gate" in name:
-            out1 = re.sub(r'ffn_gate', r'ffn_gate_svd_u', name)
-            out2 = re.sub(r'ffn_gate', r'ffn_gate_svd_v', name)
+    s_sqrt = torch.sqrt(s)
+    u_factor = (u * s_sqrt.unsqueeze(0)).to("cpu", dtype=torch.float16).numpy()
+    v_factor = (s_sqrt.unsqueeze(1) * vh).to("cpu", dtype=torch.float16).numpy()
+    return u_factor, v_factor
+
+
+def svd_tensor_names(name: str) -> tuple[str, str]:
+    if "ffn_down" in name:
+        return re.sub(r"ffn_down", r"ffn_down_svd_u", name), re.sub(r"ffn_down", r"ffn_down_svd_v", name)
+    if "ffn_up" in name:
+        return re.sub(r"ffn_up", r"ffn_up_svd_u", name), re.sub(r"ffn_up", r"ffn_up_svd_v", name)
+    if "ffn_gate" in name:
+        return re.sub(r"ffn_gate", r"ffn_gate_svd_u", name), re.sub(r"ffn_gate", r"ffn_gate_svd_v", name)
+    raise ValueError(f"unsupported SVD tensor name: {name}")
+
+
+def main() -> int:
+    args = parse_args()
+    input_path = args.input
+    output_path = args.output or f"{input_path}.sort_svd.gguf"
+
+    reader = GGUFReader(input_path)
+    writer = GGUFWriter(output_path, "qwen2_svd")
+    copy_metadata(reader, writer)
+
+    svd_count = 0
+    for tensor in reader.tensors:
+        if any(token in tensor.name for token in NEED_SVD):
+            matrix = tensor_to_float32_matrix(tensor)
+            u_factor, v_factor = svd_factorize_torch(matrix, args.device)
+            out_u, out_v = svd_tensor_names(tensor.name)
+
+            writer.add_tensor(
+                name=out_u,
+                tensor=u_factor,
+                raw_shape=tuple(u_factor.shape),
+                raw_dtype=GGMLQuantizationType.F16,
+            )
+            writer.add_tensor(
+                name=out_v,
+                tensor=v_factor,
+                raw_shape=tuple(v_factor.shape),
+                raw_dtype=GGMLQuantizationType.F16,
+            )
+            svd_count += 1
+
         writer.add_tensor(
-            name=out1,
-            tensor=U.detach().cpu().numpy().astype("float32"),
-            raw_shape=tuple(U.shape),
-            raw_dtype=GGMLQuantizationType.F32,  # 新的 U/V 用 F32
+            name=tensor.name,
+            tensor=tensor.data,
+            raw_shape=tuple(tensor.shape)[::-1],
+            raw_dtype=tensor.tensor_type,
         )
-        writer.add_tensor(
-            name=out2,
-            tensor=V.detach().cpu().numpy().astype("float32"),
-            raw_shape=tuple(V.shape),
-            raw_dtype=GGMLQuantizationType.F32,
-        )
-    
-    # 未改动张量：按原始信息写回原始张量
-    writer.add_tensor(
-        name=name,
-        tensor=t.data,              # 原样写回
-        raw_shape=tuple(t.shape)[::-1], # 原始形状
-        raw_dtype=t.tensor_type,  # 原始量化类型/精度
-    )
 
-# 写文件
-writer.write_header_to_file()
-writer.write_kv_data_to_file()
-writer.write_tensors_to_file()
-writer.close()
-print("FINISHED")
+    writer.write_header_to_file()
+    writer.write_kv_data_to_file()
+    writer.write_tensors_to_file()
+    writer.close()
+
+    print(f"input: {input_path}")
+    print(f"output: {output_path}")
+    print(f"device: {args.device}")
+    print(f"svd tensors: {svd_count}")
+    print("FINISHED")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

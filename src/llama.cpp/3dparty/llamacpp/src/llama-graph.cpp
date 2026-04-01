@@ -669,11 +669,23 @@ ggml_tensor * llm_graph_context::build_mm_svd(
         bool cooperation
         ) const {
     ggml_tensor * res = nullptr;
+    ggml_tensor * w_shape = w;
+
+    if (w_shape == nullptr) {
+        if (w_svd_u != nullptr && w_svd_u->ne[0] == cur->ne[0]) {
+            w_shape = w_svd_u;
+        } else if (w_svd_v != nullptr && w_svd_v->ne[0] == cur->ne[0]) {
+            w_shape = w_svd_v;
+        } else {
+            GGML_ABORT("build_mm_svd: failed to infer output shape tensor");
+        }
+    }
+
    
     // if (CHECK_SVD(cur,w,rank))
     if (true)
     {
-        res=ggml_mul_mat_svd(ctx0,w,w_svd_v,w_svd_u,cur,rank);
+        res=ggml_mul_mat_svd(ctx0,w_shape,w_svd_v,w_svd_u,cur,rank);
         // res=ggml_mul_mat(ctx0,w_svd_v,cur);
         // res=ggml_mul_mat(ctx0,w_svd_u,res);
     }else

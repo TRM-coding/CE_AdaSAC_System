@@ -1,5 +1,6 @@
 /home/tianruiming/CE_ADA_LLAMA/build/CMakeFiles/load_test.dir
 /home/tianruiming/CE_ADA_LLAMA/build/CMakeFiles/run_svd_test.dir
+/home/tianruiming/CE_ADA_LLAMA/build/CMakeFiles/decode_svd_test.dir
 /home/tianruiming/CE_ADA_LLAMA/build/CMakeFiles/simple.dir
 /home/tianruiming/CE_ADA_LLAMA/build/CMakeFiles/llama-bench.dir
 /home/tianruiming/CE_ADA_LLAMA/build/CMakeFiles/edit_cache.dir

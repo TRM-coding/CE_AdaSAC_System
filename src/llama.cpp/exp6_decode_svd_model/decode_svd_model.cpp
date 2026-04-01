@@ -14,14 +14,21 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <chrono>
+#include <thread>
 
-int main()
+int main(int argc, char ** argv)
 {
     int ngl = 99;
     uint32_t n_ctx = 2048;
-    // std::string model_path = "/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/gguf_models/qwen.gguf.svd.gguf";
-    std::string model_path = "/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/gguf_models/qwen7b.gguf.sort_svd.gguf";
-    // std::string model_path="/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/gguf_models/qwen.gguf";
+    std::string model_path = argc > 1
+        ? argv[1]
+        : "/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/gguf_models/qwen7b.gguf.sort_svd.gguf";
+    const int32_t max_new_tokens = argc > 2 ? std::stoi(argv[2]) : 64;
+    const int32_t n_threads = argc > 3
+        ? std::stoi(argv[3])
+        : std::max(1u, std::thread::hardware_concurrency() / 2);
+    const bool verbose_tokens = argc > 4 ? std::stoi(argv[4]) != 0 : false;
 
     // 1. 加载动态后端
     ggml_backend_load_all();
@@ -45,6 +52,8 @@ int main()
     llama_context_params ctx_params = llama_context_default_params();
     ctx_params.n_ctx = n_ctx;
     ctx_params.n_batch = n_ctx;
+    ctx_params.n_threads = n_threads;
+    ctx_params.n_threads_batch = n_threads;
 
     std::cout << "creating context ..." << std::endl;
     llama_context *ctx = llama_init_from_model(model, ctx_params);
@@ -54,6 +63,8 @@ int main()
         llama_model_free(model);
         return 1;
     }
+    std::cout << "threads: decode=" << llama_n_threads(ctx)
+              << " batch=" << llama_n_threads_batch(ctx) << std::endl;
 
     // ========== 下面是你要的一次前向传播 ==========
 
@@ -188,11 +199,14 @@ int main()
     }
 
     std::cout << "Autoregressive generation:" << std::endl;
-    std::string generated_text;
-    int32_t max_new_tokens = 64;
+    std::vector<llama_token> generated_token_ids;
+    generated_token_ids.reserve(max_new_tokens);
     int32_t total_tokens = n_tokens;
     logits = llama_get_logits_ith(ctx, total_tokens - 1);
     bool generation_failed = false;
+    int32_t generated_tokens = 0;
+    const auto generation_start = std::chrono::steady_clock::now();
+    double decode_only_sec = 0.0;
 
     if (!logits) {
         std::cerr << "llama_get_logits_ith returned nullptr before generation" << std::endl;
@@ -201,22 +215,23 @@ int main()
         for (int32_t gen = 0; gen < max_new_tokens; ++gen) {
             llama_token next_token = greedy_sample(logits);
 
-            char buf[256];
-            int32_t len = llama_token_to_piece(
-                vocab,
-                next_token,
-                buf,
-                (int32_t) sizeof(buf),
-                /*lstrip*/ 0,
-                /*special*/ true
-            );
-            std::string piece = (len > 0 ? std::string(buf, buf + len) : std::string("[ERR]"));
-            generated_text += piece;
-
-            std::cout << "  token #" << gen
-                      << " id=" << next_token
-                      << " piece=\"" << piece << "\""
-                      << std::endl;
+            if (verbose_tokens) {
+                char buf[256];
+                int32_t len = llama_token_to_piece(
+                    vocab,
+                    next_token,
+                    buf,
+                    (int32_t) sizeof(buf),
+                    /*lstrip*/ 0,
+                    /*special*/ true
+                );
+                std::string piece = (len > 0 ? std::string(buf, buf + len) : std::string("[ERR]"));
+                std::cout << "  token #" << gen
+                          << " id=" << next_token
+                          << " piece=\"" << piece << "\""
+                          << std::endl;
+            }
+            generated_token_ids.push_back(next_token);
 
             llama_batch gen_batch = llama_batch_init(1, 0, 1);
             gen_batch.n_tokens = 1;
@@ -226,8 +241,11 @@ int main()
             gen_batch.seq_id[0][0] = 0;
             gen_batch.logits[0] = 1;
 
+            const auto decode_start = std::chrono::steady_clock::now();
             ret = llama_decode(ctx, gen_batch);
+            const auto decode_end = std::chrono::steady_clock::now();
             llama_batch_free(gen_batch);
+            decode_only_sec += std::chrono::duration<double>(decode_end - decode_start).count();
             if (ret != 0) {
                 std::cerr << "llama_decode failed during generation, ret = " << ret << std::endl;
                 generation_failed = true;
@@ -235,6 +253,7 @@ int main()
             }
 
             total_tokens += 1;
+            generated_tokens += 1;
             logits = llama_get_logits_ith(ctx, 0); // fetch logits for the only token in the last batch
             if (!logits) {
                 std::cerr << "llama_get_logits_ith returned nullptr during generation" << std::endl;
@@ -244,8 +263,34 @@ int main()
         }
     }
 
-    if (!generated_text.empty()) {
+    if (!generated_token_ids.empty()) {
+        std::string generated_text;
+        for (llama_token token : generated_token_ids) {
+            char buf[256];
+            int32_t len = llama_token_to_piece(
+                vocab,
+                token,
+                buf,
+                (int32_t) sizeof(buf),
+                /*lstrip*/ 0,
+                /*special*/ true
+            );
+            generated_text += (len > 0 ? std::string(buf, buf + len) : std::string("[ERR]"));
+        }
         std::cout << "Generated text: " << generated_text << std::endl;
+    }
+
+    const auto generation_end = std::chrono::steady_clock::now();
+    const double generation_sec = std::chrono::duration<double>(generation_end - generation_start).count();
+    if (generated_tokens > 0 && decode_only_sec > 0.0) {
+        std::cout << "Decode-only throughput: " << (generated_tokens / decode_only_sec)
+                  << " tokens/s (" << generated_tokens << " tokens in "
+                  << decode_only_sec << " s of llama_decode)" << std::endl;
+    }
+    if (generated_tokens > 0 && generation_sec > 0.0) {
+        std::cout << "End-to-end throughput: " << (generated_tokens / generation_sec)
+                  << " tokens/s (" << generated_tokens << " tokens in "
+                  << generation_sec << " s)" << std::endl;
     }
 
     llama_batch_free(batch);
