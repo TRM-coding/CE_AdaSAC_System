@@ -1263,6 +1263,307 @@ static void ggml_compute_forward_mul_mat_one_chunk(
     }
 }
 
+
+static void ggml_compute_forward_mul_mat_svd_kernel_V(
+    const struct ggml_compute_params * params,
+    struct ggml_tensor * left_matrix,
+    struct ggml_tensor * right_matrix,
+    struct ggml_tensor * ans_matrix,
+    int64_t k_trunc
+)
+{
+    const struct ggml_tensor * src0 = left_matrix;
+    const struct ggml_tensor * src1 = right_matrix;
+    struct ggml_tensor * dst = ans_matrix;
+
+    GGML_TENSOR_BINARY_OP_LOCALS;
+
+    const int ith = params->ith;
+    const int nth = params->nth;
+
+
+
+    // 类型约束：dst 一律 F32；src0/src1 支持 F32 或 F16
+    GGML_ASSERT(dst->type == GGML_TYPE_F32);
+    GGML_ASSERT(src0->type == GGML_TYPE_F32 || src0->type == GGML_TYPE_F16);
+    GGML_ASSERT(src1->type == GGML_TYPE_F32 || src1->type == GGML_TYPE_F16);
+
+    // 形状约束，保持与原始 mul_mat 逻辑一致
+    // dst:  [ne0, ne1, ne2, ne3]
+    // src0: [ne00, ne01, ne02, ne03]
+    // src1: [ne10, ne11, ne12, ne13]
+    GGML_ASSERT(ne0  == ne01);  // dst dim0 = src0 dim1
+    GGML_ASSERT(ne1  == ne11);  // dst dim1 = src1 dim1
+    GGML_ASSERT(ne2  == ne12);
+    GGML_ASSERT(ne3  == ne13);
+    GGML_ASSERT(ne00 == ne10);  // dot 维一致
+
+    // 不支持 permuted src0 / src1
+    GGML_ASSERT(nb00 == ggml_type_size(src0->type));
+    GGML_ASSERT(nb10 == ggml_type_size(src1->type));
+
+    // dst 不能 transpose / permute
+    GGML_ASSERT(nb0 == sizeof(float));
+    GGML_ASSERT(nb0 <= nb1);
+    GGML_ASSERT(nb1 <= nb2);
+    GGML_ASSERT(nb2 <= nb3);
+
+    // broadcast 因子（和原始 mul_mat 一致）
+    // src0 的 dim2/dim3 可以比 src1/dst 小，按 r2/r3 做 broadcast
+    GGML_ASSERT(ne02 > 0);
+    GGML_ASSERT(ne03 > 0);
+    GGML_ASSERT(ne12 % ne02 == 0);
+    GGML_ASSERT(ne13 % ne03 == 0);
+    const int64_t r2 = ne12 / ne02;
+    const int64_t r3 = ne13 / ne03;
+
+    // 多线程按“dst 的第 0 维”平均拆分
+    const int64_t n_rows = ne0;  // = src0->ne[1]
+
+    int64_t row_start = n_rows * ith     / nth;
+    int64_t row_end   = n_rows * (ith+1) / nth;
+
+    if (row_start >= row_end) {
+        // 该线程无任务
+        return;
+    }
+
+    // 主计算：
+    // 对于每个 batch (i2,i3) 和每个“列索引 i1”，
+    //   线程负责的行区间 i0 ∈ [row_start, row_end)
+    //   dst[i0, i1, i2, i3] =
+    //       sum_k src0[k, i0, i02, i03] * src1[k, i1, i2, i3]
+    //
+    // 其中：
+    //   i02 = i2 / r2, i03 = i3 / r3   // broadcast 到 src0
+
+    for (int64_t i3 = 0; i3 < ne3; ++i3) {
+        const int64_t i03 = i3 / r3;  // 映射到 src0 第 3 维
+
+        for (int64_t i2 = 0; i2 < ne2; ++i2) {
+            const int64_t i02 = i2 / r2;  // 映射到 src0 第 2 维
+
+            // src0 在该 batch 下 dim1=0 行的起始地址
+            const char * src0_batch_base =
+                (const char *) src0->data + i02*nb02 + i03*nb03;
+
+            for (int64_t i1 = 0; i1 < ne1; ++i1) {
+                // src1 在该 (i1,i2,i3) 下、沿 dim0=k 的列向量基址
+                const char * src1_col_base =
+                    (const char *) src1->data + i1*nb11 + i2*nb12 + i3*nb13;
+
+                // dst 在该 (i1,i2,i3) 下 dim0=0 元素的基址
+                float * dst_col_base =
+                    (float *) ((char *) dst->data + i1*nb1 + i2*nb2 + i3*nb3);
+
+                for (int64_t i0 = row_start; i0 < row_end-k_trunc; ++i0) {
+                    // src0 的第 i0 行（在该 batch 下）
+                    const char * src0_row =
+                        src0_batch_base + i0*nb01;
+
+                    float sum = 0.0f;
+
+                    // 沿 dim0 = k 做内积
+                    for (int64_t k = 0; k < ne00; ++k) {
+                        float a, b;
+
+                        // 读取 src0[k, i0, i02, i03]
+                        if (src0->type == GGML_TYPE_F32) {
+                            a = *(const float *) (src0_row + k*nb00);
+                        } else {
+                            const ggml_fp16_t v0 =
+                                *(const ggml_fp16_t *) (src0_row + k*nb00);
+                            a = ggml_fp16_to_fp32(v0);
+                        }
+
+                        // 读取 src1[k, i1, i2, i3]
+                        if (src1->type == GGML_TYPE_F32) {
+                            b = *(const float *) (src1_col_base + k*nb10);
+                        } else {
+                            const ggml_fp16_t v1 =
+                                *(const ggml_fp16_t *) (src1_col_base + k*nb10);
+                            b = ggml_fp16_to_fp32(v1);
+                        }
+
+                        sum += a * b;
+                    }
+
+                    // 写回 dst[i0, i1, i2, i3]
+                    dst_col_base[i0] = sum;
+                }
+            }
+        }
+    }
+    return;
+}
+
+static void ggml_compute_forward_mul_mat_svd_kernel_U(
+    const struct ggml_compute_params * params,
+    struct ggml_tensor * left_matrix,
+    struct ggml_tensor * right_matrix,
+    struct ggml_tensor * ans_matrix,
+    int64_t k_trunc
+)
+{
+    const struct ggml_tensor * src0 = left_matrix;
+    const struct ggml_tensor * src1 = right_matrix;
+    struct ggml_tensor * dst = ans_matrix;
+
+    GGML_TENSOR_BINARY_OP_LOCALS;
+
+    const int ith = params->ith;
+    const int nth = params->nth;
+
+
+
+    // 类型约束：dst 一律 F32；src0/src1 支持 F32 或 F16
+    GGML_ASSERT(dst->type == GGML_TYPE_F32);
+    GGML_ASSERT(src0->type == GGML_TYPE_F32 || src0->type == GGML_TYPE_F16);
+    GGML_ASSERT(src1->type == GGML_TYPE_F32 || src1->type == GGML_TYPE_F16);
+
+    // 形状约束，保持与原始 mul_mat 逻辑一致
+    // dst:  [ne0, ne1, ne2, ne3]
+    // src0: [ne00, ne01, ne02, ne03]
+    // src1: [ne10, ne11, ne12, ne13]
+    GGML_ASSERT(ne0  == ne01);  // dst dim0 = src0 dim1
+    GGML_ASSERT(ne1  == ne11);  // dst dim1 = src1 dim1
+    GGML_ASSERT(ne2  == ne12);
+    GGML_ASSERT(ne3  == ne13);
+    GGML_ASSERT(ne00 == ne10);  // dot 维一致
+
+    // 不支持 permuted src0 / src1
+    GGML_ASSERT(nb00 == ggml_type_size(src0->type));
+    GGML_ASSERT(nb10 == ggml_type_size(src1->type));
+
+    // dst 不能 transpose / permute
+    GGML_ASSERT(nb0 == sizeof(float));
+    GGML_ASSERT(nb0 <= nb1);
+    GGML_ASSERT(nb1 <= nb2);
+    GGML_ASSERT(nb2 <= nb3);
+
+    // broadcast 因子（和原始 mul_mat 一致）
+    // src0 的 dim2/dim3 可以比 src1/dst 小，按 r2/r3 做 broadcast
+    GGML_ASSERT(ne02 > 0);
+    GGML_ASSERT(ne03 > 0);
+    GGML_ASSERT(ne12 % ne02 == 0);
+    GGML_ASSERT(ne13 % ne03 == 0);
+    const int64_t r2 = ne12 / ne02;
+    const int64_t r3 = ne13 / ne03;
+
+    // 多线程按“dst 的第 0 维”平均拆分
+    const int64_t n_rows = ne0;  // = src0->ne[1]
+
+    int64_t row_start = n_rows * ith     / nth;
+    int64_t row_end   = n_rows * (ith+1) / nth;
+
+    if (row_start >= row_end) {
+        // 该线程无任务
+        return;
+    }
+
+    // 主计算：
+    // 对于每个 batch (i2,i3) 和每个“列索引 i1”，
+    //   线程负责的行区间 i0 ∈ [row_start, row_end)
+    //   dst[i0, i1, i2, i3] =
+    //       sum_k src0[k, i0, i02, i03] * src1[k, i1, i2, i3]
+    //
+    // 其中：
+    //   i02 = i2 / r2, i03 = i3 / r3   // broadcast 到 src0
+
+    for (int64_t i3 = 0; i3 < ne3; ++i3) {
+        const int64_t i03 = i3 / r3;  // 映射到 src0 第 3 维
+
+        for (int64_t i2 = 0; i2 < ne2; ++i2) {
+            const int64_t i02 = i2 / r2;  // 映射到 src0 第 2 维
+
+            // src0 在该 batch 下 dim1=0 行的起始地址
+            const char * src0_batch_base =
+                (const char *) src0->data + i02*nb02 + i03*nb03;
+
+            for (int64_t i1 = 0; i1 < ne1; ++i1) {
+                // src1 在该 (i1,i2,i3) 下、沿 dim0=k 的列向量基址
+                const char * src1_col_base =
+                    (const char *) src1->data + i1*nb11 + i2*nb12 + i3*nb13;
+
+                // dst 在该 (i1,i2,i3) 下 dim0=0 元素的基址
+                float * dst_col_base =
+                    (float *) ((char *) dst->data + i1*nb1 + i2*nb2 + i3*nb3);
+
+                for (int64_t i0 = row_start; i0 < row_end; ++i0) {
+                    // src0 的第 i0 行（在该 batch 下）
+                    const char * src0_row =
+                        src0_batch_base + i0*nb01;
+
+                    float sum = 0.0f;
+
+                    // 沿 dim0 = k 做内积
+                    for (int64_t k = 0; k < ne00-k_trunc; ++k) {
+                        float a, b;
+
+                        // 读取 src0[k, i0, i02, i03]
+                        if (src0->type == GGML_TYPE_F32) {
+                            a = *(const float *) (src0_row + k*nb00);
+                        } else {
+                            const ggml_fp16_t v0 =
+                                *(const ggml_fp16_t *) (src0_row + k*nb00);
+                            a = ggml_fp16_to_fp32(v0);
+                        }
+
+                        // 读取 src1[k, i1, i2, i3]
+                        if (src1->type == GGML_TYPE_F32) {
+                            b = *(const float *) (src1_col_base + k*nb10);
+                        } else {
+                            const ggml_fp16_t v1 =
+                                *(const ggml_fp16_t *) (src1_col_base + k*nb10);
+                            b = ggml_fp16_to_fp32(v1);
+                        }
+
+                        sum += a * b;
+                    }
+
+                    // 写回 dst[i0, i1, i2, i3]
+                    dst_col_base[i0] = sum;
+                }
+            }
+        }
+    }
+    return;
+}
+
+static void ggml_compute_forward_mul_mat_svd(
+    const struct ggml_compute_params * params,
+    struct ggml_tensor * dst
+) {
+
+    const struct ggml_tensor * w  = dst->src[0]; // 未用，但保留
+    const struct ggml_tensor * b  = dst->src[1]; // input X
+    const struct ggml_tensor * u  = dst->src[2]; // w_u
+    const struct ggml_tensor * v  = dst->src[3]; // w_v
+    int64_t k_trunc=dst->svd_k_trunk;
+
+    float * tmp = (float *) params->wdata;
+    GGML_ASSERT(tmp != NULL);
+
+    // tmp shape: { w_v->ne[1], b->ne[1], b->ne[2], b->ne[3] }
+    struct ggml_tensor tmp_view = *dst;
+    tmp_view.type = GGML_TYPE_F32;
+    tmp_view.data = (void *) tmp;
+    tmp_view.ne[0] = v->ne[1];
+    tmp_view.ne[1] = b->ne[1];
+    tmp_view.ne[2] = b->ne[2];
+    tmp_view.ne[3] = b->ne[3];
+    tmp_view.nb[0] = sizeof(float);
+    tmp_view.nb[1] = tmp_view.nb[0] * tmp_view.ne[0];
+    tmp_view.nb[2] = tmp_view.nb[1] * tmp_view.ne[1];
+    tmp_view.nb[3] = tmp_view.nb[2] * tmp_view.ne[2];
+
+    // k_trunc=1;
+
+    ggml_compute_forward_mul_mat_svd_kernel_V(params, (struct ggml_tensor *) v, (struct ggml_tensor *) b, &tmp_view,k_trunc);
+    ggml_barrier(params->threadpool);
+    ggml_compute_forward_mul_mat_svd_kernel_U(params, (struct ggml_tensor *) u, &tmp_view, dst,k_trunc);
+}
+
 static void ggml_compute_forward_mul_mat(
         const struct ggml_compute_params * params,
               struct ggml_tensor * dst) {
@@ -1840,6 +2141,10 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
             {
                 ggml_compute_forward_mul_mat(params, tensor);
             } break;
+        case GGML_OP_MUL_MAT_SVD:
+            {
+                ggml_compute_forward_mul_mat_svd(params, tensor);
+            } break;
         case GGML_OP_MUL_MAT_ID:
             {
                 ggml_compute_forward_mul_mat_id(params, tensor);
@@ -2230,6 +2535,7 @@ static int ggml_get_n_tasks(struct ggml_tensor * node, int n_threads) {
         case GGML_OP_GROUP_NORM:
         case GGML_OP_CONCAT:
         case GGML_OP_MUL_MAT:
+        case GGML_OP_MUL_MAT_SVD:
         case GGML_OP_MUL_MAT_ID:
         case GGML_OP_OUT_PROD:
             {
@@ -2710,6 +3016,11 @@ struct ggml_cplan ggml_graph_plan(
                             cur = ggml_row_size(vec_dot_type, ggml_nelements(node->src[1]));
                         }
                     } break;
+                case GGML_OP_MUL_MAT_SVD:
+                    {
+                        size_t tmp_elems = node->src[3]->ne[1] * node->ne[1] * node->ne[2] * node->ne[3];
+                        cur = ggml_type_size(GGML_TYPE_F32) * tmp_elems;
+                    }break;
                 case GGML_OP_MUL_MAT_ID:
                     {
                         cur = 0;

@@ -634,6 +634,56 @@ ggml_tensor * llm_graph_context::build_lora_mm(
     return res;
 }
 
+static bool CHECK_SVD(ggml_tensor * cur , ggml_tensor * w,int rank)
+{
+    if (rank < w->ne[0]/2)
+    {
+        return false;
+    }
+    return true;
+}
+#include<iostream>
+static void ggml_print_tensor(struct ggml_tensor * cur) {
+    if (cur == nullptr) {
+        std::cout << "tensor = nullptr\n";
+        return;
+    }
+
+    std::cout << "Tensor \"" << (cur->name ? cur->name : "<unnamed>") << "\""
+              << " | shape = [";
+
+    // 打印 ne[0..cur->n_dims-1]
+    for (int i = 0; i < ggml_n_dims(cur); i++) {
+        std::cout << cur->ne[i];
+        if (i + 1 < ggml_n_dims(cur)) std::cout << ", ";
+    }
+
+    std::cout << "]\n";
+}
+ggml_tensor * llm_graph_context::build_mm_svd(
+        ggml_tensor * w,
+        ggml_tensor * w_svd_u,
+        ggml_tensor * w_svd_v,
+        ggml_tensor * cur,
+        int64_t         rank,
+        bool cooperation
+        ) const {
+    ggml_tensor * res = nullptr;
+   
+    // if (CHECK_SVD(cur,w,rank))
+    if (true)
+    {
+        res=ggml_mul_mat_svd(ctx0,w,w_svd_v,w_svd_u,cur,rank);
+        // res=ggml_mul_mat(ctx0,w_svd_v,cur);
+        // res=ggml_mul_mat(ctx0,w_svd_u,res);
+    }else
+    {
+        res=ggml_mul_mat(ctx0,w,cur);
+    }
+    
+    return res;
+}
+
 ggml_tensor * llm_graph_context::build_lora_mm_id(
           ggml_tensor * w,   // ggml_tensor * as
           ggml_tensor * cur, // ggml_tensor * b
@@ -695,6 +745,37 @@ ggml_tensor * llm_graph_context::build_norm(
     }
 
     return cur;
+}
+
+ggml_tensor * llm_graph_context::build_ffn_svd_qwen2(
+            ggml_tensor * cur,
+            ggml_tensor * up,ggml_tensor * up_svd_u,ggml_tensor * up_svd_v,
+            ggml_tensor * gate,ggml_tensor * gate_svd_u,ggml_tensor * gate_svd_v,
+            ggml_tensor * down,ggml_tensor * down_svd_u,ggml_tensor * down_svd_v,
+            int   il,
+            int          up_rank,
+            int          gate_rank,
+            int          down_rank
+                    ) const{
+    // up projection with SVD
+    // ggml_tensor * tmp=nullptr;
+
+    ggml_tensor * tmp = build_mm_svd(up, up_svd_u,up_svd_v,cur, up_rank);//TODO: finish build_lora_mm_svd
+    cb(tmp, "ffn_up", il);
+    //gate projection with SVD
+    cur = build_mm_svd(gate,gate_svd_u,gate_svd_v,cur,gate_rank);
+    cb(cur, "ffn_gate", il);
+    //silu activation
+    cur = ggml_silu(ctx0, cur);
+    cb(cur, "ffn_silu", il);
+    
+    cur = ggml_mul(ctx0, cur, tmp);
+    cb(cur, "ffn_gate_par", il);
+
+    //down projection with SVD
+    cur = build_mm_svd(down,down_svd_u,down_svd_v,cur,down_rank);
+    return cur;
+
 }
 
 ggml_tensor * llm_graph_context::build_ffn(

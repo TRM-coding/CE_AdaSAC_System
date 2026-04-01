@@ -39,7 +39,7 @@ reader = GGUFReader(gguf_path)
 writer = GGUFWriter(gguf_path + ".svd"+".gguf","qwen2_svd")
 copy_metadata(reader, writer)
 
-need_svd = ['ffn_up', 'ffn_down']
+need_svd = ['ffn_up', 'ffn_down','ffn_gate']
 
 
 def convert_to_torch(gguf_tensor):
@@ -47,7 +47,8 @@ def convert_to_torch(gguf_tensor):
     W_np = np.array(gguf_tensor.data, copy=False).astype("float32", copy=False)
 
     # 按 GGUF 的维度 reshape （C-order）
-    W_np = W_np.reshape(gguf_tensor.shape)
+    true_shape = np.flip(gguf_tensor.shape)
+    W_np = W_np.reshape(true_shape)
 
     return torch.from_numpy(W_np)
 
@@ -64,7 +65,7 @@ def svd_factorize_torch(torch_tensor: torch.Tensor, device='cuda:5'):
     torch_tensor = torch_tensor.to(device)
 
     # SVD on GPU
-    U, S, Vh = torch.linalg.svd(torch_tensor, full_matrices=False)
+    U, S, Vh = torch.linalg.svd(torch_tensor, full_matrices=False)#Vh 是V的转置
 
     s_sqrt = torch.sqrt(S)
 
@@ -92,16 +93,19 @@ for t in reader.tensors:
         if "ffn_up" in name:
             out1 = re.sub(r'ffn_up', r'ffn_up_svd_u', name)
             out2 = re.sub(r'ffn_up', r'ffn_up_svd_v', name)
+        if "ffn_gate" in name:
+            out1 = re.sub(r'ffn_gate', r'ffn_gate_svd_u', name)
+            out2 = re.sub(r'ffn_gate', r'ffn_gate_svd_v', name)
         writer.add_tensor(
             name=out1,
             tensor=U.detach().cpu().numpy().astype("float32"),
-            raw_shape=tuple(U.shape)[::-1],
+            raw_shape=tuple(U.shape),
             raw_dtype=GGMLQuantizationType.F32,  # 新的 U/V 用 F32
         )
         writer.add_tensor(
             name=out2,
             tensor=V.detach().cpu().numpy().astype("float32"),
-            raw_shape=tuple(V.shape)[::-1],
+            raw_shape=tuple(V.shape),
             raw_dtype=GGMLQuantizationType.F32,
         )
     
@@ -118,3 +122,4 @@ writer.write_header_to_file()
 writer.write_kv_data_to_file()
 writer.write_tensors_to_file()
 writer.close()
+print("FINISHED")

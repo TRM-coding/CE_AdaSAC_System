@@ -50,7 +50,7 @@ int main()
     ctx_params.n_ctx = n_ctx;
     ctx_params.n_batch = n_ctx;
     std::cout<<"---------------------------------------------"<<std::endl;
-
+    std::cout<<"HHHHH"<<std::endl;
     llama_context *ctx = llama_init_from_model(model, ctx_params);
     if (!ctx)
     {

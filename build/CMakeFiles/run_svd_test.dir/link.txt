@@ -1,0 +1,1 @@
+/usr/bin/g++ -g CMakeFiles/run_svd_test.dir/exp5_run_svd_model/run_svd_model.cpp.o -o run_svd_test  -Wl,-rpath,/home/tianruiming/CE_ADA_LLAMA/build/bin bin/libllama.so bin/libggml.so bin/libggml-cpu.so bin/libggml-base.so 

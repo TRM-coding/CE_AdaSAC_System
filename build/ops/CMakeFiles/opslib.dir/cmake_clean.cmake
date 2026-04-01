@@ -1,0 +1,41 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/opslib.dir/ADD/add_cpu.cpp.o"
+  "CMakeFiles/opslib.dir/ADD/add_cpu.cpp.o.d"
+  "CMakeFiles/opslib.dir/CPY/cpy_cpu.cpp.o"
+  "CMakeFiles/opslib.dir/CPY/cpy_cpu.cpp.o.d"
+  "CMakeFiles/opslib.dir/GELU/gelu_cpu.cpp.o"
+  "CMakeFiles/opslib.dir/GELU/gelu_cpu.cpp.o.d"
+  "CMakeFiles/opslib.dir/MUL/mul_cpu.cpp.o"
+  "CMakeFiles/opslib.dir/MUL/mul_cpu.cpp.o.d"
+  "CMakeFiles/opslib.dir/MUL_MAT/mul_mat_cpu.cpp.o"
+  "CMakeFiles/opslib.dir/MUL_MAT/mul_mat_cpu.cpp.o.d"
+  "CMakeFiles/opslib.dir/NORM/norm_cpu.cpp.o"
+  "CMakeFiles/opslib.dir/NORM/norm_cpu.cpp.o.d"
+  "CMakeFiles/opslib.dir/PERMUTE/permute_cpu.cpp.o"
+  "CMakeFiles/opslib.dir/PERMUTE/permute_cpu.cpp.o.d"
+  "CMakeFiles/opslib.dir/RESHAPE/reshape_cpu.cpp.o"
+  "CMakeFiles/opslib.dir/RESHAPE/reshape_cpu.cpp.o.d"
+  "CMakeFiles/opslib.dir/RMS_NORM/rms_norm_cpu.cpp.o"
+  "CMakeFiles/opslib.dir/RMS_NORM/rms_norm_cpu.cpp.o.d"
+  "CMakeFiles/opslib.dir/ROPE/rope_cpu.cpp.o"
+  "CMakeFiles/opslib.dir/ROPE/rope_cpu.cpp.o.d"
+  "CMakeFiles/opslib.dir/SVD_MUL_MAT/svd_mul_mat.cpp.o"
+  "CMakeFiles/opslib.dir/SVD_MUL_MAT/svd_mul_mat.cpp.o.d"
+  "CMakeFiles/opslib.dir/VIEW/view1d_cpu.cpp.o"
+  "CMakeFiles/opslib.dir/VIEW/view1d_cpu.cpp.o.d"
+  "CMakeFiles/opslib.dir/VIEW/view2d_cpu.cpp.o"
+  "CMakeFiles/opslib.dir/VIEW/view2d_cpu.cpp.o.d"
+  "CMakeFiles/opslib.dir/VIEW/view3d_cpu.cpp.o"
+  "CMakeFiles/opslib.dir/VIEW/view3d_cpu.cpp.o.d"
+  "CMakeFiles/opslib.dir/VIEW/view4d_cpu.cpp.o"
+  "CMakeFiles/opslib.dir/VIEW/view4d_cpu.cpp.o.d"
+  "CMakeFiles/opslib.dir/ops_py.cpp.o"
+  "CMakeFiles/opslib.dir/ops_py.cpp.o.d"
+  "opslib.pdb"
+  "opslib.so"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang CXX)
+  include(CMakeFiles/opslib.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

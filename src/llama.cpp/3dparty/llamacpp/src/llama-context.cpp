@@ -2243,6 +2243,7 @@ llama_context_params llama_context_default_params() {
 
     return result;
 }
+#include<iostream>
 
 llama_context * llama_init_from_model(
                  llama_model * model,
@@ -2267,13 +2268,15 @@ llama_context * llama_init_from_model(
         params.flash_attn = false;
     }
 
+    
     if (ggml_is_quantized(params.type_v) && !params.flash_attn) {
         LLAMA_LOG_ERROR("%s: V cache quantization requires flash_attn\n", __func__);
         return nullptr;
     }
-
+    
     try {
         auto * ctx = new llama_context(*model, params);
+        // std::cout<<"EEEEEE"<<std::endl;
         return ctx;
     } catch (const std::exception & err) {
         LLAMA_LOG_ERROR("%s: failed to initialize the context: %s\n", __func__, err.what());

@@ -457,6 +457,7 @@ extern "C" {
         GGML_OP_L2_NORM,
 
         GGML_OP_MUL_MAT,
+        GGML_OP_MUL_MAT_SVD,
         GGML_OP_MUL_MAT_ID,
         GGML_OP_OUT_PROD,
 
@@ -573,6 +574,8 @@ extern "C" {
     // n-dimensional tensor
     struct ggml_tensor {
         enum ggml_type type;
+        int64_t svd_k_trunk;
+        int64_t _pad_svd;
 
         struct ggml_backend_buffer * buffer;
 
@@ -1123,6 +1126,14 @@ extern "C" {
             struct ggml_context * ctx,
             struct ggml_tensor  * a,
             struct ggml_tensor  * b);
+
+    GGML_API struct ggml_tensor * ggml_mul_mat_svd(
+        struct ggml_context * ctx,
+        struct ggml_tensor  * w,
+        struct ggml_tensor  * w_v,
+        struct ggml_tensor  * w_u,
+        struct ggml_tensor  * b,
+        int64_t k_trunc);
 
     // change the precision of a matrix multiplication
     // set to GGML_PREC_F32 for higher precision (useful for phi-2)

@@ -1,0 +1,284 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1,
+						6,
+						7
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-Debug-f5ebdc15457944623624.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.10"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						4,
+						5,
+						7,
+						8
+					]
+				},
+				{
+					"build" : "3dparty/llamacpp",
+					"childIndexes" : 
+					[
+						2,
+						5
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-3dparty.llamacpp-Debug-c9f2f9c5fe6c9eb1a039.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.14"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 1,
+					"source" : "3dparty/llamacpp"
+				},
+				{
+					"build" : "3dparty/llamacpp/ggml",
+					"childIndexes" : 
+					[
+						3
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-3dparty.llamacpp.ggml-Debug-3db710868d6af2f6a85b.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.14"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 2,
+					"source" : "3dparty/llamacpp/ggml"
+				},
+				{
+					"build" : "3dparty/llamacpp/ggml/src",
+					"childIndexes" : 
+					[
+						4
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-3dparty.llamacpp.ggml.src-Debug-8a314a815fc93537e8d3.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.14"
+					},
+					"parentIndex" : 2,
+					"projectIndex" : 2,
+					"source" : "3dparty/llamacpp/ggml/src",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2
+					]
+				},
+				{
+					"build" : "3dparty/llamacpp/ggml/src/ggml-cpu",
+					"jsonFile" : "directory-3dparty.llamacpp.ggml.src.ggml-cpu-Debug-b654c3a9395bad548027.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.14"
+					},
+					"parentIndex" : 3,
+					"projectIndex" : 2,
+					"source" : "3dparty/llamacpp/ggml/src/ggml-cpu"
+				},
+				{
+					"build" : "3dparty/llamacpp/src",
+					"jsonFile" : "directory-3dparty.llamacpp.src-Debug-8edcd8c590ac00cecabe.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.14"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 1,
+					"source" : "3dparty/llamacpp/src",
+					"targetIndexes" : 
+					[
+						3
+					]
+				},
+				{
+					"build" : "3dparty/pybind11",
+					"jsonFile" : "directory-3dparty.pybind11-Debug-b8706702e0ec6358989f.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.15"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 3,
+					"source" : "3dparty/pybind11"
+				},
+				{
+					"build" : "ops",
+					"jsonFile" : "directory-ops-Debug-b78ef00847a81551b3fe.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.10"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "ops",
+					"targetIndexes" : 
+					[
+						6
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"childIndexes" : 
+					[
+						1,
+						3
+					],
+					"directoryIndexes" : 
+					[
+						0,
+						7
+					],
+					"name" : "OPS_TEST",
+					"targetIndexes" : 
+					[
+						4,
+						5,
+						6,
+						7,
+						8
+					]
+				},
+				{
+					"childIndexes" : 
+					[
+						2
+					],
+					"directoryIndexes" : 
+					[
+						1,
+						5
+					],
+					"name" : "llama.cpp",
+					"parentIndex" : 0,
+					"targetIndexes" : 
+					[
+						3
+					]
+				},
+				{
+					"directoryIndexes" : 
+					[
+						2,
+						3,
+						4
+					],
+					"name" : "ggml",
+					"parentIndex" : 1,
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2
+					]
+				},
+				{
+					"directoryIndexes" : 
+					[
+						6
+					],
+					"name" : "pybind11",
+					"parentIndex" : 0
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 3,
+					"id" : "ggml::@bfde697d21b571ad4ac7",
+					"jsonFile" : "target-ggml-Debug-b7a71f9847e3ad9fb71a.json",
+					"name" : "ggml",
+					"projectIndex" : 2
+				},
+				{
+					"directoryIndex" : 3,
+					"id" : "ggml-base::@bfde697d21b571ad4ac7",
+					"jsonFile" : "target-ggml-base-Debug-d77ea5cfe031624d2465.json",
+					"name" : "ggml-base",
+					"projectIndex" : 2
+				},
+				{
+					"directoryIndex" : 3,
+					"id" : "ggml-cpu::@bfde697d21b571ad4ac7",
+					"jsonFile" : "target-ggml-cpu-Debug-20fe9d19b0eb91eee782.json",
+					"name" : "ggml-cpu",
+					"projectIndex" : 2
+				},
+				{
+					"directoryIndex" : 5,
+					"id" : "llama::@7fa4b763fb9db4b9cfe6",
+					"jsonFile" : "target-llama-Debug-c0cc62445a5b40ef4eca.json",
+					"name" : "llama",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "llama-bench::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-llama-bench-Debug-7cbdff3357e54cc547f7.json",
+					"name" : "llama-bench",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "load_test::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-load_test-Debug-d3a01b2d99be7bd03d0a.json",
+					"name" : "load_test",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 7,
+					"id" : "opslib::@49a8d06959898a2e773e",
+					"jsonFile" : "target-opslib-Debug-13f8ec17bdd62ac9fc16.json",
+					"name" : "opslib",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "run_svd_test::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-run_svd_test-Debug-103e49f9bac9844cc3c4.json",
+					"name" : "run_svd_test",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "simple::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-simple-Debug-213b88e4b95692336b19.json",
+					"name" : "simple",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/home/tianruiming/CE_ADA_LLAMA/build",
+		"source" : "/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 6
+	}
+}

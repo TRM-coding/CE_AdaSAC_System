@@ -1,0 +1,1 @@
+/usr/bin/g++ -fPIC -g -shared -Wl,-soname,libggml.so -o ../../../../bin/libggml.so "CMakeFiles/ggml.dir/ggml-backend-reg.cpp.o"  -Wl,-rpath,/home/tianruiming/CE_ADA_LLAMA/build/bin: -ldl -lstdc++fs ../../../../bin/libggml-cpu.so ../../../../bin/libggml-base.so 

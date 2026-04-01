@@ -435,6 +435,15 @@ struct llm_graph_context {
     ggml_tensor * build_lora_mm(
               ggml_tensor * w,
               ggml_tensor * cur) const;
+    
+    ggml_tensor * build_mm_svd(
+        ggml_tensor * w,
+        ggml_tensor * w_svd_u,
+        ggml_tensor * w_svd_v,
+        ggml_tensor * cur,
+        int64_t         rank,
+        bool cooperation=false
+    )const;
 
     // do mat_mul_id, while optionally apply lora
     ggml_tensor * build_lora_mm_id(
@@ -463,6 +472,22 @@ struct llm_graph_context {
              ggml_tensor * act_scales,
          llm_ffn_op_type   type_op,
        llm_ffn_gate_type   type_gate,
+                     int   il) const;
+
+    ggml_tensor * build_ffn_svd_qwen2(
+             ggml_tensor * cur,
+             ggml_tensor * up,
+             ggml_tensor * up_svd_u,
+             ggml_tensor * up_svd_v,
+             ggml_tensor * gate,
+             ggml_tensor * gate_svd_u,
+             ggml_tensor * gate_svd_v,
+             ggml_tensor * down,
+             ggml_tensor * down_svd_u,
+             ggml_tensor * down_svd_v,
+             int          up_rank,
+             int          gate_rank,
+             int          down_rank,
                      int   il) const;
 
     ggml_tensor * build_moe_ffn(

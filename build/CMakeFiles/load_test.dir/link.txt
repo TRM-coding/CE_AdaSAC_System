@@ -1,0 +1,1 @@
+/usr/bin/g++ -g CMakeFiles/load_test.dir/exp3_load_svd_to_llamacpp/load_llamacpp.cpp.o -o load_test  -Wl,-rpath,/home/tianruiming/CE_ADA_LLAMA/build/bin bin/libllama.so bin/libggml.so bin/libggml-cpu.so bin/libggml-base.so 

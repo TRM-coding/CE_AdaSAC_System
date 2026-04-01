@@ -932,6 +932,7 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
     "L2_NORM",
 
     "MUL_MAT",
+    "MUL_MAT_SVD",
     "MUL_MAT_ID",
     "OUT_PROD",
 
@@ -994,7 +995,7 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
     "OPT_STEP_ADAMW",
 };
 
-static_assert(GGML_OP_COUNT == 82, "GGML_OP_COUNT != 82");
+static_assert(GGML_OP_COUNT == 83, "GGML_OP_COUNT != 83");
 
 static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "none",
@@ -1089,7 +1090,7 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "adamw(x)",
 };
 
-static_assert(GGML_OP_COUNT == 82, "GGML_OP_COUNT != 82");
+static_assert(GGML_OP_COUNT == 83, "GGML_OP_COUNT != 83");
 
 static_assert(GGML_OP_POOL_COUNT == 2, "GGML_OP_POOL_COUNT != 2");
 
@@ -1609,6 +1610,8 @@ static struct ggml_tensor * ggml_new_tensor_impl(
 
     *result = (struct ggml_tensor) {
         /*.type         =*/ type,
+        /*.svd_k_trunk  =*/ 1, 
+        /*._pad_svd     =*/ 1,  
         /*.buffer       =*/ NULL,
         /*.ne           =*/ { 1, 1, 1, 1 },
         /*.nb           =*/ { 0, 0, 0, 0 },
@@ -2749,6 +2752,61 @@ struct ggml_tensor * ggml_mul_mat(
     result->op     = GGML_OP_MUL_MAT;
     result->src[0] = a;
     result->src[1] = b;
+
+    return result;
+}
+
+
+static void ggml_print_tensor(struct ggml_tensor * cur) {
+    if (!cur) {
+        printf("Tensor <null>\n");
+        return;
+    }
+
+    printf("Tensor \"%s\" | shape = [",
+           cur->name ? cur->name : "<unnamed>");
+
+    int nd = ggml_n_dims(cur);
+
+    for (int i = 0; i < nd; i++) {
+        printf("%lld", (long long)cur->ne[i]);
+        if (i + 1 < nd) printf(", ");
+    }
+
+    printf("]\n");
+}
+
+struct ggml_tensor * ggml_mul_mat_svd(
+        struct ggml_context * ctx,
+        struct ggml_tensor  * w,
+        struct ggml_tensor  * w_v,
+        struct ggml_tensor  * w_u,
+        struct ggml_tensor  * b,
+        int64_t k_trunk) {
+    GGML_ASSERT(ggml_can_mul_mat(w,b));
+    // ggml_print_tensor(b);
+    // ggml_print_tensor(w);
+    // ggml_print_tensor(w_v);
+    // ggml_print_tensor(w_u);
+    GGML_ASSERT(ggml_can_mul_mat(w_v, b));
+
+    GGML_ASSERT(ggml_can_mul_mat(w_u, ggml_mul_mat(ctx,w_v,b)));
+    GGML_ASSERT(!ggml_is_transposed(w));
+    GGML_ASSERT(!ggml_is_transposed(w_u));
+    GGML_ASSERT(!ggml_is_transposed(w_v));
+
+    const int64_t ne[4] = { w->ne[1], b->ne[1], b->ne[2], b->ne[3] };
+    // const int64_t ne_tmp[4] = { w_v->ne[1], b->ne[1], b->ne[2], b->ne[3] };
+    struct ggml_tensor * result = ggml_new_tensor(ctx, GGML_TYPE_F32, 4, ne);
+    // struct ggml_tensor * tmp = ggml_new_tensor(ctx, GGML_TYPE_F32, 4, ne_tmp);
+
+    result->op     = GGML_OP_MUL_MAT_SVD;
+    result->src[0] = w;
+    result->src[1] = b;
+    result->src[2] = w_u;
+    result->src[3] = w_v;
+    result->svd_k_trunk=k_trunk;
+    // result->src[4] = tmp;
 
     return result;
 }

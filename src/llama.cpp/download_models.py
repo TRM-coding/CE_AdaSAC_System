@@ -7,14 +7,14 @@ from huggingface_hub import Repository, snapshot_download
 MODELS = {
     # 名称: HF 仓库名
     # "llama3_2_1b": "meta-llama/Llama-3.2-1B",
-    "tinyllama_1_1b": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",   
-    "qwen2_5_1_5b": "Qwen/Qwen2.5-1.5B",                      
-    "phi_1_5": "microsoft/phi-1_5",
-    "opt_1_3b": "facebook/opt-1.3b",
-    "gptneo_1_3b": "EleutherAI/gpt-neo-1.3B",
-    "pythia_1_4b": "EleutherAI/pythia-1.4b",
+    # "tinyllama_1_1b": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",   
+    "qwen2_5_1_7b": "Qwen/Qwen2.5-7B",                      
+    # "phi_1_5": "microsoft/phi-1_5",
+    # "opt_1_3b": "facebook/opt-1.3b",
+    # "gptneo_1_3b": "EleutherAI/gpt-neo-1.3B",
+    # "pythia_1_4b": "EleutherAI/pythia-1.4b",
     # 新增 GLM Edge 1.5B Chat 模型
-    "glm_edge_1_5b_chat": "zai-org/glm-edge-1.5b-chat",
+    # "glm_edge_1_5b_chat": "zai-org/glm-edge-1.5b-chat",
 }
 
 def _ensure_hf_hub():

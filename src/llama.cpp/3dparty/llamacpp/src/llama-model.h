@@ -212,6 +212,8 @@ struct llama_layer {
     struct ggml_tensor * ffn_up_svd_u       = nullptr; // w3_u
     struct ggml_tensor * ffn_up_svd_v       = nullptr; // w3_v
     struct ggml_tensor * ffn_gate_enc = nullptr;
+    struct ggml_tensor * ffn_gate_svd_u = nullptr;
+    struct ggml_tensor * ffn_gate_svd_v = nullptr;
     struct ggml_tensor * ffn_down_enc = nullptr;
     struct ggml_tensor * ffn_up_enc   = nullptr;
 
