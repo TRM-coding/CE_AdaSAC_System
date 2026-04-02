@@ -266,6 +266,61 @@ cd /home/tianruiming/CE_ADA_LLAMA
 - 紧凑模型比原始 SVD 进一步提升
 - 但仍然略慢于原始 dense
 
+#### 原始 dense `Q4_0`
+
+模型：
+
+- `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/gguf_models/qwen.q4_0.gguf`
+
+量化命令：
+
+```bash
+cd /home/tianruiming/CE_ADA_LLAMA
+src/llama.cpp/3dparty/llamacpp/build/bin/llama-quantize \
+  /home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/gguf_models/qwen.gguf \
+  /home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/gguf_models/qwen.q4_0.gguf \
+  Q4_0
+```
+
+结果：
+
+- 原始 `qwen.gguf`：约 `2.88 GiB`
+- `qwen.q4_0.gguf`：约 `885.97 MiB`
+
+`llama-bench`：
+
+- `tg128: 19.18 ± 0.29 tokens/s`
+
+说明：
+
+- 在当前机器上，`Q4_0` dense 大约是 F16 dense 的 `2.1x`
+- 该结果可作为后续量化路径对照基线
+
+#### 关于量化 SVD 的结论
+
+本轮还额外验证了量化模型的 SVD 生成链路。
+
+新增修改文件：
+
+- `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp7_generate_sort_svd/generate_sort_svd.py`
+
+新增能力：
+
+1. 支持通过命令行传入输入/输出模型路径
+2. 支持读取量化 GGUF
+3. 对 `Q4_0` 这类量化 tensor 先按 GGUF 规则反量化，再做 SVD
+
+但这里需要明确一个事实：
+
+- 当前 SVD 推理链路并不支持“全量化 SVD”
+- 现有 SVD 模型中，`ffn_*_svd_u` 和 `ffn_*_svd_v` 仍然是 `F16`
+
+所以：
+
+- 可以从量化底模出发生成 SVD 模型
+- 但生成后的 SVD 模型本质上仍然是“量化底模 + F16 的 U/V”
+- 当前 `mul_mat_svd` 还没有专门支持量化 `U/V` 的内核路径
+
 ### 5.2 Qwen2.5-7B
 
 #### 原始 dense
@@ -308,6 +363,103 @@ cd /home/tianruiming/CE_ADA_LLAMA
 
 紧凑模型同样明显优于原始 SVD。
 
+### 5.3 Android 手机端实测
+
+这部分的目标是把 `decode_svd_test` 交叉编译到 Android 手机上，直接在手机端跑当前 SVD 模型。
+
+#### 交叉编译
+
+修改文件：
+
+- `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/CMakeLists.txt`
+
+修改原因：
+
+- 原工程只在 `NOT ANDROID` 分支里编译 `decode_svd_test`
+- 因此 Android 构建默认不会生成该可执行文件
+
+本轮调整：
+
+- 在 `ANDROID` 分支中新增 `decode_svd_test`
+- 仅增加构建目标，不改推理逻辑
+
+交叉编译命令：
+
+```bash
+mkdir -p /home/tianruiming/CE_ADA_LLAMA/build-android
+cd /home/tianruiming/CE_ADA_LLAMA/build-android
+
+cmake /home/tianruiming/CE_ADA_LLAMA/src/llama.cpp \
+  -DCMAKE_TOOLCHAIN_FILE=/home/tianruiming/Android/Sdk/ndk/26.3.11579264/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=arm64-v8a \
+  -DANDROID_PLATFORM=android-29 \
+  -DGGML_OPENMP=OFF
+
+cmake --build . -j80 --target decode_svd_test
+```
+
+生成产物：
+
+- `/home/tianruiming/CE_ADA_LLAMA/build-android/decode_svd_test`
+
+产物性质：
+
+- `ELF 64-bit`
+- `ARM aarch64`
+- Android 动态可执行文件
+
+#### 推送到手机
+
+手机端目录：
+
+- `/data/local/tmp/CE_Ada`
+
+推送命令：
+
+```bash
+adb shell 'mkdir -p /data/local/tmp/CE_Ada'
+adb push /home/tianruiming/CE_ADA_LLAMA/build-android/decode_svd_test /data/local/tmp/CE_Ada/
+adb push /home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/gguf_models/qwen.gguf.sort_svd.compact.gguf /data/local/tmp/CE_Ada/
+```
+
+手机端实测模型：
+
+- `/data/local/tmp/CE_Ada/qwen.gguf.sort_svd.compact.gguf`
+
+手机信息：
+
+- 型号：`PLK110`
+- ABI：`arm64-v8a`
+- CPU 核数：`8`
+
+#### 手机端运行命令
+
+```bash
+adb shell 'cd /data/local/tmp/CE_Ada && chmod +x decode_svd_test && ./decode_svd_test /data/local/tmp/CE_Ada/qwen.gguf.sort_svd.compact.gguf 8 4 0'
+adb shell 'cd /data/local/tmp/CE_Ada && ./decode_svd_test /data/local/tmp/CE_Ada/qwen.gguf.sort_svd.compact.gguf 8 8 0'
+```
+
+#### 手机端结果
+
+`threads=4`：
+
+- `Decode-only throughput: 1.32935 tokens/s`
+- `End-to-end throughput: 1.32888 tokens/s`
+
+`threads=8`：
+
+- `Decode-only throughput: 3.1642 tokens/s`
+- `End-to-end throughput: 3.16148 tokens/s`
+
+#### Android 小结
+
+可以确定：
+
+1. 当前 Android 交叉编译链路是通的
+2. 当前 `decode_svd_test` 可以在手机端直接跑通
+3. 当前 1.5B 紧凑 SVD 模型在这台手机上的最好结果约为 `3.16 tokens/s`
+4. 在这台 8 核手机上，`8` 线程明显优于 `4` 线程
+
 ## 6. 本轮工作的实际价值
 
 这轮最重要的收获，不是“硬把 SVD 速度吹成已经完全追平 dense”，而是把整个问题空间收窄了。
@@ -322,6 +474,7 @@ cd /home/tianruiming/CE_ADA_LLAMA
    - `F16` decode 热路径缺失
    - 基准程序把打印和文本拼接算进吞吐
    - SVD 模型中冗余保留 dense FFN 权重
+   - Android 构建默认不产出 `decode_svd_test`
 
 3. 当前剩余差距已经主要收敛到 `mul_mat_svd` 内核本身
    - 不是“压根走错算子”
@@ -336,6 +489,7 @@ cd /home/tianruiming/CE_ADA_LLAMA
 
 - 原始 dense 的测速链路是对的
 - SVD 的测速链路现在也是对的
+- Android 手机上的 SVD 实测链路也是对的
 
 ### 7.2 关于速度
 
@@ -343,11 +497,14 @@ cd /home/tianruiming/CE_ADA_LLAMA
 
 - 当前 SVD 方案已经能够达到和原始 llama.cpp 相近的量级
 - 但在当前 full-rank 验证下，SVD 仍略慢于 dense `mul_mat`
+- `Q4_0` dense 在 CPU 上明显快于 F16 dense
+- 当前 SVD 方案尚未形成“全量化 SVD”链路
 
 更准确地说：
 
 - 1.5B 上已经比较接近
 - 7B 上差距更明显
+- 手机端 1.5B 紧凑 SVD 约为 `3.16 tokens/s`
 
 ### 7.3 关于优化方向
 
@@ -356,6 +513,7 @@ cd /home/tianruiming/CE_ADA_LLAMA
 1. 继续优化 `ggml_compute_forward_mul_mat_svd` 第二段 `tmp * U`
 2. 做更细粒度的内核 profile
 3. 持续在紧凑模型上测试，避免无用张量干扰
+4. 如果要继续推进量化 SVD，需要单独为量化 `U/V` 设计存储格式和内核
 
 ## 8. 本轮修改文件汇总
 
@@ -363,6 +521,8 @@ cd /home/tianruiming/CE_ADA_LLAMA
 - `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/src/llama-model.cpp`
 - `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/src/llama-graph.cpp`
 - `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp6_decode_svd_model/decode_svd_model.cpp`
+- `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/CMakeLists.txt`
+- `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp7_generate_sort_svd/generate_sort_svd.py`
 - `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp7_generate_sort_svd/strip_dense_ffn_from_svd.py`
 
 ## 9. 结论
@@ -371,6 +531,7 @@ cd /home/tianruiming/CE_ADA_LLAMA
 
 1. 把 dense 基线测速链路完全核实清楚。
 2. 把 SVD 路径中明显错误或浪费的实现修掉。
-3. 给后续继续压 `mul_mat_svd` 内核留下了干净、可信的验证环境。
+3. 打通了 Android 手机端的交叉编译、部署和实测链路。
+4. 给后续继续压 `mul_mat_svd` 内核留下了干净、可信的验证环境。
 
-当前状态下，SVD 路径的速度结论是可信的，后续优化可以直接围绕算子本身展开。
+当前状态下，SVD 路径在 PC 和 Android 手机上的速度结论都是可信的，后续优化可以直接围绕算子本身展开。

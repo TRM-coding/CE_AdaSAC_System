@@ -1,3 +1,6 @@
 
 models/
 gguf_models/
+build/
+build-android/
+test/current-submodule-standalone-release

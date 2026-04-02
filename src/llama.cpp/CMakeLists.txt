@@ -32,16 +32,8 @@ include_directories(${CMAKE_SOURCE_DIR}/ops)
 add_subdirectory(ops)
 
 if(IS_ANDROID)
-    # add_executable(ops_test exp1/main.cpp)
-    # target_link_libraries(ops_test PRIVATE 
-    #     opslib
-    #     llama
-    # )
-    # 强制静态链接所有库和 C++ 运行时
-    # target_link_options(ops_test PRIVATE 
-    #     -static-libgcc 
-    #     -static-libstdc++
-    # )
+    add_executable(decode_svd_test exp6_decode_svd_model/decode_svd_model.cpp)
+    target_link_libraries(decode_svd_test PRIVATE llama)
 endif()
 
 # 桌面版才编译 ops_test
