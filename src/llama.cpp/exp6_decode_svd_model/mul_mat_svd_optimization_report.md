@@ -287,7 +287,7 @@ src/llama.cpp/3dparty/llamacpp/build/bin/llama-quantize \
 - 原始 `qwen.gguf`：约 `2.88 GiB`
 - `qwen.q4_0.gguf`：约 `885.97 MiB`
 
-`llama-bench`：
+`llama-bench`（早期本地构建结果）：
 
 - `tg128: 19.18 ± 0.29 tokens/s`
 
@@ -295,6 +295,11 @@ src/llama.cpp/3dparty/llamacpp/build/bin/llama-quantize \
 
 - 在当前机器上，`Q4_0` dense 大约是 F16 dense 的 `2.1x`
 - 该结果可作为后续量化路径对照基线
+
+注意：
+
+- 上面这组 `19.18 tokens/s` 是早期构建下得到的历史数据
+- 在后续控制变量实验中，统一切换到 `Release` 构建并串行跑 benchmark 后，`Q4_0` dense 的正式结果已经更新，见下文第 `5.4` 节
 
 #### 关于量化 SVD 的结论
 
@@ -460,6 +465,136 @@ adb shell 'cd /data/local/tmp/CE_Ada && ./decode_svd_test /data/local/tmp/CE_Ada
 3. 当前 1.5B 紧凑 SVD 模型在这台手机上的最好结果约为 `3.16 tokens/s`
 4. 在这台 8 核手机上，`8` 线程明显优于 `4` 线程
 
+### 5.4 官方 llama.cpp 与当前仓库的控制变量对照
+
+这部分的目标是回答一个更基础的问题：
+
+- 先不考虑 SVD
+- 先确认当前仓库里的原始 dense 路径，和官方 llama.cpp 相比是否存在异常性能损失
+
+#### 官方仓库基线
+
+源码：
+
+- `/home/tianruiming/CE_ADA_LLAMA/test/llama.cpp-official`
+
+版本：
+
+- commit `295354e`
+
+构建方式：
+
+```bash
+cmake -S /home/tianruiming/CE_ADA_LLAMA/test/llama.cpp-official \
+  -B /home/tianruiming/CE_ADA_LLAMA/test/llama.cpp-official/build-release \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DGGML_NATIVE=ON \
+  -DGGML_OPENMP=ON \
+  -DLLAMA_CURL=OFF
+
+cmake --build /home/tianruiming/CE_ADA_LLAMA/test/llama.cpp-official/build-release -j80 --target llama-bench
+```
+
+官方 `llama-bench` 结果：
+
+- `qwen.gguf` F16：`12.13 ± 0.01 tokens/s`
+- `qwen.q4_0.gguf` Q4_0：`43.24 ± 5.83 tokens/s`
+
+#### 当前仓库 `Release` 重编译
+
+为了避免污染当前工作树代码，本轮没有修改源码，只新建了独立构建目录：
+
+- `/home/tianruiming/CE_ADA_LLAMA/build-release-current`
+
+构建方式：
+
+```bash
+cmake -S /home/tianruiming/CE_ADA_LLAMA/src/llama.cpp \
+  -B /home/tianruiming/CE_ADA_LLAMA/build-release-current \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DGGML_NATIVE=ON \
+  -DGGML_OPENMP=ON
+
+cmake --build /home/tianruiming/CE_ADA_LLAMA/build-release-current -j80 --target llama-bench decode_svd_test
+```
+
+当前仓库 `Release` 结果：
+
+- `qwen.gguf` F16：`11.32 ± 0.06 tokens/s`
+- `qwen.q4_0.gguf` Q4_0：`57.47 ± 7.66 tokens/s`
+
+#### 对照结论
+
+可以得到两个明确结论：
+
+1. 当前仓库的 dense `F16` 路径只有小幅损失，约为官方的 `93.3%`
+2. 当前仓库的 dense `Q4_0` 路径没有“明显慢于官方”的问题
+
+这一步很重要，因为它意味着：
+
+- 当前仓库中，原始 dense 路径整体是正常的
+- 后续主要矛盾仍然是 SVD 路径，而不是 llama.cpp 原生 dense 路径
+
+### 5.5 当前仓库 `Release` 下的 F16 SVD 速度
+
+在确认 dense 基线正常之后，再回到当前仓库的 SVD 链路。
+
+测试程序：
+
+- `/home/tianruiming/CE_ADA_LLAMA/build-release-current/decode_svd_test`
+
+测试模型：
+
+- `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/gguf_models/qwen.gguf.sort_svd.compact.gguf`
+
+命令：
+
+```bash
+cd /home/tianruiming/CE_ADA_LLAMA/build-release-current
+LD_LIBRARY_PATH=./bin ./decode_svd_test /home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/gguf_models/qwen.gguf.sort_svd.compact.gguf 8 32 0
+```
+
+结果：
+
+- `Decode-only throughput: 7.54228 tokens/s`
+- `End-to-end throughput: 7.52806 tokens/s`
+
+和当前仓库 `Release` 版 dense `F16` 对照：
+
+- dense `qwen.gguf`：`11.32 ± 0.06 tokens/s`
+- SVD `qwen.gguf.sort_svd.compact.gguf`：`7.54 tokens/s`
+
+也就是说：
+
+- 当前 `Release` 版 F16 SVD 速度大约是 dense F16 的 `66.6%`
+- 当前 SVD 链路已经稳定，但还没有追平 dense `mul_mat`
+
+### 5.6 官方 Android 手机端 FP16 基线
+
+为了获得手机端的官方基线，本轮还额外交叉编译了官方 `llama.cpp` 的 Android `llama-bench`，并直接使用手机上现成的 FP16 模型：
+
+- 模型：`/data/local/tmp/CE_Ada/qwen.gguf`
+
+官方 Android 二进制目录：
+
+- `/data/local/tmp/llama.cpp-official/bin`
+
+手机端运行命令：
+
+```bash
+adb shell 'cd /data/local/tmp/llama.cpp-official && LD_LIBRARY_PATH=bin ./bin/llama-bench -m /data/local/tmp/CE_Ada/qwen.gguf -t 8 -ngl 0 -p 0 -n 128 -r 3 -o md'
+```
+
+结果：
+
+- `qwen2 1.5B F16`
+- `threads=8`
+- `tg128 = 18.29 ± 1.10 tokens/s`
+
+这给出了手机端的官方 dense FP16 参考值，后续可以直接拿来和手机端 `decode_svd_test` 对照。
+
 ## 6. 本轮工作的实际价值
 
 这轮最重要的收获，不是“硬把 SVD 速度吹成已经完全追平 dense”，而是把整个问题空间收窄了。
@@ -469,6 +604,7 @@ adb shell 'cd /data/local/tmp/CE_Ada && ./decode_svd_test /data/local/tmp/CE_Ada
 1. 原始 `qwen.gguf` 的对照基线是正确的
    - 它确实走 llama.cpp 原生 `mul_mat`
    - `decode_svd_test` 与 `llama-bench` 结果基本一致
+   - 当前仓库 `Release` 下的 dense 路径整体正常
 
 2. SVD 路径里此前存在的链路问题已经被修掉
    - `F16` decode 热路径缺失
@@ -490,21 +626,24 @@ adb shell 'cd /data/local/tmp/CE_Ada && ./decode_svd_test /data/local/tmp/CE_Ada
 - 原始 dense 的测速链路是对的
 - SVD 的测速链路现在也是对的
 - Android 手机上的 SVD 实测链路也是对的
+- 官方 Android 手机上的 dense `F16` 基线也已经测出
 
 ### 7.2 关于速度
 
 可以确定：
 
-- 当前 SVD 方案已经能够达到和原始 llama.cpp 相近的量级
-- 但在当前 full-rank 验证下，SVD 仍略慢于 dense `mul_mat`
+- 当前仓库的原始 dense 路径性能基本正常
+- 当前 full-rank 验证下，SVD 仍慢于 dense `mul_mat`
 - `Q4_0` dense 在 CPU 上明显快于 F16 dense
 - 当前 SVD 方案尚未形成“全量化 SVD”链路
 
 更准确地说：
 
-- 1.5B 上已经比较接近
-- 7B 上差距更明显
-- 手机端 1.5B 紧凑 SVD 约为 `3.16 tokens/s`
+- 当前仓库 `Release` 下：
+  - dense `qwen.gguf` F16：`11.32 ± 0.06 tokens/s`
+  - SVD `qwen.gguf.sort_svd.compact.gguf`：`7.54 tokens/s`
+- 官方 Android 手机端 dense `qwen.gguf` F16：`18.29 ± 1.10 tokens/s`
+- 当前 Android 手机端 1.5B 紧凑 SVD：`3.16 tokens/s`
 
 ### 7.3 关于优化方向
 
@@ -527,11 +666,13 @@ adb shell 'cd /data/local/tmp/CE_Ada && ./decode_svd_test /data/local/tmp/CE_Ada
 
 ## 9. 结论
 
-本轮工作已经完成了三件关键事情：
+本轮工作已经完成了几件关键事情：
 
 1. 把 dense 基线测速链路完全核实清楚。
 2. 把 SVD 路径中明显错误或浪费的实现修掉。
 3. 打通了 Android 手机端的交叉编译、部署和实测链路。
-4. 给后续继续压 `mul_mat_svd` 内核留下了干净、可信的验证环境。
+4. 用官方 `295354e` 做了 PC 端和手机端的基线对照。
+5. 确认当前仓库里的原始 dense 路径基本正常，后续优化重点应继续放在 `mul_mat_svd` 本身。
+6. 给后续继续压 `mul_mat_svd` 内核留下了干净、可信的验证环境。
 
 当前状态下，SVD 路径在 PC 和 Android 手机上的速度结论都是可信的，后续优化可以直接围绕算子本身展开。
