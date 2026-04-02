@@ -1,1 +1,0 @@
-/usr/bin/g++ -g CMakeFiles/decode_svd_test.dir/exp6_decode_svd_model/decode_svd_model.cpp.o -o decode_svd_test  -Wl,-rpath,/home/tianruiming/CE_ADA_LLAMA/build/bin bin/libllama.so bin/libggml.so bin/libggml-cpu.so bin/libggml-base.so 
