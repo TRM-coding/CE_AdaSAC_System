@@ -14,6 +14,7 @@
 #include "vec.h"
 #include "ops.h"
 #include "ggml.h"
+#include "../ggml-svd-offload.h"
 
 #if defined(_MSC_VER) || defined(__MINGW32__)
 #include <malloc.h> // using malloc.h with MSC/MINGW
@@ -1335,13 +1336,15 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
         return false;
     }
 
-    const int64_t k_keep = ggml_mul_mat_svd_get_k_keep(dst, v);
-    GGML_ASSERT(k_keep > 0);
+    const int64_t total_rank = v->ne[1];
+    int64_t k_keep = ggml_mul_mat_svd_get_k_keep(dst, v);
 
     void * wdata_cur = params->wdata;
     GGML_ASSERT(wdata_cur != NULL);
 
-    float * tmp = (float *) incr_ptr_aligned(&wdata_cur, sizeof(float) * k_keep, sizeof(float));
+    float * tmp = (float *) incr_ptr_aligned(&wdata_cur, sizeof(float) * total_rank, sizeof(float));
+    float * remote_out = (float *) incr_ptr_aligned(&wdata_cur, sizeof(float) * dst->ne[0], sizeof(float));
+    int32_t * request_started = (int32_t *) incr_ptr_aligned(&wdata_cur, sizeof(int32_t), sizeof(int32_t));
 
     const int ith = params->ith;
     const int nth = params->nth;
@@ -1367,8 +1370,41 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
         ggml_barrier(params->threadpool);
     }
 
-    const int64_t tmp_start = ith * k_keep / nth;
-    const int64_t tmp_end   = (ith + 1) * k_keep / nth;
+    const bool can_offload =
+        ggml_svd_offload_client_enabled() &&
+        dst->svd_layer_id >= 0 &&
+        dst->svd_op_id >= 0 &&
+        dst->svd_offload_rate > 0.5f &&
+        total_rank > 1;
+
+    if (can_offload) {
+        const int64_t k_trunc_remote = (int64_t) ceilf(dst->svd_offload_rate * (float) total_rank);
+        k_keep = total_rank - k_trunc_remote;
+        if (k_keep < 1) {
+            k_keep = 1;
+        }
+        if (k_keep > total_rank) {
+            k_keep = total_rank;
+        }
+    }
+
+    struct ggml_svd_offload_request_handle handle = { -1, 0 };
+    if (ith == 0) {
+        *request_started = can_offload &&
+            ggml_svd_offload_begin_request(
+                dst->svd_layer_id,
+                dst->svd_op_id,
+                dst->svd_offload_rate,
+                k_keep,
+                x,
+                b->ne[0],
+                &handle);
+    }
+    ggml_barrier(params->threadpool);
+
+    const int64_t k_local = *request_started ? k_keep : total_rank;
+    const int64_t tmp_start = ith * k_local / nth;
+    const int64_t tmp_end   = (ith + 1) * k_local / nth;
 
     if (v->type == GGML_TYPE_F16) {
         int64_t i = tmp_start;
@@ -1391,9 +1427,9 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     const void * tmp_vec = tmp;
     const bool need_tmp_convert = vec_dot_type_u != GGML_TYPE_F32;
     if (need_tmp_convert) {
-        tmp_vec = incr_ptr_aligned(&wdata_cur, ggml_row_size(vec_dot_type_u, k_keep), sizeof(int64_t));
+        tmp_vec = incr_ptr_aligned(&wdata_cur, ggml_row_size(vec_dot_type_u, k_local), sizeof(int64_t));
         if (ith == 0) {
-            from_float_u(tmp, (void *) tmp_vec, k_keep);
+            from_float_u(tmp, (void *) tmp_vec, k_local);
         }
     }
 
@@ -1404,20 +1440,44 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     const int64_t dst_start = ith * dst->ne[0] / nth;
     const int64_t dst_end   = (ith + 1) * dst->ne[0] / nth;
 
-    if (u->type == GGML_TYPE_F16) {
-        int64_t i = dst_start;
-        for (; i + 1 < dst_end; i += GGML_VEC_DOT_UNROLL) {
-            ggml_vec_dot_f16_unroll((int) k_keep, (int) u->nb[1], dst_data + i, (char *) u->data + i * u->nb[1], (ggml_fp16_t *) tmp_vec);
-        }
-        for (; i < dst_end; ++i) {
-            const char * u_row = (const char *) u->data + i * u->nb[1];
-            vec_dot_u((int) k_keep, &dst_data[i], 0, (void *) u_row, 0, (void *) tmp_vec, 0, 1);
+    if (k_local > 0) {
+        if (u->type == GGML_TYPE_F16) {
+            int64_t i = dst_start;
+            for (; i + 1 < dst_end; i += GGML_VEC_DOT_UNROLL) {
+                ggml_vec_dot_f16_unroll((int) k_local, (int) u->nb[1], dst_data + i, (char *) u->data + i * u->nb[1], (ggml_fp16_t *) tmp_vec);
+            }
+            for (; i < dst_end; ++i) {
+                const char * u_row = (const char *) u->data + i * u->nb[1];
+                vec_dot_u((int) k_local, &dst_data[i], 0, (void *) u_row, 0, (void *) tmp_vec, 0, 1);
+            }
+        } else {
+            for (int64_t i = dst_start; i < dst_end; ++i) {
+                const char * u_row = (const char *) u->data + i * u->nb[1];
+                vec_dot_u((int) k_local, &dst_data[i], 0, (void *) u_row, 0, (void *) tmp_vec, 0, 1);
+            }
         }
     } else {
         for (int64_t i = dst_start; i < dst_end; ++i) {
-            const char * u_row = (const char *) u->data + i * u->nb[1];
-            vec_dot_u((int) k_keep, &dst_data[i], 0, (void *) u_row, 0, (void *) tmp_vec, 0, 1);
+            dst_data[i] = 0.0f;
         }
+    }
+
+    ggml_barrier(params->threadpool);
+
+    if (ith == 0) {
+        if (*request_started) {
+            if (!ggml_svd_offload_finish_request(&handle, remote_out, dst->ne[0])) {
+                memset(remote_out, 0, sizeof(float) * dst->ne[0]);
+            }
+        } else {
+            memset(remote_out, 0, sizeof(float) * dst->ne[0]);
+        }
+    }
+
+    ggml_barrier(params->threadpool);
+
+    for (int64_t i = dst_start; i < dst_end; ++i) {
+        dst_data[i] += remote_out[i];
     }
 
     return true;
@@ -2958,7 +3018,7 @@ struct ggml_cplan ggml_graph_plan(
                             : 0;
                         const int64_t k_keep = v->ne[1] - k_trunc;
 
-                        const size_t tmp_elems = k_keep * b->ne[1] * b->ne[2] * b->ne[3];
+                        const size_t tmp_elems = v->ne[1] * b->ne[1] * b->ne[2] * b->ne[3];
                         cur = GGML_PAD(ggml_type_size(GGML_TYPE_F32) * tmp_elems, sizeof(int64_t));
 
                         const enum ggml_type vec_dot_type_v = type_traits_cpu[v->type].vec_dot_type;
@@ -2968,9 +3028,12 @@ struct ggml_cplan ggml_graph_plan(
 
                         const enum ggml_type vec_dot_type_u = type_traits_cpu[u->type].vec_dot_type;
                         if (vec_dot_type_u != GGML_TYPE_F32) {
-                            const size_t tmp_rhs_elems = k_keep * b->ne[1] * b->ne[2] * b->ne[3];
+                            const size_t tmp_rhs_elems = v->ne[1] * b->ne[1] * b->ne[2] * b->ne[3];
                             cur += GGML_PAD(ggml_row_size(vec_dot_type_u, tmp_rhs_elems), sizeof(int64_t));
                         }
+
+                        cur += GGML_PAD(ggml_type_size(GGML_TYPE_F32) * node->ne[0], sizeof(int64_t));
+                        cur += GGML_PAD(sizeof(int32_t), sizeof(int32_t));
                     }break;
                 case GGML_OP_MUL_MAT_ID:
                     {

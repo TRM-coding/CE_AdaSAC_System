@@ -52,7 +52,8 @@
 作用：
 
 - 在 llama.cpp 的图构建层封装一次 SVD 矩阵乘法
-- 负责把模型层里的 `w / U / V / cur / rank` 组装成 `ggml_mul_mat_svd(...)`
+- 负责把模型层里的 `w / U / V / cur / offload_rate` 组装成 `ggml_mul_mat_svd(...)`
+- 同时给结果节点挂上协同所需的层号、算子号、卸载率元数据
 
 输入：
 
@@ -60,7 +61,9 @@
 - `w_svd_u`：SVD `U`
 - `w_svd_v`：SVD `V`
 - `cur`：当前层输入
-- `rank`：图构建时传下来的截断控制参数
+- `il`：当前层号
+- `op_kind`：当前算子类型，区分 `up / gate / down`
+- `offload_rate`：当前层协同卸载率或本地截断率
 
 输出：
 
@@ -70,6 +73,9 @@
 
 - 当 `w == nullptr` 时，允许从 `U/V` 推断输出 shape
 - 这是为了支持紧凑 SVD 模型，即删除原始 dense FFN 张量后仍能正常建图
+- 在当前代码里：
+  - 协同模式下，`offload_rate` 只作为运行时元数据，不在 prefill 建图阶段直接截断
+  - 非协同模式下，`offload_rate` 会被解释为本地 `k_trunc` 比例，用于只保留前部 rank 的本地实验
 
 #### `llm_graph_context::build_ffn_svd_qwen2`
 
@@ -84,11 +90,11 @@
 
 内部流程：
 
-1. `tmp = build_mm_svd(up, up_svd_u, up_svd_v, cur, up_rank)`
-2. `cur = build_mm_svd(gate, gate_svd_u, gate_svd_v, cur, gate_rank)`
+1. `tmp = build_mm_svd(up, up_svd_u, up_svd_v, cur, il, GGML_SVD_OP_UP, offload_rate)`
+2. `cur = build_mm_svd(gate, gate_svd_u, gate_svd_v, cur, il, GGML_SVD_OP_GATE, offload_rate)`
 3. `cur = silu(cur)`
 4. `cur = cur * tmp`
-5. `cur = build_mm_svd(down, down_svd_u, down_svd_v, cur, down_rank)`
+5. `cur = build_mm_svd(down, down_svd_u, down_svd_v, cur, il, GGML_SVD_OP_DOWN, offload_rate)`
 
 说明：
 
@@ -158,6 +164,24 @@
 
 - 当前实现支持截断
 - 但语义是“截掉后面的多少个 rank”，不是“直接传保留前 r 个 rank”
+- 在协同模式下，本地快路径会优先根据 `svd_offload_rate` 重新计算本地 `k_keep`，让本地只算前缀 rank，尾部 rank 交给远端
+
+#### `ggml_mul_mat_svd_set_offload_meta`
+
+位置：
+
+- [ggml.c](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml.c)
+
+作用：
+
+- 给 `GGML_OP_MUL_MAT_SVD` 结果节点写入：
+  - `svd_layer_id`
+  - `svd_op_id`
+  - `svd_offload_rate`
+
+说明：
+
+- 这些字段是当前协同卸载请求的唯一图级元数据来源
 
 #### `ggml_compute_forward_mul_mat_svd_vec`
 
@@ -186,6 +210,20 @@
 
 - 避免走两次完整通用 `ggml_compute_forward_mul_mat`
 - `F16` 分支复用 `ggml_vec_dot_f16_unroll`
+
+当前协同模式下的真实执行顺序：
+
+1. `thread 0` 发送当前算子的远端请求
+2. 本地线程并行计算前缀 rank
+3. 所有本地线程完成前缀部分
+4. `thread 0` 等待并接收远端尾部 rank 输出
+5. 本地把远端结果加到 `dst`
+
+重要限制：
+
+- 这个同步点只覆盖“一个 SVD 算子”
+- 当前不会把多个连续层合并成一次请求
+- FFN 中的 `up / gate / down` 三个 SVD 线性层会分别触发各自的请求
 
 #### `ggml_compute_forward_mul_mat_svd`
 
@@ -307,7 +345,7 @@
 这里调用：
 
 ```cpp
-res = ggml_mul_mat_svd(ctx0, w_shape, w_svd_v, w_svd_u, cur, rank);
+res = ggml_mul_mat_svd(ctx0, w_shape, w_svd_v, w_svd_u, cur, k_trunc);
 ```
 
 这一步会把：
@@ -316,9 +354,17 @@ res = ggml_mul_mat_svd(ctx0, w_shape, w_svd_v, w_svd_u, cur, rank);
 - `V`
 - `U`
 - 当前输入 `cur`
-- rank 截断参数
+- `k_trunc`
 
 一起封装进 GGML 图节点。
+
+随后还会调用：
+
+```cpp
+ggml_mul_mat_svd_set_offload_meta(res, il, op_kind, offload_rate);
+```
+
+把协同执行所需元数据挂到结果节点上。
 
 ### 3.7 `ggml_mul_mat_svd` 在图中创建 `GGML_OP_MUL_MAT_SVD`
 
@@ -378,9 +424,13 @@ ggml_compute_forward_mul_mat_svd(params, tensor);
 
 如果满足 decode 热路径条件，执行顺序是：
 
-1. 每个线程算一段 `tmp`
-2. barrier
-3. 每个线程再算一段 `dst`
+1. 判断当前是否满足协同卸载条件
+2. 若满足，先发起单个算子的远端尾部请求
+3. 每个线程算一段本地前缀 `tmp`
+4. barrier
+5. 每个线程再算一段本地前缀 `dst`
+6. 等待远端返回尾部输出
+7. 本地把远端结果加到 `dst`
 
 这一层就是当前 PC 和手机端 decode 性能优化的核心。
 
@@ -411,16 +461,38 @@ ggml_compute_forward_mul_mat_svd(params, tensor);
 
 ### 4.3 当前代码里是否实际启用了截断
 
-当前图构建代码里，大部分地方默认还是按满秩在跑，原因是 `rank` 被设置成 `0` 时，当前语义等价于“不截断”：
+当前代码里分两种模式：
 
-- [llama-model.cpp:6496](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/src/llama-model.cpp#L6496)
+1. 协同模式
+   - 建图时按满秩挂 `GGML_OP_MUL_MAT_SVD`
+   - decode 单 token 热路径根据 `svd_offload_rate` 动态决定本地保留多少 rank，尾部 rank 走远端
+
+2. 非协同模式但传入了 rate
+   - 建图时直接把 rate 解释成 `k_trunc`
+   - 变成“本地只算前部 rank”的截断 SVD
+   - 这个模式只适合性能实验，不保证与满秩结果一致
 
 所以要区分两件事：
 
 1. 算子能力层面：已经支持部分秩计算
-2. 当前模型图实际配置：默认大多仍在跑满秩
+2. 协同语义层面：当前只支持单算子粒度的尾部卸载，不支持多层整段连续卸载
 
-## 5. 最短调用链总结
+## 5. 当前协同语义的边界
+
+为了避免后续误读，这里再单独明确一次：
+
+1. 当前支持什么
+   - 单个 `GGML_OP_MUL_MAT_SVD` 的“本地前缀 + 远端尾部 + 同步合并”
+
+2. 当前不支持什么
+   - 连续若干层整段全量卸载到端侧
+   - 端侧连续推进多层后再统一返回中间激活
+   - 把同一层的 `up / gate / down` 三个 SVD 算子合并成单次请求
+
+3. 为什么这点重要
+   - 当前多层卸载变慢的主要原因之一，就是请求粒度太细，等待点太多
+
+## 6. 最短调用链总结
 
 如果只保留最核心的一条链，可以概括成：
 
@@ -432,12 +504,15 @@ ggml_compute_forward_mul_mat_svd(params, tensor);
 6. `ggml_mul_mat_svd` 生成 `GGML_OP_MUL_MAT_SVD`
 7. GGML CPU backend 分发到 `ggml_compute_forward_mul_mat_svd`
 8. `ggml_compute_forward_mul_mat_svd` 最终执行 `x * V * U`
+9. 若协同模式开启且卸载率超过阈值，则在单算子内部拆成“本地前缀 + 远端尾部 + 合并”
 
-## 6. 相关文件
+## 7. 相关文件
 
 - [decode_svd_model.cpp](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp6_decode_svd_model/decode_svd_model.cpp)
+- [svd_mobile_server.cpp](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp6_decode_svd_model/svd_mobile_server.cpp)
 - [llama-model.cpp](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/src/llama-model.cpp)
 - [llama-graph.cpp](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/src/llama-graph.cpp)
 - [ggml.h](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/include/ggml.h)
 - [ggml.c](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml.c)
+- [ggml-svd-offload.c](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-svd-offload.c)
 - [ggml-cpu.c](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-cpu/ggml-cpu.c)

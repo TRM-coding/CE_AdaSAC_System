@@ -6404,10 +6404,9 @@ struct llm_build_qwen : public llm_graph_context {
         ggml_build_forward_expand(gf, cur);
     }
 };
-#include<iostream>
-// 导入SVD版本模型
+
 struct llm_build_qwen2_svd : public llm_graph_context {
-    llm_build_qwen2_svd(const llama_model & model, const llm_graph_params & params, ggml_cgraph * gf,const int * up_ranks,const int * gate_ranks,const int * down_ranks) : llm_graph_context(params) {
+    llm_build_qwen2_svd(const llama_model & model, const llm_graph_params & params, ggml_cgraph * gf) : llm_graph_context(params) {
         const int64_t n_embd_head = hparams.n_embd_head_v;
 
         GGML_ASSERT(n_embd_head == hparams.n_embd_head_k);
@@ -6487,36 +6486,20 @@ struct llm_build_qwen2_svd : public llm_graph_context {
                     model.layers[il].ffn_norm, NULL,
                     LLM_NORM_RMS, il);
             cb(cur, "ffn_norm", il);
-            
-            int up_rank= up_ranks ? up_ranks[il] : -1;
-            int gate_rank= gate_ranks ? gate_ranks[il] : -1;
-            int down_rank= down_ranks ? down_ranks[il] : -1;
-            
-            // std::cout<<"BGBGGSDG"<<std::endl;
-            up_rank=0;
-            gate_rank=0;
-            down_rank=0;
-            if(il%5==0)
-            {
-                up_rank=600;
-                // gate_rank=400;
-                // down_rank=100;
-            }
+
+            const float offload_rate =
+                svd_offload_rates != nullptr && il < (int) svd_offload_rate_count
+                    ? svd_offload_rates[il]
+                    : 0.0f;
+
             cur = build_ffn_svd_qwen2(cur,
                     model.layers[il].ffn_up,   model.layers[il].ffn_up_svd_u, model.layers[il].ffn_up_svd_v,
                     model.layers[il].ffn_gate, model.layers[il].ffn_gate_svd_u,model.layers[il].ffn_gate_svd_v,
                     model.layers[il].ffn_down, model.layers[il].ffn_down_svd_u, model.layers[il].ffn_down_svd_v,
-                    0,
-                    up_rank,gate_rank, down_rank
+                    il,
+                    offload_rate
             );
             cb(cur, "ffn_out_svd", il);
-            // cur = build_ffn(cur,
-            //         model.layers[il].ffn_up,   NULL, NULL,
-            //         model.layers[il].ffn_gate, NULL, NULL,
-            //         model.layers[il].ffn_down, NULL, NULL,
-            //         NULL,
-            //         LLM_FFN_SILU, LLM_FFN_PAR, il);
-            // cb(cur, "ffn_out", il);
 
             cur = ggml_add(ctx0, cur, ffn_inp);
 
@@ -13072,16 +13055,7 @@ llm_graph_result_ptr llama_model::build_graph(
             } break;
         case LLM_ARCH_QWEN2_SVD:
             {
-                static int * up_ranks=new int[30];//TODO:replace with svd version
-                static int * gate_ranks=new int[30];//TODO:replace with svd version
-                static int * down_ranks=new int[30];//TODO:replace with svd version
-                for (int i = 0; i < 30; ++i) {
-                    up_ranks[i] = 1;
-                    gate_ranks[i] = 1;
-                    down_ranks[i] = 1;
-                }
-                llm = std::make_unique<llm_build_qwen2_svd>(*this, params, gf,up_ranks, gate_ranks, down_ranks);//TODO:replace with svd version
-                // llm = std::make_unique<llm_build_qwen2>(*this, params, gf);
+                llm = std::make_unique<llm_build_qwen2_svd>(*this, params, gf);
             } break;
         case LLM_ARCH_QWEN2VL:
             {

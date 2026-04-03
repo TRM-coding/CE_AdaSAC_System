@@ -197,6 +197,7 @@ add_library(ggml-base
             ggml-alloc.c
             ggml-backend.cpp
             ggml-opt.cpp
+            ggml-svd-offload.c
             ggml-threading.cpp
             ggml-threading.h
             ggml-quants.c

@@ -9,6 +9,7 @@
 #include "ggml-cpp.h"
 
 #include <map>
+#include <string>
 #include <vector>
 
 struct llama_model;
@@ -199,6 +200,12 @@ private:
     llama_sbatch        sbatch;
 
     llama_cross cross; // TODO: tmp for handling cross-attention - need something better probably
+
+    std::vector<float> svd_offload_rates;
+    std::string        svd_offload_host;
+    uint16_t           svd_offload_port       = 0;
+    int32_t            svd_offload_timeout_ms = 0;
+    bool               svd_offload_enabled    = false;
 
     std::unique_ptr<llama_kv_cache_unified> kv_self;
 

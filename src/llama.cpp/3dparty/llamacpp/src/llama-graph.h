@@ -359,6 +359,9 @@ struct llm_graph_params {
     const llama_adapter_loras * loras;
     const llama_memory_i      * memory;
     const llama_cross         * cross;
+    const float *               svd_offload_rates;
+    uint32_t                    svd_offload_rate_count;
+    bool                        svd_offload_enabled;
 
     int32_t n_outputs;
 
@@ -412,6 +415,9 @@ struct llm_graph_context {
     const llama_adapter_loras * loras;
     const llama_memory_i      * memory;
     const llama_cross         * cross;
+    const float *               svd_offload_rates;
+    const uint32_t              svd_offload_rate_count;
+    const bool                  svd_offload_enabled;
 
     const llm_graph_cb & cb_func;
 
@@ -441,8 +447,9 @@ struct llm_graph_context {
         ggml_tensor * w_svd_u,
         ggml_tensor * w_svd_v,
         ggml_tensor * cur,
-        int64_t         rank,
-        bool cooperation=false
+        int32_t         il,
+        int32_t         op_kind,
+        float           offload_rate
     )const;
 
     // do mat_mul_id, while optionally apply lora
@@ -485,10 +492,8 @@ struct llm_graph_context {
              ggml_tensor * down,
              ggml_tensor * down_svd_u,
              ggml_tensor * down_svd_v,
-             int          up_rank,
-             int          gate_rank,
-             int          down_rank,
-                     int   il) const;
+                     int   il,
+                   float   offload_rate) const;
 
     ggml_tensor * build_moe_ffn(
              ggml_tensor * cur,

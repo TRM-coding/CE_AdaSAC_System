@@ -575,7 +575,10 @@ extern "C" {
     struct ggml_tensor {
         enum ggml_type type;
         int64_t svd_k_trunk;
-        int64_t _pad_svd;
+        int32_t svd_layer_id;
+        int32_t svd_op_id;
+        float   svd_offload_rate;
+        int32_t _pad_svd;
 
         struct ggml_backend_buffer * buffer;
 
@@ -605,7 +608,7 @@ extern "C" {
 
         void * extra; // extra things e.g. for ggml-cuda.cu
 
-        char padding[8];
+        char padding[16];
     };
 
     static const size_t GGML_TENSOR_SIZE = sizeof(struct ggml_tensor);
@@ -1134,6 +1137,12 @@ extern "C" {
         struct ggml_tensor  * w_u,
         struct ggml_tensor  * b,
         int64_t k_trunc);
+
+    GGML_API void ggml_mul_mat_svd_set_offload_meta(
+        struct ggml_tensor * tensor,
+        int32_t layer_id,
+        int32_t op_id,
+        float offload_rate);
 
     // change the precision of a matrix multiplication
     // set to GGML_PREC_F32 for higher precision (useful for phi-2)

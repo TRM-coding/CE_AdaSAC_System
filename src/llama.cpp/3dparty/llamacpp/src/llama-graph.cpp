@@ -1,4 +1,5 @@
 #include "llama-graph.h"
+#include "../ggml/src/ggml-svd-offload.h"
 
 #include "llama-impl.h"
 #include "llama-batch.h"
@@ -588,6 +589,9 @@ llm_graph_context::llm_graph_context(const llm_graph_params & params) :
     loras            (params.loras),
     memory           (params.memory),
     cross            (params.cross),
+    svd_offload_rates(params.svd_offload_rates),
+    svd_offload_rate_count(params.svd_offload_rate_count),
+    svd_offload_enabled(params.svd_offload_enabled),
     cb_func          (params.cb),
     res              (std::make_unique<llm_graph_result>()) {
     }
@@ -634,39 +638,14 @@ ggml_tensor * llm_graph_context::build_lora_mm(
     return res;
 }
 
-static bool CHECK_SVD(ggml_tensor * cur , ggml_tensor * w,int rank)
-{
-    if (rank < w->ne[0]/2)
-    {
-        return false;
-    }
-    return true;
-}
-#include<iostream>
-static void ggml_print_tensor(struct ggml_tensor * cur) {
-    if (cur == nullptr) {
-        std::cout << "tensor = nullptr\n";
-        return;
-    }
-
-    std::cout << "Tensor \"" << (cur->name ? cur->name : "<unnamed>") << "\""
-              << " | shape = [";
-
-    // 打印 ne[0..cur->n_dims-1]
-    for (int i = 0; i < ggml_n_dims(cur); i++) {
-        std::cout << cur->ne[i];
-        if (i + 1 < ggml_n_dims(cur)) std::cout << ", ";
-    }
-
-    std::cout << "]\n";
-}
 ggml_tensor * llm_graph_context::build_mm_svd(
         ggml_tensor * w,
         ggml_tensor * w_svd_u,
         ggml_tensor * w_svd_v,
         ggml_tensor * cur,
-        int64_t         rank,
-        bool cooperation
+        int32_t         il,
+        int32_t         op_kind,
+        float           offload_rate
         ) const {
     ggml_tensor * res = nullptr;
     ggml_tensor * w_shape = w;
@@ -681,18 +660,18 @@ ggml_tensor * llm_graph_context::build_mm_svd(
         }
     }
 
-   
-    // if (CHECK_SVD(cur,w,rank))
-    if (true)
-    {
-        res=ggml_mul_mat_svd(ctx0,w_shape,w_svd_v,w_svd_u,cur,rank);
-        // res=ggml_mul_mat(ctx0,w_svd_v,cur);
-        // res=ggml_mul_mat(ctx0,w_svd_u,res);
-    }else
-    {
-        res=ggml_mul_mat(ctx0,w,cur);
+    int64_t k_trunc = 0;
+    if (!svd_offload_enabled && offload_rate > 0.0f && offload_rate < 1.0f) {
+        const int64_t total_rank = w_svd_v->ne[1];
+        k_trunc = (int64_t) ceilf(offload_rate * (float) total_rank);
+        if (k_trunc >= total_rank) {
+            k_trunc = total_rank - 1;
+        }
     }
-    
+
+    res = ggml_mul_mat_svd(ctx0, w_shape, w_svd_v, w_svd_u, cur, k_trunc);
+    ggml_mul_mat_svd_set_offload_meta(res, il, op_kind, offload_rate);
+
     return res;
 }
 
@@ -765,29 +744,22 @@ ggml_tensor * llm_graph_context::build_ffn_svd_qwen2(
             ggml_tensor * gate,ggml_tensor * gate_svd_u,ggml_tensor * gate_svd_v,
             ggml_tensor * down,ggml_tensor * down_svd_u,ggml_tensor * down_svd_v,
             int   il,
-            int          up_rank,
-            int          gate_rank,
-            int          down_rank
+            float        offload_rate
                     ) const{
-    // up projection with SVD
-    // ggml_tensor * tmp=nullptr;
-
-    ggml_tensor * tmp = build_mm_svd(up, up_svd_u,up_svd_v,cur, up_rank);//TODO: finish build_lora_mm_svd
+    ggml_tensor * tmp = build_mm_svd(up, up_svd_u, up_svd_v, cur, il, GGML_SVD_OP_UP, offload_rate);
     cb(tmp, "ffn_up", il);
-    //gate projection with SVD
-    cur = build_mm_svd(gate,gate_svd_u,gate_svd_v,cur,gate_rank);
+
+    cur = build_mm_svd(gate, gate_svd_u, gate_svd_v, cur, il, GGML_SVD_OP_GATE, offload_rate);
     cb(cur, "ffn_gate", il);
-    //silu activation
+
     cur = ggml_silu(ctx0, cur);
     cb(cur, "ffn_silu", il);
-    
+
     cur = ggml_mul(ctx0, cur, tmp);
     cb(cur, "ffn_gate_par", il);
 
-    //down projection with SVD
-    cur = build_mm_svd(down,down_svd_u,down_svd_v,cur,down_rank);
+    cur = build_mm_svd(down, down_svd_u, down_svd_v, cur, il, GGML_SVD_OP_DOWN, offload_rate);
     return cur;
-
 }
 
 ggml_tensor * llm_graph_context::build_ffn(

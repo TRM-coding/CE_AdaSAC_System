@@ -364,6 +364,14 @@ extern "C" {
         // currently works only with CPU execution
         ggml_abort_callback abort_callback;
         void *              abort_callback_data;
+
+        // cooperative SVD offload [EXPERIMENTAL]
+        const float * svd_offload_rates;       // per-layer offload rate in [0, 1]
+        uint32_t      svd_offload_rate_count;  // number of entries in svd_offload_rates
+        const char *  svd_offload_host;        // remote device address, e.g. "127.0.0.1"
+        uint16_t      svd_offload_port;        // remote device TCP port
+        int32_t       svd_offload_timeout_ms;  // socket timeout in milliseconds
+        bool          svd_offload_enabled;     // enable cooperative SVD offload
     };
 
     // model quantization parameters

@@ -1610,8 +1610,11 @@ static struct ggml_tensor * ggml_new_tensor_impl(
 
     *result = (struct ggml_tensor) {
         /*.type         =*/ type,
-        /*.svd_k_trunk  =*/ 1, 
-        /*._pad_svd     =*/ 1,  
+        /*.svd_k_trunk  =*/ 0,
+        /*.svd_layer_id =*/ -1,
+        /*.svd_op_id    =*/ -1,
+        /*.svd_offload_rate =*/ 0.0f,
+        /*._pad_svd     =*/ 0,
         /*.buffer       =*/ NULL,
         /*.ne           =*/ { 1, 1, 1, 1 },
         /*.nb           =*/ { 0, 0, 0, 0 },
@@ -2809,6 +2812,17 @@ struct ggml_tensor * ggml_mul_mat_svd(
     // result->src[4] = tmp;
 
     return result;
+}
+
+void ggml_mul_mat_svd_set_offload_meta(
+        struct ggml_tensor * tensor,
+        int32_t layer_id,
+        int32_t op_id,
+        float offload_rate) {
+    GGML_ASSERT(tensor != NULL);
+    tensor->svd_layer_id = layer_id;
+    tensor->svd_op_id = op_id;
+    tensor->svd_offload_rate = offload_rate;
 }
 
 void ggml_mul_mat_set_prec(

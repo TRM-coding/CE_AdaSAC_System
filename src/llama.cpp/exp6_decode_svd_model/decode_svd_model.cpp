@@ -16,6 +16,64 @@
 #include <algorithm>
 #include <chrono>
 #include <thread>
+#include <fstream>
+#include <sstream>
+
+namespace {
+
+std::vector<float> parse_offload_rates_arg(const std::string & arg, int32_t n_layer) {
+    if (arg.empty() || arg == "off" || arg == "none") {
+        return {};
+    }
+
+    std::string content = arg;
+    std::ifstream fin(arg);
+    if (fin.good()) {
+        std::ostringstream oss;
+        oss << fin.rdbuf();
+        content = oss.str();
+    }
+
+    for (char & ch : content) {
+        if (ch == '\n' || ch == '\r' || ch == ';') {
+            ch = ',';
+        }
+    }
+
+    std::vector<float> rates;
+    std::stringstream ss(content);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+        if (item.empty()) {
+            continue;
+        }
+        rates.push_back(std::stof(item));
+    }
+
+    if (rates.size() == 1 && n_layer > 1) {
+        rates.resize(n_layer, rates[0]);
+    }
+    if ((int32_t) rates.size() < n_layer) {
+        rates.resize(n_layer, 0.0f);
+    }
+
+    for (float & rate : rates) {
+        rate = std::max(0.0f, std::min(1.0f, rate));
+    }
+    return rates;
+}
+
+bool parse_host_port(const std::string & arg, std::string & host, uint16_t & port) {
+    const size_t pos = arg.find(':');
+    if (pos == std::string::npos) {
+        return false;
+    }
+    host = arg.substr(0, pos);
+    port = static_cast<uint16_t>(std::stoi(arg.substr(pos + 1)));
+    return !host.empty() && port != 0;
+}
+
+} // namespace
 
 int main(int argc, char ** argv)
 {
@@ -29,6 +87,8 @@ int main(int argc, char ** argv)
         ? std::stoi(argv[3])
         : std::max(1u, std::thread::hardware_concurrency() / 2);
     const bool verbose_tokens = argc > 4 ? std::stoi(argv[4]) != 0 : false;
+    const std::string offload_endpoint = argc > 5 ? argv[5] : "";
+    const std::string offload_rates_arg = argc > 6 ? argv[6] : "";
 
     // 1. 加载动态后端
     ggml_backend_load_all();
@@ -45,6 +105,7 @@ int main(int argc, char ** argv)
         return 1;
     }
     std::cout << "model_name:" << model->name << std::endl;
+    std::cout << "n_layer:" << model->hparams.n_layer << std::endl;
 
     const llama_vocab *vocab = llama_model_get_vocab(model);
 
@@ -54,6 +115,27 @@ int main(int argc, char ** argv)
     ctx_params.n_batch = n_ctx;
     ctx_params.n_threads = n_threads;
     ctx_params.n_threads_batch = n_threads;
+
+    std::vector<float> offload_rates = parse_offload_rates_arg(offload_rates_arg, model->hparams.n_layer);
+    std::string offload_host;
+    uint16_t offload_port = 0;
+    const bool has_rates = !offload_rates.empty();
+    const bool has_endpoint = parse_host_port(offload_endpoint, offload_host, offload_port);
+    if (has_rates) {
+        ctx_params.svd_offload_rates = offload_rates.data();
+        ctx_params.svd_offload_rate_count = static_cast<uint32_t>(offload_rates.size());
+    }
+    if (has_endpoint && has_rates) {
+        ctx_params.svd_offload_enabled = true;
+        ctx_params.svd_offload_host = offload_host.c_str();
+        ctx_params.svd_offload_port = offload_port;
+        ctx_params.svd_offload_timeout_ms = 3000;
+        std::cout << "SVD offload enabled: " << offload_host << ":" << offload_port << std::endl;
+    } else if (has_rates) {
+        std::cout << "SVD local truncation enabled, rates count: " << offload_rates.size() << std::endl;
+    } else {
+        std::cout << "SVD offload disabled" << std::endl;
+    }
 
     std::cout << "creating context ..." << std::endl;
     llama_context *ctx = llama_init_from_model(model, ctx_params);

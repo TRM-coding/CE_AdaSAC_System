@@ -5,6 +5,7 @@
 #include "llama-mmap.h"
 #include "llama-model.h"
 #include "llama-kv-cache.h"
+#include "../ggml/src/ggml-svd-offload.h"
 
 #include <cassert>
 #include <cstring>
@@ -52,6 +53,26 @@ llama_context::llama_context(
 
     cparams.cb_eval           = params.cb_eval;
     cparams.cb_eval_user_data = params.cb_eval_user_data;
+
+    svd_offload_enabled = params.svd_offload_enabled;
+    svd_offload_port = params.svd_offload_port;
+    svd_offload_timeout_ms = params.svd_offload_timeout_ms;
+    if (params.svd_offload_host != nullptr) {
+        svd_offload_host = params.svd_offload_host;
+    }
+    if (params.svd_offload_rates != nullptr && params.svd_offload_rate_count > 0) {
+        svd_offload_rates.assign(
+                params.svd_offload_rates,
+                params.svd_offload_rates + params.svd_offload_rate_count);
+    }
+
+    const ggml_svd_offload_client_config offload_config = {
+        /*.enabled    =*/ svd_offload_enabled,
+        /*.host       =*/ svd_offload_host.empty() ? NULL : svd_offload_host.c_str(),
+        /*.port       =*/ svd_offload_port,
+        /*.timeout_ms =*/ svd_offload_timeout_ms,
+    };
+    ggml_svd_offload_set_client_config(&offload_config);
 
     auto rope_scaling_type = params.rope_scaling_type;
     if (rope_scaling_type == LLAMA_ROPE_SCALING_TYPE_UNSPECIFIED) {
@@ -1620,6 +1641,9 @@ llm_graph_result_ptr llama_context::graph_build(
                 /*.loras       =*/ &loras,
                 /*.memory      =*/ kv_self.get(),
                 /*.cross       =*/ &cross,
+                /*.svd_offload_rates      =*/ svd_offload_rates.empty() ? nullptr : svd_offload_rates.data(),
+                /*.svd_offload_rate_count =*/ (uint32_t) svd_offload_rates.size(),
+                /*.svd_offload_enabled    =*/ svd_offload_enabled,
                 /*.n_outputs   =*/ n_outputs,
                 /*.cb          =*/ graph_get_cb(),
             }, gf, gtype);
@@ -2239,6 +2263,12 @@ llama_context_params llama_context_default_params() {
         /*.no_perf                     =*/ true,
         /*.abort_callback              =*/ nullptr,
         /*.abort_callback_data         =*/ nullptr,
+        /*.svd_offload_rates           =*/ nullptr,
+        /*.svd_offload_rate_count      =*/ 0,
+        /*.svd_offload_host            =*/ nullptr,
+        /*.svd_offload_port            =*/ 0,
+        /*.svd_offload_timeout_ms      =*/ 0,
+        /*.svd_offload_enabled         =*/ false,
     };
 
     return result;
