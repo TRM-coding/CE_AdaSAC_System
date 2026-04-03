@@ -1380,8 +1380,8 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     if (can_offload) {
         const int64_t k_trunc_remote = (int64_t) ceilf(dst->svd_offload_rate * (float) total_rank);
         k_keep = total_rank - k_trunc_remote;
-        if (k_keep < 1) {
-            k_keep = 1;
+        if (k_keep < 0) {
+            k_keep = 0;
         }
         if (k_keep > total_rank) {
             k_keep = total_rank;
@@ -1440,7 +1440,7 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     ggml_barrier(params->threadpool);
 
     const void * tmp_vec = tmp;
-    const bool need_tmp_convert = vec_dot_type_u != GGML_TYPE_F32;
+    const bool need_tmp_convert = k_local > 0 && vec_dot_type_u != GGML_TYPE_F32;
     if (need_tmp_convert) {
         tmp_vec = incr_ptr_aligned(&wdata_cur, ggml_row_size(vec_dot_type_u, k_local), sizeof(int64_t));
         if (ith == 0) {
