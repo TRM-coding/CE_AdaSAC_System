@@ -95,8 +95,7 @@
   - 每层卸载率数组，取值范围 `[0, 1]`
 - `uint32_t svd_offload_rate_count`
   - 卸载率数组长度
-- `const char * svd_offload_host`
-  - 远端设备地址
+- `const char * svd_offload_host` - 远端设备地址
 - `uint16_t svd_offload_port`
   - 远端设备端口
 - `int32_t svd_offload_timeout_ms`

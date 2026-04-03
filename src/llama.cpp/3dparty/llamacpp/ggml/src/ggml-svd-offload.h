@@ -30,8 +30,10 @@ struct ggml_svd_offload_request_handle {
     int32_t response_ready;
     int32_t request_kind;
     int32_t layer_id;
+    int32_t op_id;
     int32_t rank_start;
     uint64_t input_hash;
+    uint64_t start_us;
 };
 
 void ggml_svd_offload_set_client_config(const struct ggml_svd_offload_client_config * config);
@@ -48,6 +50,7 @@ bool ggml_svd_offload_begin_request(
 
 bool ggml_svd_offload_begin_up_gate_request(
         int32_t layer_id,
+        int32_t op_id,
         float offload_rate,
         int64_t rank_start,
         const float * input,
@@ -61,9 +64,24 @@ bool ggml_svd_offload_finish_request(
 
 bool ggml_svd_offload_finish_up_gate_request(
         struct ggml_svd_offload_request_handle * handle,
-        float * output_up,
-        int64_t output_up_len,
-        int64_t output_gate_len);
+        float * output,
+        int64_t output_len,
+        int64_t paired_output_len);
+
+bool ggml_svd_offload_has_cached_up(
+        int32_t layer_id,
+        int64_t rank_start,
+        const float * input,
+        int64_t input_len,
+        int64_t output_len);
+
+bool ggml_svd_offload_take_cached_up(
+        int32_t layer_id,
+        int64_t rank_start,
+        const float * input,
+        int64_t input_len,
+        float * output,
+        int64_t output_len);
 
 bool ggml_svd_offload_has_cached_gate(
         int32_t layer_id,

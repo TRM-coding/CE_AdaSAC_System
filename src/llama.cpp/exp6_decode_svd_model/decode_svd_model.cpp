@@ -1,11 +1,12 @@
 #include "llama-context.h"
-
 #include "llama-impl.h"
 #include "llama-batch.h"
 #include "llama-io.h"
 #include "llama-memory.h"
 #include "llama-mmap.h"
 #include "llama-model.h"
+
+extern "C" void ggml_svd_offload_close_client(void);
 
 #include <cinttypes>
 #include <cstring>
@@ -376,6 +377,7 @@ int main(int argc, char ** argv)
     }
 
     llama_batch_free(batch);
+    ggml_svd_offload_close_client();
     llama_free(ctx);
     llama_model_free(model);
 

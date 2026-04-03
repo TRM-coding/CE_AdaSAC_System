@@ -15,6 +15,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <time.h>
 #include <unordered_map>
 #include <vector>
 
@@ -125,6 +126,27 @@ struct UpGateExecutorKeyHash {
         h = h * 1315423911u + (size_t) key.rank_start;
         return h;
     }
+};
+
+uint64_t now_us() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t) ts.tv_sec * 1000000ULL + (uint64_t) ts.tv_nsec / 1000ULL;
+}
+
+struct ServerProfile {
+    uint64_t requests_up_gate = 0;
+    uint64_t requests_mat_down = 0;
+    uint64_t requests_mat_other = 0;
+    uint64_t create_up_gate_us = 0;
+    uint64_t create_mat_down_us = 0;
+    uint64_t create_mat_other_us = 0;
+    uint64_t run_up_gate_us = 0;
+    uint64_t run_mat_down_us = 0;
+    uint64_t run_mat_other_us = 0;
+    uint64_t up_gate_cache_miss = 0;
+    uint64_t mat_down_cache_miss = 0;
+    uint64_t mat_other_cache_miss = 0;
 };
 
 SvdMatRefs get_svd_tensors(const llama_model & model, int32_t layer_id, int32_t op_id) {
@@ -444,6 +466,7 @@ int main(int argc, char ** argv) {
         }
         setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
         std::cout << "client connected" << std::endl;
+        ServerProfile prof;
 
         while (true) {
             WireRequest req {};
@@ -464,24 +487,52 @@ int main(int argc, char ** argv) {
             std::vector<float> output_aux;
             try {
                 if (req.request_kind == REQ_UP_GATE) {
+                    prof.requests_up_gate++;
                     const UpGateExecutorKey key { req.layer_id, req.rank_start };
                     const auto up = get_svd_tensors(*model, req.layer_id, SVD_OP_UP);
                     const auto gate = get_svd_tensors(*model, req.layer_id, SVD_OP_GATE);
                     auto & exec = up_gate_executors[key];
                     if (!exec) {
+                        prof.up_gate_cache_miss++;
+                        const uint64_t t0 = now_us();
                         exec = create_up_gate_executor(backend, up.u, up.v, gate.u, gate.v, req.rank_start, req.input_len);
+                        prof.create_up_gate_us += now_us() - t0;
                     }
+                    const uint64_t t0 = now_us();
                     run_up_gate_executor(backend, *exec, input, output, output_aux);
+                    prof.run_up_gate_us += now_us() - t0;
                     rsp.output_len = static_cast<int32_t>(output.size());
                     rsp.output_len_aux = static_cast<int32_t>(output_aux.size());
                 } else {
+                    const bool is_down = req.op_id == SVD_OP_DOWN;
+                    if (is_down) {
+                        prof.requests_mat_down++;
+                    } else {
+                        prof.requests_mat_other++;
+                    }
                     const MatExecutorKey key { req.layer_id, req.op_id, req.rank_start };
                     const auto mat = get_svd_tensors(*model, req.layer_id, req.op_id);
                     auto & exec = mat_executors[key];
                     if (!exec) {
+                        const uint64_t t0 = now_us();
                         exec = create_mat_executor(backend, mat.u, mat.v, req.rank_start, req.input_len);
+                        const uint64_t dt = now_us() - t0;
+                        if (is_down) {
+                            prof.mat_down_cache_miss++;
+                            prof.create_mat_down_us += dt;
+                        } else {
+                            prof.mat_other_cache_miss++;
+                            prof.create_mat_other_us += dt;
+                        }
                     }
+                    const uint64_t t0 = now_us();
                     run_mat_executor(backend, *exec, input, output);
+                    const uint64_t dt = now_us() - t0;
+                    if (is_down) {
+                        prof.run_mat_down_us += dt;
+                    } else {
+                        prof.run_mat_other_us += dt;
+                    }
                     rsp.output_len = static_cast<int32_t>(output.size());
                 }
             } catch (const std::exception & e) {
@@ -503,6 +554,20 @@ int main(int argc, char ** argv) {
             }
         }
 
+        std::cerr
+            << "[svd-offload-server] up_gate_req=" << prof.requests_up_gate
+            << " down_req=" << prof.requests_mat_down
+            << " other_mat_req=" << prof.requests_mat_other
+            << " up_gate_miss=" << prof.up_gate_cache_miss
+            << " down_miss=" << prof.mat_down_cache_miss
+            << " other_miss=" << prof.mat_other_cache_miss
+            << " create_up_gate=" << (prof.create_up_gate_us / 1000.0) << " ms"
+            << " create_down=" << (prof.create_mat_down_us / 1000.0) << " ms"
+            << " create_other=" << (prof.create_mat_other_us / 1000.0) << " ms"
+            << " run_up_gate=" << (prof.run_up_gate_us / 1000.0) << " ms"
+            << " run_down=" << (prof.run_mat_down_us / 1000.0) << " ms"
+            << " run_other=" << (prof.run_mat_other_us / 1000.0) << " ms"
+            << std::endl;
         std::cout << "client disconnected" << std::endl;
         close(client_fd);
     }
