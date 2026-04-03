@@ -1388,17 +1388,32 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
         }
     }
 
-    struct ggml_svd_offload_request_handle handle = { -1, 0 };
+    struct ggml_svd_offload_request_handle handle = { -1, 0, 0, -1, -1, 0 };
     if (ith == 0) {
-        *request_started = can_offload &&
-            ggml_svd_offload_begin_request(
-                dst->svd_layer_id,
-                dst->svd_op_id,
-                dst->svd_offload_rate,
-                k_keep,
-                x,
-                b->ne[0],
-                &handle);
+        *request_started = 0;
+        if (can_offload &&
+            dst->svd_op_id == GGML_SVD_OP_GATE &&
+            ggml_svd_offload_has_cached_gate(dst->svd_layer_id, k_keep, x, b->ne[0], dst->ne[0])) {
+            *request_started = 2;
+        } else if (can_offload) {
+            const bool started = dst->svd_op_id == GGML_SVD_OP_UP
+                ? ggml_svd_offload_begin_up_gate_request(
+                    dst->svd_layer_id,
+                    dst->svd_offload_rate,
+                    k_keep,
+                    x,
+                    b->ne[0],
+                    &handle)
+                : ggml_svd_offload_begin_request(
+                    dst->svd_layer_id,
+                    dst->svd_op_id,
+                    dst->svd_offload_rate,
+                    k_keep,
+                    x,
+                    b->ne[0],
+                    &handle);
+            *request_started = started ? 1 : 0;
+        }
     }
     ggml_barrier(params->threadpool);
 
@@ -1465,8 +1480,15 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     ggml_barrier(params->threadpool);
 
     if (ith == 0) {
-        if (*request_started) {
-            if (!ggml_svd_offload_finish_request(&handle, remote_out, dst->ne[0])) {
+        if (*request_started == 1) {
+            const bool ok = handle.request_kind == GGML_SVD_OFFLOAD_REQ_UP_GATE
+                ? ggml_svd_offload_finish_up_gate_request(&handle, remote_out, dst->ne[0], dst->ne[0])
+                : ggml_svd_offload_finish_request(&handle, remote_out, dst->ne[0]);
+            if (!ok) {
+                memset(remote_out, 0, sizeof(float) * dst->ne[0]);
+            }
+        } else if (*request_started == 2) {
+            if (!ggml_svd_offload_take_cached_gate(dst->svd_layer_id, k_keep, x, b->ne[0], remote_out, dst->ne[0])) {
                 memset(remote_out, 0, sizeof(float) * dst->ne[0]);
             }
         } else {

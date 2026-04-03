@@ -14,6 +14,7 @@
 struct ggml_svd_offload_wire_request {
     uint32_t magic;
     uint32_t version;
+    int32_t request_kind;
     int32_t layer_id;
     int32_t op_id;
     float offload_rate;
@@ -26,6 +27,7 @@ struct ggml_svd_offload_wire_response {
     uint32_t version;
     int32_t status;
     int32_t output_len;
+    int32_t output_len_aux;
 };
 
 static struct {
@@ -44,10 +46,54 @@ static struct {
     PTHREAD_MUTEX_INITIALIZER,
 };
 
+static struct {
+    int32_t layer_id;
+    int32_t rank_start;
+    int32_t output_len;
+    uint64_t input_hash;
+    float * data;
+    bool valid;
+} g_svd_gate_cache = {
+    -1,
+    -1,
+    0,
+    0,
+    NULL,
+    false,
+};
+
 enum {
     GGML_SVD_OFFLOAD_MAGIC = 0x5344564fU,
-    GGML_SVD_OFFLOAD_VERSION = 1,
+    GGML_SVD_OFFLOAD_VERSION = 2,
 };
+
+static void ggml_svd_gate_cache_clear_locked(void) {
+    g_svd_gate_cache.valid = false;
+    g_svd_gate_cache.layer_id = -1;
+    g_svd_gate_cache.rank_start = -1;
+    g_svd_gate_cache.output_len = 0;
+    g_svd_gate_cache.input_hash = 0;
+}
+
+static bool ggml_svd_gate_cache_resize_locked(int32_t output_len) {
+    if (output_len <= 0) {
+        ggml_svd_gate_cache_clear_locked();
+        return false;
+    }
+    if (g_svd_gate_cache.output_len == output_len && g_svd_gate_cache.data != NULL) {
+        return true;
+    }
+    float * new_data = (float *) realloc(g_svd_gate_cache.data, sizeof(float) * (size_t) output_len);
+    if (new_data == NULL) {
+        ggml_svd_gate_cache_clear_locked();
+        free(g_svd_gate_cache.data);
+        g_svd_gate_cache.data = NULL;
+        return false;
+    }
+    g_svd_gate_cache.data = new_data;
+    g_svd_gate_cache.output_len = output_len;
+    return true;
+}
 
 static bool ggml_svd_send_all(int fd, const void * data, size_t size) {
     const char * ptr = (const char *) data;
@@ -73,6 +119,19 @@ static bool ggml_svd_recv_all(int fd, void * data, size_t size) {
         size -= (size_t) nread;
     }
     return true;
+}
+
+static uint64_t ggml_svd_hash_input(const float * input, int64_t input_len) {
+    const uint8_t * bytes = (const uint8_t *) input;
+    const size_t nbytes = sizeof(float) * (size_t) input_len;
+    uint64_t hash = 1469598103934665603ULL;
+
+    for (size_t i = 0; i < nbytes; ++i) {
+        hash ^= bytes[i];
+        hash *= 1099511628211ULL;
+    }
+
+    return hash;
 }
 
 static void ggml_svd_set_socket_timeouts(int fd, int32_t timeout_ms) {
@@ -129,6 +188,7 @@ void ggml_svd_offload_set_client_config(const struct ggml_svd_offload_client_con
         close(g_svd_client.socket_fd);
         g_svd_client.socket_fd = -1;
     }
+    ggml_svd_gate_cache_clear_locked();
 
     g_svd_client.enabled = config != NULL && config->enabled;
     g_svd_client.port = config != NULL ? config->port : 0;
@@ -147,7 +207,8 @@ bool ggml_svd_offload_client_enabled(void) {
     return g_svd_client.enabled && g_svd_client.port != 0 && g_svd_client.host[0] != '\0';
 }
 
-bool ggml_svd_offload_begin_request(
+static bool ggml_svd_offload_begin_request_impl(
+        enum ggml_svd_offload_request_kind request_kind,
         int32_t layer_id,
         int32_t op_id,
         float offload_rate,
@@ -169,6 +230,7 @@ bool ggml_svd_offload_begin_request(
     struct ggml_svd_offload_wire_request req;
     req.magic = GGML_SVD_OFFLOAD_MAGIC;
     req.version = GGML_SVD_OFFLOAD_VERSION;
+    req.request_kind = (int32_t) request_kind;
     req.layer_id = layer_id;
     req.op_id = op_id;
     req.offload_rate = offload_rate;
@@ -179,15 +241,57 @@ bool ggml_svd_offload_begin_request(
         !ggml_svd_send_all(g_svd_client.socket_fd, input, sizeof(float) * (size_t) input_len)) {
         close(g_svd_client.socket_fd);
         g_svd_client.socket_fd = -1;
+        ggml_svd_gate_cache_clear_locked();
         pthread_mutex_unlock(&g_svd_client.mutex);
         return false;
     }
 
     handle->socket_fd = g_svd_client.socket_fd;
     handle->response_ready = 1;
+    handle->request_kind = (int32_t) request_kind;
+    handle->layer_id = layer_id;
+    handle->rank_start = (int32_t) rank_start;
+    handle->input_hash = ggml_svd_hash_input(input, input_len);
 
     pthread_mutex_unlock(&g_svd_client.mutex);
     return true;
+}
+
+bool ggml_svd_offload_begin_request(
+        int32_t layer_id,
+        int32_t op_id,
+        float offload_rate,
+        int64_t rank_start,
+        const float * input,
+        int64_t input_len,
+        struct ggml_svd_offload_request_handle * handle) {
+    return ggml_svd_offload_begin_request_impl(
+            GGML_SVD_OFFLOAD_REQ_MAT,
+            layer_id,
+            op_id,
+            offload_rate,
+            rank_start,
+            input,
+            input_len,
+            handle);
+}
+
+bool ggml_svd_offload_begin_up_gate_request(
+        int32_t layer_id,
+        float offload_rate,
+        int64_t rank_start,
+        const float * input,
+        int64_t input_len,
+        struct ggml_svd_offload_request_handle * handle) {
+    return ggml_svd_offload_begin_request_impl(
+            GGML_SVD_OFFLOAD_REQ_UP_GATE,
+            layer_id,
+            GGML_SVD_OP_UP,
+            offload_rate,
+            rank_start,
+            input,
+            input_len,
+            handle);
 }
 
 bool ggml_svd_offload_finish_request(
@@ -207,12 +311,14 @@ bool ggml_svd_offload_finish_request(
         rsp.magic != GGML_SVD_OFFLOAD_MAGIC ||
         rsp.version != GGML_SVD_OFFLOAD_VERSION ||
         rsp.status != 0 ||
+        rsp.output_len_aux != 0 ||
         rsp.output_len != output_len ||
         !ggml_svd_recv_all(fd, output, sizeof(float) * (size_t) output_len)) {
         close(fd);
         if (g_svd_client.socket_fd == fd) {
             g_svd_client.socket_fd = -1;
         }
+        ggml_svd_gate_cache_clear_locked();
         pthread_mutex_unlock(&g_svd_client.mutex);
         handle->response_ready = 0;
         return false;
@@ -223,11 +329,109 @@ bool ggml_svd_offload_finish_request(
     return true;
 }
 
+bool ggml_svd_offload_finish_up_gate_request(
+        struct ggml_svd_offload_request_handle * handle,
+        float * output_up,
+        int64_t output_up_len,
+        int64_t output_gate_len) {
+    if (handle == NULL || !handle->response_ready || output_up == NULL || output_up_len <= 0 || output_gate_len <= 0) {
+        return false;
+    }
+
+    pthread_mutex_lock(&g_svd_client.mutex);
+
+    struct ggml_svd_offload_wire_response rsp;
+    const int fd = handle->socket_fd;
+
+    const bool ok =
+        ggml_svd_recv_all(fd, &rsp, sizeof(rsp)) &&
+        rsp.magic == GGML_SVD_OFFLOAD_MAGIC &&
+        rsp.version == GGML_SVD_OFFLOAD_VERSION &&
+        rsp.status == 0 &&
+        rsp.output_len == output_up_len &&
+        rsp.output_len_aux == output_gate_len &&
+        ggml_svd_recv_all(fd, output_up, sizeof(float) * (size_t) output_up_len) &&
+        ggml_svd_gate_cache_resize_locked((int32_t) output_gate_len) &&
+        ggml_svd_recv_all(fd, g_svd_gate_cache.data, sizeof(float) * (size_t) output_gate_len);
+
+    if (!ok) {
+        close(fd);
+        if (g_svd_client.socket_fd == fd) {
+            g_svd_client.socket_fd = -1;
+        }
+        ggml_svd_gate_cache_clear_locked();
+        pthread_mutex_unlock(&g_svd_client.mutex);
+        handle->response_ready = 0;
+        return false;
+    }
+
+    g_svd_gate_cache.layer_id = handle->layer_id;
+    g_svd_gate_cache.rank_start = handle->rank_start;
+    g_svd_gate_cache.input_hash = handle->input_hash;
+    g_svd_gate_cache.valid = true;
+
+    pthread_mutex_unlock(&g_svd_client.mutex);
+    handle->response_ready = 0;
+    return true;
+}
+
+bool ggml_svd_offload_has_cached_gate(
+        int32_t layer_id,
+        int64_t rank_start,
+        const float * input,
+        int64_t input_len,
+        int64_t output_len) {
+    if (input == NULL || input_len <= 0 || output_len <= 0) {
+        return false;
+    }
+
+    const uint64_t input_hash = ggml_svd_hash_input(input, input_len);
+    bool ok = false;
+    pthread_mutex_lock(&g_svd_client.mutex);
+    ok = g_svd_gate_cache.valid &&
+        g_svd_gate_cache.layer_id == layer_id &&
+        g_svd_gate_cache.rank_start == rank_start &&
+        g_svd_gate_cache.input_hash == input_hash &&
+        g_svd_gate_cache.output_len == output_len &&
+        g_svd_gate_cache.data != NULL;
+    pthread_mutex_unlock(&g_svd_client.mutex);
+    return ok;
+}
+
+bool ggml_svd_offload_take_cached_gate(
+        int32_t layer_id,
+        int64_t rank_start,
+        const float * input,
+        int64_t input_len,
+        float * output,
+        int64_t output_len) {
+    if (input == NULL || input_len <= 0 || output == NULL || output_len <= 0) {
+        return false;
+    }
+
+    const uint64_t input_hash = ggml_svd_hash_input(input, input_len);
+    bool ok = false;
+    pthread_mutex_lock(&g_svd_client.mutex);
+    ok = g_svd_gate_cache.valid &&
+        g_svd_gate_cache.layer_id == layer_id &&
+        g_svd_gate_cache.rank_start == rank_start &&
+        g_svd_gate_cache.input_hash == input_hash &&
+        g_svd_gate_cache.output_len == output_len &&
+        g_svd_gate_cache.data != NULL;
+    if (ok) {
+        memcpy(output, g_svd_gate_cache.data, sizeof(float) * (size_t) output_len);
+        ggml_svd_gate_cache_clear_locked();
+    }
+    pthread_mutex_unlock(&g_svd_client.mutex);
+    return ok;
+}
+
 void ggml_svd_offload_close_client(void) {
     pthread_mutex_lock(&g_svd_client.mutex);
     if (g_svd_client.socket_fd >= 0) {
         close(g_svd_client.socket_fd);
         g_svd_client.socket_fd = -1;
     }
+    ggml_svd_gate_cache_clear_locked();
     pthread_mutex_unlock(&g_svd_client.mutex);
 }
