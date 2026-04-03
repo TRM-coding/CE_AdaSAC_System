@@ -1417,6 +1417,27 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     }
     ggml_barrier(params->threadpool);
 
+    if (*request_started && k_keep == 0) {
+        if (ith == 0) {
+            if (*request_started == 1) {
+                const bool ok = handle.request_kind == GGML_SVD_OFFLOAD_REQ_UP_GATE
+                    ? ggml_svd_offload_finish_up_gate_request(&handle, dst_data, dst->ne[0], dst->ne[0])
+                    : ggml_svd_offload_finish_request(&handle, dst_data, dst->ne[0]);
+                if (!ok) {
+                    memset(dst_data, 0, sizeof(float) * dst->ne[0]);
+                }
+            } else if (*request_started == 2) {
+                if (!ggml_svd_offload_take_cached_gate(dst->svd_layer_id, k_keep, x, b->ne[0], dst_data, dst->ne[0])) {
+                    memset(dst_data, 0, sizeof(float) * dst->ne[0]);
+                }
+            } else {
+                memset(dst_data, 0, sizeof(float) * dst->ne[0]);
+            }
+        }
+        ggml_barrier(params->threadpool);
+        return true;
+    }
+
     const int64_t k_local = *request_started ? k_keep : total_rank;
     const int64_t tmp_start = ith * k_local / nth;
     const int64_t tmp_end   = (ith + 1) * k_local / nth;

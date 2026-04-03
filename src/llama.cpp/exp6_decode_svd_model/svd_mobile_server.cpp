@@ -12,8 +12,10 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #ifdef GGML_USE_OPENMP
@@ -86,6 +88,45 @@ struct SvdMatRefs {
     const ggml_tensor * v;
 };
 
+struct MatExecutorKey {
+    int32_t layer_id;
+    int32_t op_id;
+    int32_t rank_start;
+
+    bool operator==(const MatExecutorKey & other) const {
+        return layer_id == other.layer_id &&
+               op_id == other.op_id &&
+               rank_start == other.rank_start;
+    }
+};
+
+struct UpGateExecutorKey {
+    int32_t layer_id;
+    int32_t rank_start;
+
+    bool operator==(const UpGateExecutorKey & other) const {
+        return layer_id == other.layer_id &&
+               rank_start == other.rank_start;
+    }
+};
+
+struct MatExecutorKeyHash {
+    size_t operator()(const MatExecutorKey & key) const {
+        size_t h = (size_t) key.layer_id;
+        h = h * 1315423911u + (size_t) key.op_id;
+        h = h * 1315423911u + (size_t) key.rank_start;
+        return h;
+    }
+};
+
+struct UpGateExecutorKeyHash {
+    size_t operator()(const UpGateExecutorKey & key) const {
+        size_t h = (size_t) key.layer_id;
+        h = h * 1315423911u + (size_t) key.rank_start;
+        return h;
+    }
+};
+
 SvdMatRefs get_svd_tensors(const llama_model & model, int32_t layer_id, int32_t op_id) {
     if (layer_id < 0 || layer_id >= static_cast<int32_t>(model.layers.size())) {
         throw std::runtime_error("invalid layer id");
@@ -100,90 +141,236 @@ SvdMatRefs get_svd_tensors(const llama_model & model, int32_t layer_id, int32_t 
     }
 }
 
-void compute_remote_tail_with_ggml(
+void validate_svd_tensors(
         const ggml_tensor * u,
         const ggml_tensor * v,
         int32_t rank_start,
-        const std::vector<float> & input,
-        std::vector<float> & output,
-        int32_t n_threads) {
+        int64_t expected_input_len) {
     if (u == nullptr || v == nullptr) {
         throw std::runtime_error("missing SVD tensors");
     }
     if (!ggml_is_contiguous(u) || !ggml_is_contiguous(v)) {
         throw std::runtime_error("non-contiguous SVD tensors are not supported");
     }
-    if (input.size() != static_cast<size_t>(v->ne[0])) {
+    if (expected_input_len != v->ne[0]) {
         throw std::runtime_error("unexpected input length");
     }
-
     const int64_t total_rank = v->ne[1];
     if (rank_start < 0 || rank_start >= total_rank) {
         throw std::runtime_error("invalid rank split");
     }
+}
 
+struct RemoteMatExecutor {
+    ggml_context * ctx = nullptr;
+    ggml_backend_buffer_t buffer = nullptr;
+    ggml_tensor * input_tensor = nullptr;
+    ggml_tensor * output_tensor = nullptr;
+    ggml_cgraph * graph = nullptr;
+    int64_t input_len = 0;
+    int64_t output_len = 0;
+
+    ~RemoteMatExecutor() {
+        if (buffer != nullptr) {
+            ggml_backend_buffer_free(buffer);
+        }
+        if (ctx != nullptr) {
+            ggml_free(ctx);
+        }
+    }
+};
+
+struct RemoteUpGateExecutor {
+    ggml_context * ctx = nullptr;
+    ggml_backend_buffer_t buffer = nullptr;
+    ggml_tensor * input_tensor = nullptr;
+    ggml_tensor * output_up = nullptr;
+    ggml_tensor * output_gate = nullptr;
+    ggml_cgraph * graph = nullptr;
+    int64_t input_len = 0;
+    int64_t output_len = 0;
+
+    ~RemoteUpGateExecutor() {
+        if (buffer != nullptr) {
+            ggml_backend_buffer_free(buffer);
+        }
+        if (ctx != nullptr) {
+            ggml_free(ctx);
+        }
+    }
+};
+
+std::unique_ptr<RemoteMatExecutor> create_mat_executor(
+        ggml_backend_t backend,
+        const ggml_tensor * u,
+        const ggml_tensor * v,
+        int32_t rank_start,
+        int64_t input_len) {
+    validate_svd_tensors(u, v, rank_start, input_len);
+
+    const int64_t total_rank = v->ne[1];
     const int64_t k_remote = total_rank - rank_start;
-    output.assign(static_cast<size_t>(u->ne[1]), 0.0f);
 
     ggml_init_params params {};
     params.mem_size = 16 * 1024 * 1024;
     params.mem_buffer = nullptr;
     params.no_alloc = true;
 
-    ggml_context * ctx = ggml_init(params);
-    if (ctx == nullptr) {
+    auto exec = std::make_unique<RemoteMatExecutor>();
+    exec->ctx = ggml_init(params);
+    if (exec->ctx == nullptr) {
         throw std::runtime_error("ggml_init failed");
     }
 
-    ggml_backend_t backend = ggml_backend_cpu_init();
-    if (backend == nullptr) {
-        ggml_free(ctx);
-        throw std::runtime_error("ggml_backend_cpu_init failed");
-    }
-    ggml_backend_cpu_set_n_threads(backend, n_threads);
-
-    ggml_tensor * input_tensor = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, (int64_t) input.size(), 1);
+    exec->input_len = input_len;
+    exec->output_len = u->ne[1];
+    exec->input_tensor = ggml_new_tensor_2d(exec->ctx, GGML_TYPE_F32, input_len, 1);
     ggml_tensor * v_tail = ggml_view_2d(
-        ctx,
+        exec->ctx,
         const_cast<ggml_tensor *>(v),
         v->ne[0],
         k_remote,
         v->nb[1],
         (size_t) rank_start * v->nb[1]);
-    ggml_tensor * tmp = ggml_mul_mat(ctx, v_tail, input_tensor);
+    ggml_tensor * tmp = ggml_mul_mat(exec->ctx, v_tail, exec->input_tensor);
     ggml_tensor * u_tail = ggml_view_2d(
-        ctx,
+        exec->ctx,
         const_cast<ggml_tensor *>(u),
         k_remote,
         u->ne[1],
         u->nb[1],
         (size_t) rank_start * u->nb[0]);
-    ggml_tensor * output_tensor = ggml_mul_mat(ctx, u_tail, tmp);
+    exec->output_tensor = ggml_mul_mat(exec->ctx, u_tail, tmp);
 
-    ggml_backend_buffer_t buffer = ggml_backend_alloc_ctx_tensors(ctx, backend);
-    if (buffer == nullptr) {
-        ggml_backend_free(backend);
-        ggml_free(ctx);
+    exec->buffer = ggml_backend_alloc_ctx_tensors(exec->ctx, backend);
+    if (exec->buffer == nullptr) {
         throw std::runtime_error("ggml_backend_alloc_ctx_tensors failed");
     }
 
-    ggml_backend_tensor_set(input_tensor, input.data(), 0, sizeof(float) * input.size());
+    exec->graph = ggml_new_graph(exec->ctx);
+    if (exec->graph == nullptr) {
+        throw std::runtime_error("ggml_new_graph failed");
+    }
+    ggml_build_forward_expand(exec->graph, exec->output_tensor);
 
-    ggml_cgraph * graph = ggml_new_graph(ctx);
-    ggml_build_forward_expand(graph, output_tensor);
-    const ggml_status status = ggml_backend_graph_compute(backend, graph);
-    if (status != GGML_STATUS_SUCCESS) {
-        ggml_backend_buffer_free(buffer);
-        ggml_backend_free(backend);
-        ggml_free(ctx);
-        throw std::runtime_error("ggml_backend_graph_compute failed");
+    return exec;
+}
+
+std::unique_ptr<RemoteUpGateExecutor> create_up_gate_executor(
+        ggml_backend_t backend,
+        const ggml_tensor * up_u,
+        const ggml_tensor * up_v,
+        const ggml_tensor * gate_u,
+        const ggml_tensor * gate_v,
+        int32_t rank_start,
+        int64_t input_len) {
+    validate_svd_tensors(up_u, up_v, rank_start, input_len);
+    validate_svd_tensors(gate_u, gate_v, rank_start, input_len);
+
+    const int64_t total_rank = up_v->ne[1];
+    const int64_t k_remote = total_rank - rank_start;
+
+    ggml_init_params params {};
+    params.mem_size = 24 * 1024 * 1024;
+    params.mem_buffer = nullptr;
+    params.no_alloc = true;
+
+    auto exec = std::make_unique<RemoteUpGateExecutor>();
+    exec->ctx = ggml_init(params);
+    if (exec->ctx == nullptr) {
+        throw std::runtime_error("ggml_init failed");
     }
 
-    ggml_backend_tensor_get(output_tensor, output.data(), 0, sizeof(float) * output.size());
+    exec->input_len = input_len;
+    exec->output_len = up_u->ne[1];
+    exec->input_tensor = ggml_new_tensor_2d(exec->ctx, GGML_TYPE_F32, input_len, 1);
 
-    ggml_backend_buffer_free(buffer);
-    ggml_backend_free(backend);
-    ggml_free(ctx);
+    ggml_tensor * up_v_tail = ggml_view_2d(
+        exec->ctx,
+        const_cast<ggml_tensor *>(up_v),
+        up_v->ne[0],
+        k_remote,
+        up_v->nb[1],
+        (size_t) rank_start * up_v->nb[1]);
+    ggml_tensor * up_tmp = ggml_mul_mat(exec->ctx, up_v_tail, exec->input_tensor);
+    ggml_tensor * up_u_tail = ggml_view_2d(
+        exec->ctx,
+        const_cast<ggml_tensor *>(up_u),
+        k_remote,
+        up_u->ne[1],
+        up_u->nb[1],
+        (size_t) rank_start * up_u->nb[0]);
+    exec->output_up = ggml_mul_mat(exec->ctx, up_u_tail, up_tmp);
+
+    ggml_tensor * gate_v_tail = ggml_view_2d(
+        exec->ctx,
+        const_cast<ggml_tensor *>(gate_v),
+        gate_v->ne[0],
+        k_remote,
+        gate_v->nb[1],
+        (size_t) rank_start * gate_v->nb[1]);
+    ggml_tensor * gate_tmp = ggml_mul_mat(exec->ctx, gate_v_tail, exec->input_tensor);
+    ggml_tensor * gate_u_tail = ggml_view_2d(
+        exec->ctx,
+        const_cast<ggml_tensor *>(gate_u),
+        k_remote,
+        gate_u->ne[1],
+        gate_u->nb[1],
+        (size_t) rank_start * gate_u->nb[0]);
+    exec->output_gate = ggml_mul_mat(exec->ctx, gate_u_tail, gate_tmp);
+
+    exec->buffer = ggml_backend_alloc_ctx_tensors(exec->ctx, backend);
+    if (exec->buffer == nullptr) {
+        throw std::runtime_error("ggml_backend_alloc_ctx_tensors failed");
+    }
+
+    exec->graph = ggml_new_graph(exec->ctx);
+    if (exec->graph == nullptr) {
+        throw std::runtime_error("ggml_new_graph failed");
+    }
+    ggml_build_forward_expand(exec->graph, exec->output_up);
+    ggml_build_forward_expand(exec->graph, exec->output_gate);
+
+    return exec;
+}
+
+void run_mat_executor(
+        ggml_backend_t backend,
+        RemoteMatExecutor & exec,
+        const std::vector<float> & input,
+        std::vector<float> & output) {
+    if ((int64_t) input.size() != exec.input_len) {
+        throw std::runtime_error("unexpected input length");
+    }
+
+    output.assign((size_t) exec.output_len, 0.0f);
+    ggml_backend_tensor_set(exec.input_tensor, input.data(), 0, sizeof(float) * input.size());
+    const ggml_status status = ggml_backend_graph_compute(backend, exec.graph);
+    if (status != GGML_STATUS_SUCCESS) {
+        throw std::runtime_error("ggml_backend_graph_compute failed");
+    }
+    ggml_backend_tensor_get(exec.output_tensor, output.data(), 0, sizeof(float) * output.size());
+}
+
+void run_up_gate_executor(
+        ggml_backend_t backend,
+        RemoteUpGateExecutor & exec,
+        const std::vector<float> & input,
+        std::vector<float> & output,
+        std::vector<float> & output_aux) {
+    if ((int64_t) input.size() != exec.input_len) {
+        throw std::runtime_error("unexpected input length");
+    }
+
+    output.assign((size_t) exec.output_len, 0.0f);
+    output_aux.assign((size_t) exec.output_len, 0.0f);
+    ggml_backend_tensor_set(exec.input_tensor, input.data(), 0, sizeof(float) * input.size());
+    const ggml_status status = ggml_backend_graph_compute(backend, exec.graph);
+    if (status != GGML_STATUS_SUCCESS) {
+        throw std::runtime_error("ggml_backend_graph_compute failed");
+    }
+    ggml_backend_tensor_get(exec.output_up, output.data(), 0, sizeof(float) * output.size());
+    ggml_backend_tensor_get(exec.output_gate, output_aux.data(), 0, sizeof(float) * output_aux.size());
 }
 
 } // namespace
@@ -201,6 +388,13 @@ int main(int argc, char ** argv) {
 #ifdef GGML_USE_OPENMP
     omp_set_num_threads(n_threads);
 #endif
+
+    ggml_backend_t backend = ggml_backend_cpu_init();
+    if (backend == nullptr) {
+        std::cerr << "ggml_backend_cpu_init failed" << std::endl;
+        return 1;
+    }
+    ggml_backend_cpu_set_n_threads(backend, n_threads);
 
     llama_model_params model_params = llama_model_default_params();
     model_params.n_gpu_layers = 0;
@@ -239,6 +433,9 @@ int main(int argc, char ** argv) {
     std::cout << "svd_mobile_server listening on 0.0.0.0:" << port
               << " threads=" << n_threads << std::endl;
 
+    std::unordered_map<MatExecutorKey, std::unique_ptr<RemoteMatExecutor>, MatExecutorKeyHash> mat_executors;
+    std::unordered_map<UpGateExecutorKey, std::unique_ptr<RemoteUpGateExecutor>, UpGateExecutorKeyHash> up_gate_executors;
+
     while (true) {
         const int client_fd = accept(listen_fd, nullptr, nullptr);
         if (client_fd < 0) {
@@ -267,15 +464,24 @@ int main(int argc, char ** argv) {
             std::vector<float> output_aux;
             try {
                 if (req.request_kind == REQ_UP_GATE) {
+                    const UpGateExecutorKey key { req.layer_id, req.rank_start };
                     const auto up = get_svd_tensors(*model, req.layer_id, SVD_OP_UP);
                     const auto gate = get_svd_tensors(*model, req.layer_id, SVD_OP_GATE);
-                    compute_remote_tail_with_ggml(up.u, up.v, req.rank_start, input, output, n_threads);
-                    compute_remote_tail_with_ggml(gate.u, gate.v, req.rank_start, input, output_aux, n_threads);
+                    auto & exec = up_gate_executors[key];
+                    if (!exec) {
+                        exec = create_up_gate_executor(backend, up.u, up.v, gate.u, gate.v, req.rank_start, req.input_len);
+                    }
+                    run_up_gate_executor(backend, *exec, input, output, output_aux);
                     rsp.output_len = static_cast<int32_t>(output.size());
                     rsp.output_len_aux = static_cast<int32_t>(output_aux.size());
                 } else {
+                    const MatExecutorKey key { req.layer_id, req.op_id, req.rank_start };
                     const auto mat = get_svd_tensors(*model, req.layer_id, req.op_id);
-                    compute_remote_tail_with_ggml(mat.u, mat.v, req.rank_start, input, output, n_threads);
+                    auto & exec = mat_executors[key];
+                    if (!exec) {
+                        exec = create_mat_executor(backend, mat.u, mat.v, req.rank_start, req.input_len);
+                    }
+                    run_mat_executor(backend, *exec, input, output);
                     rsp.output_len = static_cast<int32_t>(output.size());
                 }
             } catch (const std::exception & e) {
@@ -303,5 +509,6 @@ int main(int argc, char ** argv) {
 
     close(listen_fd);
     llama_model_free(model);
+    ggml_backend_free(backend);
     return 0;
 }
