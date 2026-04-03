@@ -1,5 +1,14 @@
 # SVD 协同卸载优化实验报告
 
+> 更新说明（2026-04-03 晚）  
+> 本文前半部分记录的是一轮“整层 FFN 卸载 / dense 快路径”优化设想与阶段性结果。  
+> 在当前干净代码版本的实际回归中，最终稳定落地并验证正确性的路径不是整层 `FFN` 远端执行，而是：
+> - 保留 `GGML_OP_MUL_MAT_SVD` 粒度
+> - 新增 `up + gate` 合并请求
+> - 手机端改为直接复用 ggml 内置 `mul_mat` 两段小图执行尾部 rank
+>
+> 因此，文中涉及 `GGML_OP_FFN_SVD_OFFLOAD`、手机端 dense FFN 快路径、`9.48 tok/s` 的部分，应视为历史实验记录，不代表当前稳定版本结论。当前稳定版本结论见文末新增的“9. 当前稳定版本回归结果”。
+
 ## 1. 本轮目标
 
 本轮目标是在不破坏现有按层卸载率接口的前提下，排查并优化“手机端”明显慢于电脑端的问题，并满足：
@@ -309,3 +318,128 @@ LD_LIBRARY_PATH=. ./decode_svd_test \
 - 调度器后续若决定某层 `offload_rate == 1.0`，直接走完整 FFN 卸载
 - 若是 `0.5 < offload_rate < 1.0`，继续走原有 partial-rank SVD 卸载
 - 手机端部署时，优先使用保留 dense FFN 的 SVD 模型作为服务端模型
+
+## 9. 当前稳定版本回归结果
+
+### 9.1 回归问题定位
+
+在对“当前干净版本”继续修改并复现实验时，出现了两类问题：
+
+1. 数值错误
+   - 现象：协同 `75% / 100%` 时生成文本退化成 `",,,,,,,,"` 或乱码
+   - 初始怀疑：`up + gate` 合并请求后的 gate 缓存命中错误
+   - 实际根因：
+     - 原缓存确实存在“按输入指针命中”的潜在风险，因此已改成“输入内容哈希”命中
+     - 但真正导致输出错误的直接原因，是手机端那版 `vec_dot` 快路径在当前张量类型下会反复走到 `missing float conversion for SVD tensor type`
+     - 远端请求失败后，客户端会把 `remote_out` 清零，最终导致模型输出退化
+
+2. 服务端分配错误
+   - 现象：重启新服务端后出现
+     - `GGML_ASSERT(ggml_get_no_alloc(ctx) == true) failed`
+   - 根因：服务端临时 ggml context 使用了 `ggml_backend_alloc_ctx_tensors(...)`，但 `ggml_init_params.no_alloc` 配错成了 `false`
+
+### 9.2 当前稳定修复
+
+当前稳定版本采用的修复方案如下：
+
+- 客户端保留 `up + gate` 合并请求
+  - `up` 发一次远端请求
+  - `gate` 直接复用同输入的缓存结果
+  - 缓存键改为：
+    - `layer_id`
+    - `rank_start`
+    - `input_hash`
+
+- 手机端不再直接使用那条会失败的 `vec_dot` 类型特征路径
+  - 改为构造两段 ggml 小图：
+    - `tmp = mul_mat(v_tail, input)`
+    - `out = mul_mat(u_tail, tmp)`
+  - 即直接复用 ggml 内置 `mul_mat`
+
+- 服务端分配方式修正
+  - `ggml_init_params.no_alloc = true`
+  - 再调用 `ggml_backend_alloc_ctx_tensors(...)`
+
+### 9.3 本次实际代码变更
+
+涉及文件：
+
+- `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-svd-offload.h`
+- `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-svd-offload.c`
+- `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-cpu/ggml-cpu.c`
+- `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp6_decode_svd_model/svd_mobile_server.cpp`
+
+新增/修正点：
+
+- 协议版本升级到 `v2`
+- 请求类型支持：
+  - `GGML_SVD_OFFLOAD_REQ_MAT`
+  - `GGML_SVD_OFFLOAD_REQ_UP_GATE`
+- `up + gate` 合并返回双输出
+- gate 缓存从“输入地址”改成“输入内容哈希”
+- 手机端尾部 rank 计算改为 ggml 内置 `mul_mat`
+
+### 9.4 本次绑核复现实验
+
+测试日期：
+
+- 2026-04-03
+
+测试约束：
+
+- 使用隔离 cgroup：`/sys/fs/cgroup/tianruiming-exclusive`
+- 手机端固定绑核：`60-67`
+- 电脑端固定绑核：`68-75`
+- 两端都使用 `8` 核 `8` 线程
+- 所有实验顺序执行，避免核心争用
+
+服务端启动方式：
+
+```bash
+cd /home/tianruiming/CE_ADA_LLAMA/build-release-current
+sudo bash -lc '
+  echo $$ > /sys/fs/cgroup/tianruiming-exclusive/cgroup.procs
+  exec taskset -c 60-67 env LD_LIBRARY_PATH=./bin OMP_NUM_THREADS=8 \
+    ./svd_mobile_server ../src/llama.cpp/gguf_models/qwen.gguf.sort_svd.compact.gguf 7788 8
+'
+```
+
+客户端启动方式：
+
+```bash
+cd /home/tianruiming/CE_ADA_LLAMA/build-release-current
+taskset -c 68-75 env LD_LIBRARY_PATH=./bin OMP_NUM_THREADS=8 \
+  ./decode_svd_test ../src/llama.cpp/gguf_models/qwen.gguf.sort_svd.compact.gguf 8 8 0 127.0.0.1:7788 1.0
+```
+
+结果：
+
+| 场景 | Decode-only throughput | End-to-end throughput | 正确性 |
+| --- | --- | --- | --- |
+| 单机基线 | `9.71403 tok/s` | `9.69112 tok/s` | 正确 |
+| 协同卸载 `75%` | `9.42101 tok/s` | `9.40045 tok/s` | 正确 |
+| 协同卸载 `100%` | `6.52324 tok/s` | `6.51379 tok/s` | 正确 |
+
+三组生成文本一致：
+
+- `Generated text: , there was a young girl named Lily`
+
+### 9.5 当前稳定结论
+
+当前稳定版本已经解决“模型计算错误”问题，但还没有解决吞吐提升问题。
+
+结论：
+
+- 正确性已恢复
+- `up + gate` 合并协议可以稳定工作
+- 手机端“直接复用 ggml 内置 `mul_mat` 两段小图”是可靠的
+- 但这条路径每次请求都要新建小图与分配 backend 资源，固定开销很重
+- 因此在当前实现下：
+  - `75%` 卸载仅接近单机
+  - `100%` 卸载明显慢于单机
+
+下一步建议：
+
+1. 把手机端这条 ggml `mul_mat` 执行路径做成常驻执行器，避免每次请求都新建 context / backend / buffer
+2. 在保证正确性的前提下，继续保留 `up + gate` 合并请求
+3. 不要把“已修复正确性”和“已实现提速”混为一谈，当前只完成了前者

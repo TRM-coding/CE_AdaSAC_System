@@ -1,5 +1,9 @@
 # SVD 协同卸载实验报告
 
+> 更新说明（2026-04-03 晚）  
+> 本文主体记录的是最初的单算子协同卸载实现与早期联调结果。  
+> 在后续继续修改时，出现过一次“吞吐上去了但模型输出错误”的回归。当前稳定版本已经修复该问题；最新回归结论、绑核方式和实验数据见文末新增的“9. 当前稳定版本回归补充”。
+
 ## 1. 目标
 
 本轮实现目标是在当前 `QWEN2_SVD` 推理链路上加入“电脑端 + 手机端”协同计算能力：
@@ -353,3 +357,128 @@ Prompt：
 2. 把多个连续 SVD 算子合并成更粗粒度请求，减少单层 `up / gate / down` 的 RTT 次数
 3. 调度器不要让所有层都超过 `50%`，而是只挑少量高收益层触发卸载
 4. Android 端落地时让手机端独占自己的 CPU 核，避免像本机双进程这样与电脑端争用同一组核
+
+## 9. 当前稳定版本回归补充
+
+### 9.1 本次回归问题
+
+在后续继续优化时，曾出现下面的错误现象：
+
+- `75%` 卸载输出变成 `thereketlulululululu`
+- `100%` 卸载输出变成 `,,,,,,,,`
+- 首轮 `Top-5 next-token candidates` 也已经偏离单机基线
+
+最终定位结果：
+
+- `up + gate` 合并缓存确实需要从“输入地址命中”改成“输入内容哈希命中”
+- 但真正导致模型算错的直接原因，是手机端那版 `vec_dot` 快路径在当前张量类型下会触发：
+  - `request failed: missing float conversion for SVD tensor type`
+- 客户端收到失败后把远端结果清零，最终导致生成结果退化
+
+同时，服务端新路径还暴露出一个分配错误：
+
+- `GGML_ASSERT(ggml_get_no_alloc(ctx) == true) failed`
+
+根因是：
+
+- 服务端临时 ggml context 使用了 `ggml_backend_alloc_ctx_tensors(...)`
+- 但 `ggml_init_params.no_alloc` 误设为 `false`
+
+### 9.2 当前稳定修复
+
+当前稳定版本的修复方式：
+
+- 客户端：
+  - 保留 `up + gate` 合并请求
+  - gate 缓存键改为 `layer_id + rank_start + input_hash`
+
+- 服务端：
+  - 不再直接依赖那条会失败的 `vec_dot` 类型特征路径
+  - 改为直接复用 ggml 内置 `mul_mat`
+  - 对尾部 rank 计算构造两段小图：
+    - `tmp = mul_mat(v_tail, input)`
+    - `out = mul_mat(u_tail, tmp)`
+  - 修正 `ggml_init_params.no_alloc = true`
+
+### 9.3 当前实际运行方式
+
+本次回归严格使用隔离核，避免争用：
+
+- cgroup：
+  - `/sys/fs/cgroup/tianruiming-exclusive`
+- 手机端：
+  - 绑核 `60-67`
+  - `OMP_NUM_THREADS=8`
+- 电脑端：
+  - 绑核 `68-75`
+  - `OMP_NUM_THREADS=8`
+- 实验顺序执行，不并发启动多个客户端
+
+服务端：
+
+```bash
+cd /home/tianruiming/CE_ADA_LLAMA/build-release-current
+sudo bash -lc '
+  echo $$ > /sys/fs/cgroup/tianruiming-exclusive/cgroup.procs
+  exec taskset -c 60-67 env LD_LIBRARY_PATH=./bin OMP_NUM_THREADS=8 \
+    ./svd_mobile_server ../src/llama.cpp/gguf_models/qwen.gguf.sort_svd.compact.gguf 7788 8
+'
+```
+
+客户端基线：
+
+```bash
+cd /home/tianruiming/CE_ADA_LLAMA/build-release-current
+taskset -c 68-75 env LD_LIBRARY_PATH=./bin OMP_NUM_THREADS=8 \
+  ./decode_svd_test ../src/llama.cpp/gguf_models/qwen.gguf.sort_svd.compact.gguf 8 8 0
+```
+
+客户端协同：
+
+```bash
+cd /home/tianruiming/CE_ADA_LLAMA/build-release-current
+taskset -c 68-75 env LD_LIBRARY_PATH=./bin OMP_NUM_THREADS=8 \
+  ./decode_svd_test ../src/llama.cpp/gguf_models/qwen.gguf.sort_svd.compact.gguf 8 8 0 127.0.0.1:7788 1.0
+```
+
+### 9.4 最新实验结果
+
+测试日期：
+
+- 2026-04-03
+
+结果：
+
+| 场景 | Decode-only throughput | End-to-end throughput | 正确性 |
+| --- | --- | --- | --- |
+| 单机基线 | `9.71403 tok/s` | `9.69112 tok/s` | 正确 |
+| 协同卸载 `75%` | `9.42101 tok/s` | `9.40045 tok/s` | 正确 |
+| 协同卸载 `100%` | `6.52324 tok/s` | `6.51379 tok/s` | 正确 |
+
+三组输出一致：
+
+- `Generated text: , there was a young girl named Lily`
+
+说明：
+
+- 当前版本已经修复“模型计算错误”
+- 但并没有实现“任意卸载率都能提速”
+- `75%` 卸载只是接近单机
+- `100%` 卸载已经明显慢于单机
+
+### 9.5 当前结论
+
+当前稳定版本的状态应总结为：
+
+- 已完成：
+  - 正确性修复
+  - `up + gate` 合并请求
+  - 手机端改为复用 ggml 内置 `mul_mat`
+  - 严格绑核下的单机 / 协同回归验证
+
+- 未完成：
+  - 手机端请求执行器常驻化
+  - 消除每请求新建小图 / backend / buffer 的高固定开销
+  - 在 `75% / 100%` 乃至任意卸载率下的稳定吞吐提升
+
+因此，下一步工作的重点不再是“修输出”，而是“把当前正确路径做快”。
