@@ -98,6 +98,8 @@ bool ggml_svd_offload_take_cached_gate(
         float * output,
         int64_t output_len);
 
+void ggml_svd_local_profile_print_and_reset(void);
+
 void ggml_svd_offload_close_client(void);
 
 #ifdef __cplusplus

@@ -679,6 +679,7 @@ bool ggml_svd_offload_take_cached_gate(
 }
 
 void ggml_svd_offload_close_client(void) {
+    ggml_svd_local_profile_print_and_reset();
     pthread_mutex_lock(&g_svd_client.mutex);
     fprintf(stderr,
             "[svd-offload-client] up_gate_req=%llu down_req=%llu other_mat_req=%llu gate_cache_hits=%llu gate_cache_checks=%llu "

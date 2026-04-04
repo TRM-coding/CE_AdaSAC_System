@@ -1309,6 +1309,80 @@ static int64_t ggml_mul_mat_svd_get_k_keep(
     return v->ne[1] - k_trunc;
 }
 
+
+static struct {
+    uint64_t up_ops;
+    uint64_t gate_ops;
+    uint64_t down_ops;
+    uint64_t up_total_us;
+    uint64_t gate_total_us;
+    uint64_t down_total_us;
+    uint64_t up_v_us;
+    uint64_t gate_v_us;
+    uint64_t down_v_us;
+    uint64_t up_u_us;
+    uint64_t gate_u_us;
+    uint64_t down_u_us;
+} g_svd_local_profile = { 0 };
+
+static uint64_t ggml_svd_local_profile_now_us(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t) ts.tv_sec * 1000000ULL + (uint64_t) ts.tv_nsec / 1000ULL;
+}
+
+static void ggml_svd_local_profile_accumulate(int32_t op_id, uint64_t total_us, uint64_t v_us, uint64_t u_us) {
+    uint64_t * ops = NULL;
+    uint64_t * total = NULL;
+    uint64_t * v = NULL;
+    uint64_t * u = NULL;
+
+    switch (op_id) {
+        case GGML_SVD_OP_UP:   ops = &g_svd_local_profile.up_ops;   total = &g_svd_local_profile.up_total_us;   v = &g_svd_local_profile.up_v_us;   u = &g_svd_local_profile.up_u_us;   break;
+        case GGML_SVD_OP_GATE: ops = &g_svd_local_profile.gate_ops; total = &g_svd_local_profile.gate_total_us; v = &g_svd_local_profile.gate_v_us; u = &g_svd_local_profile.gate_u_us; break;
+        case GGML_SVD_OP_DOWN: ops = &g_svd_local_profile.down_ops; total = &g_svd_local_profile.down_total_us; v = &g_svd_local_profile.down_v_us; u = &g_svd_local_profile.down_u_us; break;
+        default: return;
+    }
+
+    __atomic_fetch_add(ops, 1, __ATOMIC_RELAXED);
+    __atomic_fetch_add(total, total_us, __ATOMIC_RELAXED);
+    __atomic_fetch_add(v, v_us, __ATOMIC_RELAXED);
+    __atomic_fetch_add(u, u_us, __ATOMIC_RELAXED);
+}
+
+void ggml_svd_local_profile_print_and_reset(void) {
+    const uint64_t up_ops = __atomic_exchange_n(&g_svd_local_profile.up_ops, 0, __ATOMIC_RELAXED);
+    const uint64_t gate_ops = __atomic_exchange_n(&g_svd_local_profile.gate_ops, 0, __ATOMIC_RELAXED);
+    const uint64_t down_ops = __atomic_exchange_n(&g_svd_local_profile.down_ops, 0, __ATOMIC_RELAXED);
+    const uint64_t up_total_us = __atomic_exchange_n(&g_svd_local_profile.up_total_us, 0, __ATOMIC_RELAXED);
+    const uint64_t gate_total_us = __atomic_exchange_n(&g_svd_local_profile.gate_total_us, 0, __ATOMIC_RELAXED);
+    const uint64_t down_total_us = __atomic_exchange_n(&g_svd_local_profile.down_total_us, 0, __ATOMIC_RELAXED);
+    const uint64_t up_v_us = __atomic_exchange_n(&g_svd_local_profile.up_v_us, 0, __ATOMIC_RELAXED);
+    const uint64_t gate_v_us = __atomic_exchange_n(&g_svd_local_profile.gate_v_us, 0, __ATOMIC_RELAXED);
+    const uint64_t down_v_us = __atomic_exchange_n(&g_svd_local_profile.down_v_us, 0, __ATOMIC_RELAXED);
+    const uint64_t up_u_us = __atomic_exchange_n(&g_svd_local_profile.up_u_us, 0, __ATOMIC_RELAXED);
+    const uint64_t gate_u_us = __atomic_exchange_n(&g_svd_local_profile.gate_u_us, 0, __ATOMIC_RELAXED);
+    const uint64_t down_u_us = __atomic_exchange_n(&g_svd_local_profile.down_u_us, 0, __ATOMIC_RELAXED);
+
+    fprintf(stderr,
+            "[svd-local-op-profile] up_ops=%llu gate_ops=%llu down_ops=%llu "
+            "up_total=%.3f ms gate_total=%.3f ms down_total=%.3f ms "
+            "up_v=%.3f ms gate_v=%.3f ms down_v=%.3f ms "
+            "up_u=%.3f ms gate_u=%.3f ms down_u=%.3f ms\n",
+            (unsigned long long) up_ops,
+            (unsigned long long) gate_ops,
+            (unsigned long long) down_ops,
+            up_total_us / 1000.0,
+            gate_total_us / 1000.0,
+            down_total_us / 1000.0,
+            up_v_us / 1000.0,
+            gate_v_us / 1000.0,
+            down_v_us / 1000.0,
+            up_u_us / 1000.0,
+            gate_u_us / 1000.0,
+            down_u_us / 1000.0);
+}
+
 static bool ggml_compute_forward_mul_mat_svd_vec(
     const struct ggml_compute_params * params,
     struct ggml_tensor * dst) {
@@ -1447,9 +1521,22 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
         return true;
     }
 
+    uint64_t local_total_begin_us = 0;
+    uint64_t local_v_begin_us = 0;
+    uint64_t local_u_begin_us = 0;
+    uint64_t local_v_us = 0;
+    uint64_t local_u_us = 0;
+    if (ith == 0 && !can_offload && dst->svd_op_id >= 0) {
+        local_total_begin_us = ggml_svd_local_profile_now_us();
+    }
+
     const int64_t k_local = *request_started ? k_keep : total_rank;
     const int64_t tmp_start = ith * k_local / nth;
     const int64_t tmp_end   = (ith + 1) * k_local / nth;
+
+    if (ith == 0 && !can_offload && dst->svd_op_id >= 0) {
+        local_v_begin_us = ggml_svd_local_profile_now_us();
+    }
 
     if (v->type == GGML_TYPE_F16) {
         int64_t i = tmp_start;
@@ -1468,6 +1555,11 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     }
 
     ggml_barrier(params->threadpool);
+
+    if (ith == 0 && !can_offload && dst->svd_op_id >= 0) {
+        local_v_us = ggml_svd_local_profile_now_us() - local_v_begin_us;
+        local_u_begin_us = ggml_svd_local_profile_now_us();
+    }
 
     const void * tmp_vec = tmp;
     const bool need_tmp_convert = k_local > 0 && vec_dot_type_u != GGML_TYPE_F32;
@@ -1509,6 +1601,10 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
 
     ggml_barrier(params->threadpool);
 
+    if (ith == 0 && !can_offload && dst->svd_op_id >= 0) {
+        local_u_us = ggml_svd_local_profile_now_us() - local_u_begin_us;
+    }
+
     if (ith == 0) {
         if (*request_started == 1) {
             const bool ok = handle.request_kind == GGML_SVD_OFFLOAD_REQ_UP_GATE
@@ -1534,6 +1630,14 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
 
     for (int64_t i = dst_start; i < dst_end; ++i) {
         dst_data[i] += remote_out[i];
+    }
+
+    if (ith == 0 && !can_offload && dst->svd_op_id >= 0) {
+        ggml_svd_local_profile_accumulate(
+            dst->svd_op_id,
+            ggml_svd_local_profile_now_us() - local_total_begin_us,
+            local_v_us,
+            local_u_us);
     }
 
     return true;
