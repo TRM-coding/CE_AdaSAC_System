@@ -277,3 +277,122 @@ up_u=171.454 ms gate_u=170.946 ms down_u=30.327 ms
 
 - 慢在图执行本身
 - 还是慢在输入输出张量搬运与 backend 调度
+
+
+## 代码路径对比后的当前判断
+
+在完成阶段耗时对比后，又进一步对照了：
+
+- 电脑端本地路径：`src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-cpu/ggml-cpu.c`
+- 手机端服务端路径：`src/llama.cpp/exp6_decode_svd_model/svd_mobile_server.cpp`
+
+当前判断如下。
+
+### 1. 两端并不是在跑同一条实现路径
+
+电脑端本地单机执行时，SVD 走的是专门的向量化本地核：
+
+- `ggml_compute_forward_mul_mat_svd_vec()`
+
+这条路径的特点是：
+
+- 直接在线程池里执行 `V*x` 和 `U*tmp`
+- 中间结果保存在当前算子的工作区
+- 不需要走通用 backend graph 调度
+- 不需要额外 `tensor_set / tensor_get`
+
+而手机端服务端执行时，走的是另一条路径：
+
+- 先在 `svd_mobile_server.cpp` 中构建小图执行器
+- 每次请求调用：
+  - `ggml_backend_tensor_set(...)`
+  - `ggml_backend_graph_compute(...)`
+  - `ggml_backend_tensor_get(...)`
+
+因此，虽然两端都在同一台机器、同样 8 核 CPU 上运行，但本质上并不是同一个 kernel / 同一个执行框架。
+
+### 2. 这解释了为什么同机同核数下仍会有明显性能差距
+
+本地路径更接近“专用 SVD kernel”风格：
+
+- 针对当前 decode 场景（输入向量是 `1` 列）做了专门实现
+- 线程划分、barrier 和中间缓冲组织都非常直接
+
+手机端服务端路径更接近“通用 CPU backend 小图执行”风格：
+
+- 需要把输入拷进 backend tensor
+- 由 backend 统一调度 graph compute
+- 再把输出从 backend tensor 拷回 host
+
+所以即使核数一样，也完全可能出现：
+
+- 手机端 `run_up_gate` 明显慢于本地 `up + gate`
+- 手机端 `run_down` 明显慢于本地 `down`
+
+### 3. `down` 的大差距说明主问题不只是 `up+gate` 合并
+
+本次实验里：
+
+- 本地 `down = 200.060 ms`
+- 手机端 `run_down = 270.490 ms`
+
+这里的差距约为：
+
+- `70.430 ms`
+- 约 `35.2%`
+
+而 `down` 路径本身并不涉及 `up+gate` 合并双输出。
+
+这说明：
+
+- 当前性能差距的主问题不只是“`up+gate` 合并图是否划算”
+- 更主要的问题是：手机端 server 整体采用的“小图 + backend compute”执行路径，本身就比本地专用 SVD 核更慢
+
+### 4. `up+gate` 合并图虽然减少了请求数，但不代表计算一定更快
+
+在服务端 `create_up_gate_executor()` 中：
+
+- `up` 和 `gate` 是两条并列子图
+- 它们共享同一个输入 tensor
+- 但各自仍然要独立完成：
+  - `V*x`
+  - `U*tmp`
+
+也就是说：
+
+- 合并图主要减少的是协议层请求次数
+- 不等于底层 CPU 计算会自然比本地两次专用 kernel 更快
+
+本次实测中：
+
+- 本地 `up + gate = 405.064 ms`
+- 手机端 `run_up_gate = 463.871 ms`
+
+说明合并请求虽然是正确的协议优化，但还不足以抹平 server 小图执行路径的额外开销。
+
+### 5. 当前最可能的根因排序
+
+结合代码和实测数据，当前最可能的原因排序为：
+
+1. **主因：** 手机端执行的是通用 backend 小图路径，而不是本地专用 SVD 向量核
+2. **次因：** 每次 server 请求都要做 `tensor_set / graph_compute / tensor_get`
+3. **次因：** `up+gate` 合并图带来双输出读取和更复杂的图执行
+4. **次因：** 当前这些矩阵 shape 对本地专用 SVD kernel 更友好，对通用小图 `mul_mat` 路径不够友好
+
+### 6. 当前结论更新
+
+到目前为止，可以把问题收敛成下面这句话：
+
+> 当前协同卸载变慢，不是因为“手机端核数不足”或“网络传输显著”，而是因为手机端 server 执行的并不是电脑端本地那条高效的专用 SVD kernel，而是一条更重的通用 CPU backend 小图执行路径，因此 `up/gate/down` 的运行时间都出现了可观差距。
+
+### 7. 后续建议
+
+下一步建议优先补两个实验：
+
+1. 给 `svd_mobile_server.cpp` 的 `run_up_gate` / `run_down` 再拆成：
+   - `tensor_set`
+   - `backend_graph_compute`
+   - `tensor_get`
+2. 把手机端 `up` / `gate` 拆开分别执行，判断：
+   - 慢点主要来自 `up+gate` 合并图
+   - 还是任何 server 小图都会慢
