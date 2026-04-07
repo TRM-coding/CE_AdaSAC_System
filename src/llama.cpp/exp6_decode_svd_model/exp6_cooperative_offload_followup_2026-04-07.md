@@ -215,61 +215,215 @@ run_up_gate=461.027 ms run_down=265.971 ms run_other=0 ms
 
 > 本次“缓存 graph plan + 持久 threadpool”只带来了很小的收益，属于边角优化，并没有改变主瓶颈。
 
-## 本次结论
+## 追加更新：第二轮修复（当前代码状态）
 
-### 结论 1：当前主因仍然没变
+说明：
 
-当前协同卸载变慢的主因仍然是：
+- 上面的小节记录的是同一天第一轮“低风险小修”版本
+- 下面补充的是继续修复后的当前代码状态
+- 当前仓库里的实现，以本节为准
 
-- 服务端执行的是“通用 CPU backend 小图路径”
-- 本地执行的是“专用 SVD 单 token vec 快路径”
+### 第二轮代码改动
 
-两边不是同一套实现，所以即使核数一致，时间也不会自然接近。
+本轮保留了 3 个有效修改。
 
-### 结论 2：create 开销不是主问题
+#### 修改 1：服务端不再走 backend 小图执行路径
 
-本次和 2026-04-04 一样，`create_up_gate` / `create_down` 只有约 `2 ms`。
+修改文件：
 
-真正慢的仍然是：
+- `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp6_decode_svd_model/svd_mobile_server.cpp`
 
-- `run_up_gate`
-- `run_down`
+核心变化：
 
-也就是服务端实际执行小图的这部分计算。
+- `RemoteMatExecutor` / `RemoteUpGateExecutor` 不再缓存 `ggml_backend_graph_plan_t`
+- 改为缓存 `ggml_cplan`
+- 输入输出直接绑定到常驻 `std::vector<float>` buffer
+- 每次请求直接调用：
 
-### 结论 3：当前已落地修改不足以修复问题
+```cpp
+ggml_graph_compute(exec.graph, &exec.plan)
+```
 
-虽然本次已经减少了部分 backend 重复开销，但结果表明：
+- 图内节点也不再是两段 `mul_mat` 小图，而是直接构造 `ggml_mul_mat_svd(...)`
 
-- 仅靠缓存 plan
-- 仅靠补 threadpool
+作用：
 
-还不足以把协同路径拉回到本地 `9 tok/s` 左右。
+- 服务端尾部 rank 计算现在会走到和本地 decode 更接近的 `GGML_OP_MUL_MAT_SVD`
+- 去掉了 `tensor_set / tensor_get / backend graph` 这一层额外调度和搬运
 
-## 本次排查中验证但未保留的方向
+#### 修改 2：修正 `offload_rate` 的触发阈值
 
-本次还尝试过两条更激进的路径，但都没有保留到当前代码：
+修改文件：
 
-1. 在服务端直接手写 `U/V` tail matvec
-2. 在 OpenMP 构建下进一步修改 ggml，让 backend graph 优先走持久 threadpool worker 而不是现有 OpenMP 路径
+- `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-cpu/ggml-cpu.c`
+
+修改前：
+
+```c
+dst->svd_offload_rate > 0.5f
+```
+
+修改后：
+
+```c
+dst->svd_offload_rate > 0.0f
+```
+
+作用：
+
+- `offload_rate = 0.5` 现在会真实触发 partial-rank 协同
+- 不再出现“看起来设了半卸载，实际完全没走远端”的歧义
+
+#### 修改 3：保留 `svd_mobile_server` 的 OpenMP 构建修复
+
+修改文件：
+
+- `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/CMakeLists.txt`
+
+作用：
+
+- `svd_mobile_server` 目标现在会显式继承 `GGML_USE_OPENMP`
+- 并链接 `OpenMP::OpenMP_CXX`
+- 避免服务端目标在某些实现尝试中静默退成单线程
+
+### 第二轮复测结果
+
+### 1. 单机本地基线
+
+客户端命令：
+
+```bash
+cd /home/tianruiming/CE_ADA_LLAMA/build-release-current
+echo $$ | sudo tee /sys/fs/cgroup/tianruiming-exclusive/cgroup.procs >/dev/null
+exec taskset -c 68-75 env LD_LIBRARY_PATH=./bin OMP_NUM_THREADS=8 \
+  ./decode_svd_test ../src/llama.cpp/gguf_models/qwen.gguf.sort_svd.compact.gguf 8 8 0
+```
 
 结果：
 
-- 第 1 条路径反而更慢
-- 第 2 条路径会牵动 `ggml-cpu.c` 中一套只在非 OpenMP 路径下使用的数据结构，修改面过大，当前风险不合适
+```text
+[svd-local-op-profile] up_ops=225 gate_ops=225 down_ops=225 \
+up_total=213.118 ms gate_total=211.014 ms down_total=210.637 ms \
+up_v=31.873 ms gate_v=30.520 ms down_v=178.651 ms \
+up_u=179.901 ms gate_u=178.992 ms down_u=31.559 ms
 
-因此当前代码只保留了低风险的服务端小图优化。
+Decode-only throughput: 9.93163 tokens/s
+End-to-end throughput: 9.90903 tokens/s
+```
 
-## 下一步建议
+### 2. 协同卸载 `offload_rate = 1.0`
 
-如果目标是把协同路径真正拉回到本地 `9 tok/s` 附近，下一步不应继续在“小图调度边角”上打补丁，而应优先改执行粒度。
+客户端结果：
 
-优先级建议如下：
+```text
+[svd-offload-client] up_gate_req=225 down_req=225 other_mat_req=0 \
+gate_cache_hits=225 gate_cache_checks=450 miss_invalid=1 miss_layer=27 \
+miss_rank=0 miss_hash=197 miss_output=0 miss_data=0 \
+send_up_gate=17.045 ms send_down=55.147 ms send_other=0.000 ms \
+wait_up_gate=469.682 ms wait_down=199.985 ms wait_other=0.000 ms
 
-1. 重新回到“整层 FFN 卸载”或“更粗粒度子图卸载”
-2. 至少把 `up / gate / down` 的单算子 RPC 再减少一层同步点
-3. 不再把主要希望寄托在 `svd_mobile_server.cpp` 的当前小图 backend 路径上
+Decode-only throughput: 7.95274 tokens/s
+End-to-end throughput: 7.90958 tokens/s
+```
 
-当前最简洁的总结是：
+服务端结果：
 
-> 本次已经验证：问题不在核型、不在网络主路径、也不在建图 create，而在服务端实际运行的通用小图执行路径本身。当前已落地的安全优化只能带来很小收益，若要真正修复，需要升级卸载粒度，而不是继续微调单算子 server 小图。
+```text
+[svd-offload-server] up_gate_req=225 down_req=225 other_mat_req=0 \
+up_gate_miss=28 down_miss=28 other_miss=0 \
+create_up_gate=1.994 ms create_down=1.613 ms create_other=0 ms \
+run_up_gate=433.527 ms run_down=218.160 ms run_other=0 ms
+```
+
+对比本地基线可见：
+
+- 本地 `up + gate` 总时间约为 `213.118 + 211.014 = 424.132 ms`
+- 服务端 `run_up_gate = 433.527 ms`
+- 本地 `down_total = 210.637 ms`
+- 服务端 `run_down = 218.160 ms`
+
+这说明：
+
+> 第二轮修复后，远端 `up / gate / down` 的执行时间已经基本贴近本地 SVD 快路径，原先“服务端明显比本地慢一截”的主矛盾已经被显著削弱。
+
+### 3. 协同卸载 `offload_rate = 0.5`
+
+在修正阈值后，`0.5` 档位会真实触发协同。
+
+客户端结果：
+
+```text
+[svd-offload-client] up_gate_req=225 down_req=225 other_mat_req=0 \
+gate_cache_hits=225 gate_cache_checks=450 miss_invalid=1 miss_layer=27 \
+miss_rank=0 miss_hash=197 miss_output=0 miss_data=0 \
+send_up_gate=7.038 ms send_down=22.738 ms send_other=0.000 ms \
+wait_up_gate=425.419 ms wait_down=233.555 ms wait_other=0.000 ms
+
+Decode-only throughput: 7.69232 tokens/s
+End-to-end throughput: 7.67900 tokens/s
+```
+
+服务端结果：
+
+```text
+[svd-offload-server] up_gate_req=225 down_req=225 other_mat_req=0 \
+up_gate_miss=28 down_miss=28 other_miss=0 \
+create_up_gate=3.036 ms create_down=2.572 ms create_other=0 ms \
+run_up_gate=406.146 ms run_down=218.657 ms run_other=0 ms
+```
+
+这组数据说明两件事：
+
+- `50%` 现在确实在真实卸载，不再是“伪半卸载”
+- 但当前协议下，`50%` 并没有比 `100%` 更快，说明剩余瓶颈已经不再是“server 内核太慢”，而是协同调度与同步成本
+
+## 更新后结论
+
+### 结论 1：服务端内核路径不再是当前主矛盾
+
+第一轮结论里，主因是：
+
+- 服务端执行“通用 CPU backend 小图路径”
+- 本地执行“专用 SVD 单 token vec 快路径”
+
+第二轮修复后，这个结论不再适用于当前代码状态。
+
+当前状态更准确的描述是：
+
+- 服务端已经切到接近本地的 SVD 执行路径
+- `run_up_gate` 和 `run_down` 已经基本贴近本地同类计算
+- “手机端算得明显更慢”不再是最主要的解释
+
+### 结论 2：剩余差距主要来自 RPC 等待与过细粒度同步
+
+即使服务端 kernel 已经接近本地，协同 `1.0` 仍只有约 `7.95 tok/s`，距离本地 `9.93 tok/s` 还有差距。
+
+当前更像是下面这些因素在主导：
+
+- 每个 token 仍需发起 `up+gate` 与 `down` 两类 RPC
+- 客户端仍要等待远端返回后再做合并
+- 协同粒度仍然是“单算子级”
+
+### 结论 3：`offload_rate = 0.5` 的逻辑错误已修复，但这一档目前并不更优
+
+修阈值前：
+
+- `50%` 档位实际上不会触发远端协同
+
+修阈值后：
+
+- `50%` 会真实触发卸载
+- 但实测约 `7.69 tok/s`
+- 没有优于 `100%` 档位
+
+### 结论 4：下一步重点应转向更粗粒度协同，而不是继续微调 server kernel
+
+下一步更值得做的是：
+
+1. 把 `up / gate / down` 再合并成更粗粒度的 FFN 协同
+2. 减少每 token 的同步点和等待点
+3. 不再把主要优化时间投入到 `svd_mobile_server.cpp` 的单算子 kernel 微调上
+
+当前最简洁的总结改为：
+
+> 第一轮结论确认了“服务端小图 backend 路径”是核心问题；第二轮修复已经基本把这部分问题解决。当前剩下的性能差距，主要不再是手机端算得慢，而是单算子 RPC 协同本身的等待成本与粒度设计。

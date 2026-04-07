@@ -39,9 +39,14 @@
 
 保留原有部分卸载路径：
 
-- `offload_rate > 0.5 && offload_rate < 1.0`
+- 当时实现为 `offload_rate > 0.5 && offload_rate < 1.0`
 - 仍走 `GGML_OP_MUL_MAT_SVD`
 - 电脑端算前缀 rank，手机端算尾部 rank
+
+补充说明：
+
+- 上面这个阈值描述对应 2026-04-03 的实现
+- 截至 2026-04-07，当前代码已放宽为 `offload_rate > 0.0 && offload_rate < 1.0`
 
 新增完整 FFN 卸载路径：
 
@@ -316,7 +321,7 @@ LD_LIBRARY_PATH=. ./decode_svd_test \
 建议：
 
 - 调度器后续若决定某层 `offload_rate == 1.0`，直接走完整 FFN 卸载
-- 若是 `0.5 < offload_rate < 1.0`，继续走原有 partial-rank SVD 卸载
+- 若是 `0.0 < offload_rate < 1.0`，继续走 partial-rank SVD 卸载
 - 手机端部署时，优先使用保留 dense FFN 的 SVD 模型作为服务端模型
 
 ## 9. 当前稳定版本回归结果
@@ -472,9 +477,9 @@ taskset -c 68-75 env LD_LIBRARY_PATH=./bin OMP_NUM_THREADS=8 \
 
 需要单独强调：
 
-- 当前代码只在 `offload_rate > 0.5` 时才会触发真实协同
-- 因此实验中的 `50%` 档位实际上不会真正卸载到手机端
-- 这意味着当前版本还不能声称“任意卸载率都已经获得可靠加速”
+- 本节实验对应的当时代码只在 `offload_rate > 0.5` 时才会触发真实协同
+- 因此这里的 `50%` 档位实际上不会真正卸载到手机端
+- 截至 2026-04-07，这个阈值已经修成 `offload_rate > 0.0`
 
 综合来看，当前稳定实现的真实结论是：
 
@@ -482,4 +487,4 @@ taskset -c 68-75 env LD_LIBRARY_PATH=./bin OMP_NUM_THREADS=8 \
 - `up + gate` 合并请求和 ggml `mul_mat` 服务端路径可以稳定工作
 - 但收益高度依赖电脑端算力是否受限
 - 只有在电脑端核心很少，或者电脑端被额外占用时，协同卸载才更容易体现价值
-- 下一步优化重点仍然是削减手机端每请求固定开销，并去掉 `offload_rate > 0.5` 这类粗阈值限制
+- 后续优化重点仍然是削减手机端每请求固定开销；`offload_rate > 0.5` 这类粗阈值限制已于 2026-04-07 去掉
