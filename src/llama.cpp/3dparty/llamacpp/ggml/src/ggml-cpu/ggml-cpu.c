@@ -1448,7 +1448,7 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
         ggml_svd_offload_client_enabled() &&
         dst->svd_layer_id >= 0 &&
         dst->svd_op_id >= 0 &&
-        dst->svd_offload_rate > 0.5f &&
+        dst->svd_offload_rate > 0.0f &&
         total_rank > 1;
 
     if (can_offload) {

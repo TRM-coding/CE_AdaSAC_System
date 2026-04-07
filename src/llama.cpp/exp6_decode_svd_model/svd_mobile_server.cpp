@@ -1,6 +1,5 @@
 #include "llama-model.h"
 #include "llama-context.h"
-#include "ggml-backend.h"
 #include "ggml-cpu.h"
 
 #include <arpa/inet.h>
@@ -57,6 +56,7 @@ struct WireResponse {
 
 constexpr uint32_t kMagic = 0x5344564fU;
 constexpr uint32_t kVersion = 2;
+constexpr size_t kWorkDataAlign = 64;
 
 bool recv_all(int fd, void * data, size_t size) {
     char * ptr = static_cast<char *>(data);
@@ -185,16 +185,19 @@ void validate_svd_tensors(
 
 struct RemoteMatExecutor {
     ggml_context * ctx = nullptr;
-    ggml_backend_buffer_t buffer = nullptr;
     ggml_tensor * input_tensor = nullptr;
     ggml_tensor * output_tensor = nullptr;
     ggml_cgraph * graph = nullptr;
+    ggml_cplan plan {};
+    void * work_data = nullptr;
     int64_t input_len = 0;
     int64_t output_len = 0;
+    std::vector<float> input_buffer;
+    std::vector<float> output_buffer;
 
     ~RemoteMatExecutor() {
-        if (buffer != nullptr) {
-            ggml_backend_buffer_free(buffer);
+        if (work_data != nullptr) {
+            free(work_data);
         }
         if (ctx != nullptr) {
             ggml_free(ctx);
@@ -204,17 +207,21 @@ struct RemoteMatExecutor {
 
 struct RemoteUpGateExecutor {
     ggml_context * ctx = nullptr;
-    ggml_backend_buffer_t buffer = nullptr;
     ggml_tensor * input_tensor = nullptr;
     ggml_tensor * output_up = nullptr;
     ggml_tensor * output_gate = nullptr;
     ggml_cgraph * graph = nullptr;
+    ggml_cplan plan {};
+    void * work_data = nullptr;
     int64_t input_len = 0;
     int64_t output_len = 0;
+    std::vector<float> input_buffer;
+    std::vector<float> output_up_buffer;
+    std::vector<float> output_gate_buffer;
 
     ~RemoteUpGateExecutor() {
-        if (buffer != nullptr) {
-            ggml_backend_buffer_free(buffer);
+        if (work_data != nullptr) {
+            free(work_data);
         }
         if (ctx != nullptr) {
             ggml_free(ctx);
@@ -222,8 +229,32 @@ struct RemoteUpGateExecutor {
     }
 };
 
+void * alloc_work_data(size_t size) {
+    if (size == 0) {
+        return nullptr;
+    }
+
+    void * ptr = nullptr;
+    if (posix_memalign(&ptr, kWorkDataAlign, size) != 0) {
+        return nullptr;
+    }
+    return ptr;
+}
+
+ggml_tensor * make_weight_shape_tensor(
+        ggml_context * ctx,
+        int64_t input_len,
+        int64_t output_len) {
+    ggml_tensor * weight_shape = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, input_len, output_len);
+    if (weight_shape == nullptr) {
+        throw std::runtime_error("ggml_new_tensor_2d failed");
+    }
+    return weight_shape;
+}
+
 std::unique_ptr<RemoteMatExecutor> create_mat_executor(
-        ggml_backend_t backend,
+        ggml_threadpool_t threadpool,
+        int n_threads,
         const ggml_tensor * u,
         const ggml_tensor * v,
         int32_t rank_start,
@@ -246,7 +277,11 @@ std::unique_ptr<RemoteMatExecutor> create_mat_executor(
 
     exec->input_len = input_len;
     exec->output_len = u->ne[1];
+    exec->input_buffer.resize((size_t) exec->input_len);
+    exec->output_buffer.resize((size_t) exec->output_len);
+
     exec->input_tensor = ggml_new_tensor_2d(exec->ctx, GGML_TYPE_F32, input_len, 1);
+    ggml_tensor * w_shape = make_weight_shape_tensor(exec->ctx, input_len, exec->output_len);
     ggml_tensor * v_tail = ggml_view_2d(
         exec->ctx,
         const_cast<ggml_tensor *>(v),
@@ -254,7 +289,6 @@ std::unique_ptr<RemoteMatExecutor> create_mat_executor(
         k_remote,
         v->nb[1],
         (size_t) rank_start * v->nb[1]);
-    ggml_tensor * tmp = ggml_mul_mat(exec->ctx, v_tail, exec->input_tensor);
     ggml_tensor * u_tail = ggml_view_2d(
         exec->ctx,
         const_cast<ggml_tensor *>(u),
@@ -262,12 +296,9 @@ std::unique_ptr<RemoteMatExecutor> create_mat_executor(
         u->ne[1],
         u->nb[1],
         (size_t) rank_start * u->nb[0]);
-    exec->output_tensor = ggml_mul_mat(exec->ctx, u_tail, tmp);
-
-    exec->buffer = ggml_backend_alloc_ctx_tensors(exec->ctx, backend);
-    if (exec->buffer == nullptr) {
-        throw std::runtime_error("ggml_backend_alloc_ctx_tensors failed");
-    }
+    exec->output_tensor = ggml_mul_mat_svd(exec->ctx, w_shape, v_tail, u_tail, exec->input_tensor, 0);
+    exec->input_tensor->data = exec->input_buffer.data();
+    exec->output_tensor->data = exec->output_buffer.data();
 
     exec->graph = ggml_new_graph(exec->ctx);
     if (exec->graph == nullptr) {
@@ -275,11 +306,19 @@ std::unique_ptr<RemoteMatExecutor> create_mat_executor(
     }
     ggml_build_forward_expand(exec->graph, exec->output_tensor);
 
+    exec->plan = ggml_graph_plan(exec->graph, n_threads, threadpool);
+    exec->work_data = alloc_work_data(exec->plan.work_size);
+    if (exec->plan.work_size > 0 && exec->work_data == nullptr) {
+        throw std::runtime_error("alloc_work_data failed");
+    }
+    exec->plan.work_data = static_cast<uint8_t *>(exec->work_data);
+
     return exec;
 }
 
 std::unique_ptr<RemoteUpGateExecutor> create_up_gate_executor(
-        ggml_backend_t backend,
+        ggml_threadpool_t threadpool,
+        int n_threads,
         const ggml_tensor * up_u,
         const ggml_tensor * up_v,
         const ggml_tensor * gate_u,
@@ -305,7 +344,13 @@ std::unique_ptr<RemoteUpGateExecutor> create_up_gate_executor(
 
     exec->input_len = input_len;
     exec->output_len = up_u->ne[1];
+    exec->input_buffer.resize((size_t) exec->input_len);
+    exec->output_up_buffer.resize((size_t) exec->output_len);
+    exec->output_gate_buffer.resize((size_t) exec->output_len);
+
     exec->input_tensor = ggml_new_tensor_2d(exec->ctx, GGML_TYPE_F32, input_len, 1);
+    ggml_tensor * up_w_shape = make_weight_shape_tensor(exec->ctx, input_len, exec->output_len);
+    ggml_tensor * gate_w_shape = make_weight_shape_tensor(exec->ctx, input_len, exec->output_len);
 
     ggml_tensor * up_v_tail = ggml_view_2d(
         exec->ctx,
@@ -314,7 +359,6 @@ std::unique_ptr<RemoteUpGateExecutor> create_up_gate_executor(
         k_remote,
         up_v->nb[1],
         (size_t) rank_start * up_v->nb[1]);
-    ggml_tensor * up_tmp = ggml_mul_mat(exec->ctx, up_v_tail, exec->input_tensor);
     ggml_tensor * up_u_tail = ggml_view_2d(
         exec->ctx,
         const_cast<ggml_tensor *>(up_u),
@@ -322,7 +366,7 @@ std::unique_ptr<RemoteUpGateExecutor> create_up_gate_executor(
         up_u->ne[1],
         up_u->nb[1],
         (size_t) rank_start * up_u->nb[0]);
-    exec->output_up = ggml_mul_mat(exec->ctx, up_u_tail, up_tmp);
+    exec->output_up = ggml_mul_mat_svd(exec->ctx, up_w_shape, up_v_tail, up_u_tail, exec->input_tensor, 0);
 
     ggml_tensor * gate_v_tail = ggml_view_2d(
         exec->ctx,
@@ -331,7 +375,6 @@ std::unique_ptr<RemoteUpGateExecutor> create_up_gate_executor(
         k_remote,
         gate_v->nb[1],
         (size_t) rank_start * gate_v->nb[1]);
-    ggml_tensor * gate_tmp = ggml_mul_mat(exec->ctx, gate_v_tail, exec->input_tensor);
     ggml_tensor * gate_u_tail = ggml_view_2d(
         exec->ctx,
         const_cast<ggml_tensor *>(gate_u),
@@ -339,12 +382,10 @@ std::unique_ptr<RemoteUpGateExecutor> create_up_gate_executor(
         gate_u->ne[1],
         gate_u->nb[1],
         (size_t) rank_start * gate_u->nb[0]);
-    exec->output_gate = ggml_mul_mat(exec->ctx, gate_u_tail, gate_tmp);
-
-    exec->buffer = ggml_backend_alloc_ctx_tensors(exec->ctx, backend);
-    if (exec->buffer == nullptr) {
-        throw std::runtime_error("ggml_backend_alloc_ctx_tensors failed");
-    }
+    exec->output_gate = ggml_mul_mat_svd(exec->ctx, gate_w_shape, gate_v_tail, gate_u_tail, exec->input_tensor, 0);
+    exec->input_tensor->data = exec->input_buffer.data();
+    exec->output_up->data = exec->output_up_buffer.data();
+    exec->output_gate->data = exec->output_gate_buffer.data();
 
     exec->graph = ggml_new_graph(exec->ctx);
     if (exec->graph == nullptr) {
@@ -353,46 +394,42 @@ std::unique_ptr<RemoteUpGateExecutor> create_up_gate_executor(
     ggml_build_forward_expand(exec->graph, exec->output_up);
     ggml_build_forward_expand(exec->graph, exec->output_gate);
 
+    exec->plan = ggml_graph_plan(exec->graph, n_threads, threadpool);
+    exec->work_data = alloc_work_data(exec->plan.work_size);
+    if (exec->plan.work_size > 0 && exec->work_data == nullptr) {
+        throw std::runtime_error("alloc_work_data failed");
+    }
+    exec->plan.work_data = static_cast<uint8_t *>(exec->work_data);
+
     return exec;
 }
 
 void run_mat_executor(
-        ggml_backend_t backend,
         RemoteMatExecutor & exec,
-        const std::vector<float> & input,
-        std::vector<float> & output) {
+        const std::vector<float> & input) {
     if ((int64_t) input.size() != exec.input_len) {
         throw std::runtime_error("unexpected input length");
     }
 
-    output.assign((size_t) exec.output_len, 0.0f);
-    ggml_backend_tensor_set(exec.input_tensor, input.data(), 0, sizeof(float) * input.size());
-    const ggml_status status = ggml_backend_graph_compute(backend, exec.graph);
+    memcpy(exec.input_buffer.data(), input.data(), sizeof(float) * input.size());
+    const ggml_status status = ggml_graph_compute(exec.graph, &exec.plan);
     if (status != GGML_STATUS_SUCCESS) {
-        throw std::runtime_error("ggml_backend_graph_compute failed");
+        throw std::runtime_error("ggml_graph_compute failed");
     }
-    ggml_backend_tensor_get(exec.output_tensor, output.data(), 0, sizeof(float) * output.size());
 }
 
 void run_up_gate_executor(
-        ggml_backend_t backend,
         RemoteUpGateExecutor & exec,
-        const std::vector<float> & input,
-        std::vector<float> & output,
-        std::vector<float> & output_aux) {
+        const std::vector<float> & input) {
     if ((int64_t) input.size() != exec.input_len) {
         throw std::runtime_error("unexpected input length");
     }
 
-    output.assign((size_t) exec.output_len, 0.0f);
-    output_aux.assign((size_t) exec.output_len, 0.0f);
-    ggml_backend_tensor_set(exec.input_tensor, input.data(), 0, sizeof(float) * input.size());
-    const ggml_status status = ggml_backend_graph_compute(backend, exec.graph);
+    memcpy(exec.input_buffer.data(), input.data(), sizeof(float) * input.size());
+    const ggml_status status = ggml_graph_compute(exec.graph, &exec.plan);
     if (status != GGML_STATUS_SUCCESS) {
-        throw std::runtime_error("ggml_backend_graph_compute failed");
+        throw std::runtime_error("ggml_graph_compute failed");
     }
-    ggml_backend_tensor_get(exec.output_up, output.data(), 0, sizeof(float) * output.size());
-    ggml_backend_tensor_get(exec.output_gate, output_aux.data(), 0, sizeof(float) * output_aux.size());
 }
 
 } // namespace
@@ -404,19 +441,18 @@ int main(int argc, char ** argv) {
     const int port = argc > 2 ? std::stoi(argv[2]) : 7788;
     const int n_threads = argc > 3 ? std::stoi(argv[3]) : 8;
 
-    ggml_backend_load_all();
     ggml_cpu_init();
 
 #ifdef GGML_USE_OPENMP
     omp_set_num_threads(n_threads);
 #endif
 
-    ggml_backend_t backend = ggml_backend_cpu_init();
-    if (backend == nullptr) {
-        std::cerr << "ggml_backend_cpu_init failed" << std::endl;
+    ggml_threadpool_params threadpool_params = ggml_threadpool_params_default(n_threads);
+    ggml_threadpool_t threadpool = ggml_threadpool_new(&threadpool_params);
+    if (threadpool == nullptr) {
+        std::cerr << "ggml_threadpool_new failed" << std::endl;
         return 1;
     }
-    ggml_backend_cpu_set_n_threads(backend, n_threads);
 
     llama_model_params model_params = llama_model_default_params();
     model_params.n_gpu_layers = 0;
@@ -425,6 +461,7 @@ int main(int argc, char ** argv) {
     llama_model * model = llama_model_load_from_file(model_path.c_str(), model_params);
     if (model == nullptr) {
         std::cerr << "failed to load model" << std::endl;
+        ggml_threadpool_free(threadpool);
         return 1;
     }
 
@@ -432,6 +469,7 @@ int main(int argc, char ** argv) {
     if (listen_fd < 0) {
         std::cerr << "socket failed: " << strerror(errno) << std::endl;
         llama_model_free(model);
+        ggml_threadpool_free(threadpool);
         return 1;
     }
 
@@ -449,6 +487,7 @@ int main(int argc, char ** argv) {
         std::cerr << "bind/listen failed: " << strerror(errno) << std::endl;
         close(listen_fd);
         llama_model_free(model);
+        ggml_threadpool_free(threadpool);
         return 1;
     }
 
@@ -483,8 +522,10 @@ int main(int argc, char ** argv) {
             }
 
             WireResponse rsp { kMagic, kVersion, 0, 0, 0 };
-            std::vector<float> output;
-            std::vector<float> output_aux;
+            const float * output_data = nullptr;
+            size_t output_len = 0;
+            const float * output_aux_data = nullptr;
+            size_t output_aux_len = 0;
             try {
                 if (req.request_kind == REQ_UP_GATE) {
                     prof.requests_up_gate++;
@@ -495,14 +536,18 @@ int main(int argc, char ** argv) {
                     if (!exec) {
                         prof.up_gate_cache_miss++;
                         const uint64_t t0 = now_us();
-                        exec = create_up_gate_executor(backend, up.u, up.v, gate.u, gate.v, req.rank_start, req.input_len);
+                        exec = create_up_gate_executor(threadpool, n_threads, up.u, up.v, gate.u, gate.v, req.rank_start, req.input_len);
                         prof.create_up_gate_us += now_us() - t0;
                     }
                     const uint64_t t0 = now_us();
-                    run_up_gate_executor(backend, *exec, input, output, output_aux);
+                    run_up_gate_executor(*exec, input);
                     prof.run_up_gate_us += now_us() - t0;
-                    rsp.output_len = static_cast<int32_t>(output.size());
-                    rsp.output_len_aux = static_cast<int32_t>(output_aux.size());
+                    rsp.output_len = static_cast<int32_t>(exec->output_up_buffer.size());
+                    rsp.output_len_aux = static_cast<int32_t>(exec->output_gate_buffer.size());
+                    output_data = exec->output_up_buffer.data();
+                    output_len = exec->output_up_buffer.size();
+                    output_aux_data = exec->output_gate_buffer.data();
+                    output_aux_len = exec->output_gate_buffer.size();
                 } else {
                     const bool is_down = req.op_id == SVD_OP_DOWN;
                     if (is_down) {
@@ -515,7 +560,7 @@ int main(int argc, char ** argv) {
                     auto & exec = mat_executors[key];
                     if (!exec) {
                         const uint64_t t0 = now_us();
-                        exec = create_mat_executor(backend, mat.u, mat.v, req.rank_start, req.input_len);
+                        exec = create_mat_executor(threadpool, n_threads, mat.u, mat.v, req.rank_start, req.input_len);
                         const uint64_t dt = now_us() - t0;
                         if (is_down) {
                             prof.mat_down_cache_miss++;
@@ -526,14 +571,16 @@ int main(int argc, char ** argv) {
                         }
                     }
                     const uint64_t t0 = now_us();
-                    run_mat_executor(backend, *exec, input, output);
+                    run_mat_executor(*exec, input);
                     const uint64_t dt = now_us() - t0;
                     if (is_down) {
                         prof.run_mat_down_us += dt;
                     } else {
                         prof.run_mat_other_us += dt;
                     }
-                    rsp.output_len = static_cast<int32_t>(output.size());
+                    rsp.output_len = static_cast<int32_t>(exec->output_buffer.size());
+                    output_data = exec->output_buffer.data();
+                    output_len = exec->output_buffer.size();
                 }
             } catch (const std::exception & e) {
                 rsp.status = -1;
@@ -544,11 +591,11 @@ int main(int argc, char ** argv) {
                 break;
             }
             if (rsp.status == 0) {
-                if (!send_all(client_fd, output.data(), sizeof(float) * output.size())) {
+                if (!send_all(client_fd, output_data, sizeof(float) * output_len)) {
                     break;
                 }
                 if (rsp.output_len_aux > 0 &&
-                    !send_all(client_fd, output_aux.data(), sizeof(float) * output_aux.size())) {
+                    !send_all(client_fd, output_aux_data, sizeof(float) * output_aux_len)) {
                     break;
                 }
             }
@@ -573,7 +620,9 @@ int main(int argc, char ** argv) {
     }
 
     close(listen_fd);
+    up_gate_executors.clear();
+    mat_executors.clear();
     llama_model_free(model);
-    ggml_backend_free(backend);
+    ggml_threadpool_free(threadpool);
     return 0;
 }
