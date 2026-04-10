@@ -681,6 +681,14 @@ bool ggml_svd_offload_take_cached_gate(
 void ggml_svd_offload_close_client(void) {
     ggml_svd_local_profile_print_and_reset();
     pthread_mutex_lock(&g_svd_client.mutex);
+    const uint64_t send_total_us =
+        g_svd_profile.send_up_gate_us +
+        g_svd_profile.send_down_us +
+        g_svd_profile.send_other_mat_us;
+    const uint64_t wait_total_us =
+        g_svd_profile.wait_up_gate_us +
+        g_svd_profile.wait_down_us +
+        g_svd_profile.wait_other_mat_us;
     fprintf(stderr,
             "[svd-offload-client] up_gate_req=%llu down_req=%llu other_mat_req=%llu gate_cache_hits=%llu gate_cache_checks=%llu "
             "miss_invalid=%llu miss_layer=%llu miss_rank=%llu miss_hash=%llu miss_output=%llu miss_data=%llu "
@@ -703,6 +711,11 @@ void ggml_svd_offload_close_client(void) {
             g_svd_profile.wait_up_gate_us / 1000.0,
             g_svd_profile.wait_down_us / 1000.0,
             g_svd_profile.wait_other_mat_us / 1000.0);
+    fprintf(stderr,
+            "[svd-offload-client-stage-profile] rpc_send_total=%.3f ms "
+            "rpc_wait_total=%.3f ms\n",
+            send_total_us / 1000.0,
+            wait_total_us / 1000.0);
     if (g_svd_client.socket_fd >= 0) {
         close(g_svd_client.socket_fd);
         g_svd_client.socket_fd = -1;

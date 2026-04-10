@@ -1323,6 +1323,8 @@ static struct {
     uint64_t up_u_us;
     uint64_t gate_u_us;
     uint64_t down_u_us;
+    uint64_t attn_total_us;
+    uint64_t ffn_total_us;
 } g_svd_local_profile = { 0 };
 
 static uint64_t ggml_svd_local_profile_now_us(void) {
@@ -1350,6 +1352,34 @@ static void ggml_svd_local_profile_accumulate(int32_t op_id, uint64_t total_us, 
     __atomic_fetch_add(u, u_us, __ATOMIC_RELAXED);
 }
 
+static bool ggml_profile_is_ffn_node(const struct ggml_tensor * tensor) {
+    const char * name = tensor->name;
+    return name[0] != '\0' && strstr(name, "ffn") != NULL;
+}
+
+static bool ggml_profile_is_attn_node(const struct ggml_tensor * tensor) {
+    const char * name = tensor->name;
+    if (name[0] == '\0') {
+        return false;
+    }
+
+    return strstr(name, "attn") != NULL ||
+           strstr(name, "Qcur") != NULL ||
+           strstr(name, "Kcur") != NULL ||
+           strstr(name, "Vcur") != NULL ||
+           strstr(name, "kqv") != NULL ||
+           strcmp(name, "wo") == 0 ||
+           strcmp(name, "wqkv") == 0;
+}
+
+static void ggml_local_stage_profile_accumulate(const struct ggml_tensor * tensor, uint64_t total_us) {
+    if (ggml_profile_is_ffn_node(tensor)) {
+        __atomic_fetch_add(&g_svd_local_profile.ffn_total_us, total_us, __ATOMIC_RELAXED);
+    } else if (ggml_profile_is_attn_node(tensor)) {
+        __atomic_fetch_add(&g_svd_local_profile.attn_total_us, total_us, __ATOMIC_RELAXED);
+    }
+}
+
 void ggml_svd_local_profile_print_and_reset(void) {
     const uint64_t up_ops = __atomic_exchange_n(&g_svd_local_profile.up_ops, 0, __ATOMIC_RELAXED);
     const uint64_t gate_ops = __atomic_exchange_n(&g_svd_local_profile.gate_ops, 0, __ATOMIC_RELAXED);
@@ -1363,6 +1393,11 @@ void ggml_svd_local_profile_print_and_reset(void) {
     const uint64_t up_u_us = __atomic_exchange_n(&g_svd_local_profile.up_u_us, 0, __ATOMIC_RELAXED);
     const uint64_t gate_u_us = __atomic_exchange_n(&g_svd_local_profile.gate_u_us, 0, __ATOMIC_RELAXED);
     const uint64_t down_u_us = __atomic_exchange_n(&g_svd_local_profile.down_u_us, 0, __ATOMIC_RELAXED);
+    const uint64_t attn_total_us = __atomic_exchange_n(&g_svd_local_profile.attn_total_us, 0, __ATOMIC_RELAXED);
+    const uint64_t ffn_named_total_us = __atomic_exchange_n(&g_svd_local_profile.ffn_total_us, 0, __ATOMIC_RELAXED);
+    const uint64_t ffn_total_us = up_total_us + gate_total_us + down_total_us;
+    const uint64_t ffn_v_us = up_v_us + gate_v_us + down_v_us;
+    const uint64_t ffn_u_us = up_u_us + gate_u_us + down_u_us;
 
     fprintf(stderr,
             "[svd-local-op-profile] up_ops=%llu gate_ops=%llu down_ops=%llu "
@@ -1381,6 +1416,16 @@ void ggml_svd_local_profile_print_and_reset(void) {
             up_u_us / 1000.0,
             gate_u_us / 1000.0,
             down_u_us / 1000.0);
+    fprintf(stderr,
+            "[svd-local-stage-profile] attention_total=%.3f ms "
+            "ffn_total=%.3f ms "
+            "ffn_svd_total=%.3f ms "
+            "ffn_svd_v=%.3f ms ffn_svd_u=%.3f ms\n",
+            attn_total_us / 1000.0,
+            ffn_named_total_us / 1000.0,
+            ffn_total_us / 1000.0,
+            ffn_v_us / 1000.0,
+            ffn_u_us / 1000.0);
 }
 
 static bool ggml_compute_forward_mul_mat_svd_vec(
@@ -3337,6 +3382,7 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
     for (int node_n = 0; node_n < cgraph->n_nodes && atomic_load_explicit(&tp->abort, memory_order_relaxed) != node_n; node_n++) {
         struct ggml_tensor * node = cgraph->nodes[node_n];
 
+        const uint64_t t_start_us = state->ith == 0 ? ggml_time_us() : 0;
         ggml_compute_forward(&params, node);
 
         if (state->ith == 0 && cplan->abort_callback &&
@@ -3347,6 +3393,10 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
 
         if (node_n + 1 < cgraph->n_nodes) {
             ggml_barrier(state->threadpool);
+        }
+
+        if (state->ith == 0) {
+            ggml_local_stage_profile_accumulate(node, ggml_time_us() - t_start_us);
         }
     }
 

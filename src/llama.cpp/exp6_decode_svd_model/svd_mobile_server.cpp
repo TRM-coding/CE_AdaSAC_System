@@ -615,6 +615,12 @@ int main(int argc, char ** argv) {
             << " run_down=" << (prof.run_mat_down_us / 1000.0) << " ms"
             << " run_other=" << (prof.run_mat_other_us / 1000.0) << " ms"
             << std::endl;
+        std::cerr
+            << "[svd-offload-server-stage-profile] create_total="
+            << ((prof.create_up_gate_us + prof.create_mat_down_us + prof.create_mat_other_us) / 1000.0) << " ms"
+            << " remote_compute_total="
+            << ((prof.run_up_gate_us + prof.run_mat_down_us + prof.run_mat_other_us) / 1000.0) << " ms"
+            << std::endl;
         std::cout << "client disconnected" << std::endl;
         close(client_fd);
     }

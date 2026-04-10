@@ -78,6 +78,7 @@ bool parse_host_port(const std::string & arg, std::string & host, uint16_t & por
 
 int main(int argc, char ** argv)
 {
+    const auto t_program_start = std::chrono::steady_clock::now();
     int ngl = 99;
     uint32_t n_ctx = 2048;
     std::string model_path = argc > 1
@@ -99,7 +100,9 @@ int main(int argc, char ** argv)
     model_params.n_gpu_layers = ngl;
 
     std::cout << "loading model ..." << std::endl;
+    const auto t_model_load_start = std::chrono::steady_clock::now();
     llama_model *model = llama_model_load_from_file(model_path.c_str(), model_params);
+    const auto t_model_load_end = std::chrono::steady_clock::now();
     if (!model)
     {
         std::cerr << "error: unable to load model" << std::endl;
@@ -139,7 +142,9 @@ int main(int argc, char ** argv)
     }
 
     std::cout << "creating context ..." << std::endl;
+    const auto t_context_create_start = std::chrono::steady_clock::now();
     llama_context *ctx = llama_init_from_model(model, ctx_params);
+    const auto t_context_create_end = std::chrono::steady_clock::now();
     if (!ctx)
     {
         std::cerr << "error: failed to create the llama_context" << std::endl;
@@ -163,6 +168,7 @@ int main(int argc, char ** argv)
     std::vector<llama_token> tokens;
     tokens.resize(prompt.size() + 8);
 
+    const auto t_tokenize_start = std::chrono::steady_clock::now();
     int32_t n_tokens = llama_tokenize(
         vocab,
         prompt.c_str(),
@@ -171,6 +177,7 @@ int main(int argc, char ** argv)
         (int32_t)tokens.size(),
         /*add_special*/ true,
         /*parse_special*/ true);
+    const auto t_tokenize_end = std::chrono::steady_clock::now();
 
     if (n_tokens <= 0)
     {
@@ -206,7 +213,9 @@ int main(int argc, char ** argv)
     }
 
     std::cout << "running one forward pass (llama_decode) ..." << std::endl;
+    const auto t_prefill_decode_start = std::chrono::steady_clock::now();
     int32_t ret = llama_decode(ctx, batch);
+    const auto t_prefill_decode_end = std::chrono::steady_clock::now();
     if (ret != 0)
     {
         std::cerr << "llama_decode failed, ret = " << ret << std::endl;
@@ -364,7 +373,15 @@ int main(int argc, char ** argv)
     }
 
     const auto generation_end = std::chrono::steady_clock::now();
+    const auto t_program_end = std::chrono::steady_clock::now();
     const double generation_sec = std::chrono::duration<double>(generation_end - generation_start).count();
+    const double model_load_ms = std::chrono::duration<double, std::milli>(t_model_load_end - t_model_load_start).count();
+    const double context_create_ms = std::chrono::duration<double, std::milli>(t_context_create_end - t_context_create_start).count();
+    const double tokenize_ms = std::chrono::duration<double, std::milli>(t_tokenize_end - t_tokenize_start).count();
+    const double prefill_decode_ms = std::chrono::duration<double, std::milli>(t_prefill_decode_end - t_prefill_decode_start).count();
+    const double generation_decode_ms = decode_only_sec * 1000.0;
+    const double generation_total_ms = generation_sec * 1000.0;
+    const double program_total_ms = std::chrono::duration<double, std::milli>(t_program_end - t_program_start).count();
     if (generated_tokens > 0 && decode_only_sec > 0.0) {
         std::cout << "Decode-only throughput: " << (generated_tokens / decode_only_sec)
                   << " tokens/s (" << generated_tokens << " tokens in "
@@ -375,6 +392,15 @@ int main(int argc, char ** argv)
                   << " tokens/s (" << generated_tokens << " tokens in "
                   << generation_sec << " s)" << std::endl;
     }
+    std::cout << "[decode-stage-profile] "
+              << "model_load=" << model_load_ms << " ms "
+              << "context_create=" << context_create_ms << " ms "
+              << "tokenize=" << tokenize_ms << " ms "
+              << "prefill_decode=" << prefill_decode_ms << " ms "
+              << "generation_decode=" << generation_decode_ms << " ms "
+              << "generation_total=" << generation_total_ms << " ms "
+              << "program_total=" << program_total_ms << " ms"
+              << std::endl;
 
     llama_batch_free(batch);
     ggml_svd_offload_close_client();
