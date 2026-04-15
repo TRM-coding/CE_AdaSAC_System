@@ -2,14 +2,22 @@
 #include "llama-context.h"
 #include "ggml-cpu.h"
 
+#ifdef _WIN32
+#include <malloc.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#else
 #include <arpa/inet.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#endif
 
 #include <cerrno>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -58,10 +66,133 @@ constexpr uint32_t kMagic = 0x5344564fU;
 constexpr uint32_t kVersion = 2;
 constexpr size_t kWorkDataAlign = 64;
 
+#ifdef _WIN32
+bool ensure_winsock_initialized() {
+    static bool initialized = false;
+    static bool ok = false;
+    if (!initialized) {
+        WSADATA wsa_data;
+        ok = WSAStartup(MAKEWORD(2, 2), &wsa_data) == 0;
+        initialized = true;
+    }
+    return ok;
+}
+
+int close_socket(int fd) {
+    return closesocket(static_cast<SOCKET>(fd));
+}
+
+void * aligned_alloc_work_data(size_t size) {
+    return _aligned_malloc(size, kWorkDataAlign);
+}
+
+void free_work_data(void * ptr) {
+    _aligned_free(ptr);
+}
+#else
+bool ensure_winsock_initialized() {
+    return true;
+}
+
+int close_socket(int fd) {
+    return close(fd);
+}
+
+void * aligned_alloc_work_data(size_t size) {
+    void * ptr = nullptr;
+    if (posix_memalign(&ptr, kWorkDataAlign, size) != 0) {
+        return nullptr;
+    }
+    return ptr;
+}
+
+void free_work_data(void * ptr) {
+    free(ptr);
+}
+#endif
+
+enum class QuantizationMode {
+    NONE = 0,
+    Q4_0,
+    Q4_1,
+    Q5_0,
+    Q5_1,
+    Q8_0,
+    Q4_K,
+    Q5_K,
+    Q6_K,
+};
+
+enum class QuantizeFallbackReason {
+    NONE = 0,
+    TYPE_DISABLED,
+    RANK_NOT_2D,
+    ROW_NOT_ALIGNED,
+    TRAIT_UNSUPPORTED,
+    ALLOC_FAILED,
+};
+
+const char * quant_mode_name(QuantizationMode mode) {
+    switch (mode) {
+        case QuantizationMode::NONE: return "off";
+        case QuantizationMode::Q4_0: return "q4_0";
+        case QuantizationMode::Q4_1: return "q4_1";
+        case QuantizationMode::Q5_0: return "q5_0";
+        case QuantizationMode::Q5_1: return "q5_1";
+        case QuantizationMode::Q8_0: return "q8_0";
+        case QuantizationMode::Q4_K: return "q4_k";
+        case QuantizationMode::Q5_K: return "q5_k";
+        case QuantizationMode::Q6_K: return "q6_k";
+    }
+    return "unknown";
+}
+
+enum ggml_type quant_mode_to_ggml_type(QuantizationMode mode) {
+    switch (mode) {
+        case QuantizationMode::NONE: return GGML_TYPE_F16;
+        case QuantizationMode::Q4_0: return GGML_TYPE_Q4_0;
+        case QuantizationMode::Q4_1: return GGML_TYPE_Q4_1;
+        case QuantizationMode::Q5_0: return GGML_TYPE_Q5_0;
+        case QuantizationMode::Q5_1: return GGML_TYPE_Q5_1;
+        case QuantizationMode::Q8_0: return GGML_TYPE_Q8_0;
+        case QuantizationMode::Q4_K: return GGML_TYPE_Q4_K;
+        case QuantizationMode::Q5_K: return GGML_TYPE_Q5_K;
+        case QuantizationMode::Q6_K: return GGML_TYPE_Q6_K;
+    }
+    return GGML_TYPE_F16;
+}
+
+QuantizationMode parse_quantization_mode(const std::string & arg) {
+    if (arg.empty() || arg == "off" || arg == "none" || arg == "fp16") {
+        return QuantizationMode::NONE;
+    }
+    if (arg == "q4_0") return QuantizationMode::Q4_0;
+    if (arg == "q4_1") return QuantizationMode::Q4_1;
+    if (arg == "q5_0") return QuantizationMode::Q5_0;
+    if (arg == "q5_1") return QuantizationMode::Q5_1;
+    if (arg == "q8_0") return QuantizationMode::Q8_0;
+    if (arg == "q4_k") return QuantizationMode::Q4_K;
+    if (arg == "q5_k") return QuantizationMode::Q5_K;
+    if (arg == "q6_k") return QuantizationMode::Q6_K;
+    throw std::runtime_error("unsupported quantization mode: " + arg);
+}
+
+const char * quant_fallback_reason_name(QuantizeFallbackReason reason) {
+    switch (reason) {
+        case QuantizeFallbackReason::NONE: return "none";
+        case QuantizeFallbackReason::TYPE_DISABLED: return "type_disabled";
+        case QuantizeFallbackReason::RANK_NOT_2D: return "rank_not_2d";
+        case QuantizeFallbackReason::ROW_NOT_ALIGNED: return "row_not_aligned";
+        case QuantizeFallbackReason::TRAIT_UNSUPPORTED: return "trait_unsupported";
+        case QuantizeFallbackReason::ALLOC_FAILED: return "alloc_failed";
+    }
+    return "unknown";
+}
+
 bool recv_all(int fd, void * data, size_t size) {
     char * ptr = static_cast<char *>(data);
     while (size > 0) {
-        const ssize_t nread = recv(fd, ptr, size, 0);
+        const int nread = recv(fd, ptr, static_cast<int>(size), 0);
         if (nread <= 0) {
             return false;
         }
@@ -74,7 +205,7 @@ bool recv_all(int fd, void * data, size_t size) {
 bool send_all(int fd, const void * data, size_t size) {
     const char * ptr = static_cast<const char *>(data);
     while (size > 0) {
-        const ssize_t written = send(fd, ptr, size, MSG_NOSIGNAL);
+        const int written = send(fd, ptr, static_cast<int>(size), 0);
         if (written <= 0) {
             return false;
         }
@@ -129,9 +260,13 @@ struct UpGateExecutorKeyHash {
 };
 
 uint64_t now_us() {
+#ifdef _WIN32
+    return static_cast<uint64_t>(GetTickCount64()) * 1000ULL;
+#else
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t) ts.tv_sec * 1000000ULL + (uint64_t) ts.tv_nsec / 1000ULL;
+#endif
 }
 
 struct ServerProfile {
@@ -147,6 +282,34 @@ struct ServerProfile {
     uint64_t up_gate_cache_miss = 0;
     uint64_t mat_down_cache_miss = 0;
     uint64_t mat_other_cache_miss = 0;
+    uint64_t quantized_tail_tensors = 0;
+    uint64_t quantized_tail_bytes = 0;
+    uint64_t quantize_fallbacks = 0;
+    uint64_t quantize_fallback_type_disabled = 0;
+    uint64_t quantize_fallback_rank_not_2d = 0;
+    uint64_t quantize_fallback_row_not_aligned = 0;
+    uint64_t quantize_fallback_trait_unsupported = 0;
+    uint64_t quantize_fallback_alloc_failed = 0;
+};
+
+struct OwnedTensor {
+    ggml_context * ctx = nullptr;
+    ggml_tensor * tensor = nullptr;
+    std::vector<uint8_t> data;
+    std::vector<float> row_buffer;
+
+    ~OwnedTensor() {
+        if (ctx != nullptr) {
+            ggml_free(ctx);
+        }
+    }
+};
+
+struct PreparedTensor {
+    ggml_tensor * tensor = nullptr;
+    std::unique_ptr<OwnedTensor> owned;
+    bool quantized = false;
+    QuantizeFallbackReason fallback_reason = QuantizeFallbackReason::NONE;
 };
 
 SvdMatRefs get_svd_tensors(const llama_model & model, int32_t layer_id, int32_t op_id) {
@@ -194,10 +357,11 @@ struct RemoteMatExecutor {
     int64_t output_len = 0;
     std::vector<float> input_buffer;
     std::vector<float> output_buffer;
+    std::vector<std::unique_ptr<OwnedTensor>> owned_tensors;
 
     ~RemoteMatExecutor() {
         if (work_data != nullptr) {
-            free(work_data);
+            free_work_data(work_data);
         }
         if (ctx != nullptr) {
             ggml_free(ctx);
@@ -218,10 +382,11 @@ struct RemoteUpGateExecutor {
     std::vector<float> input_buffer;
     std::vector<float> output_up_buffer;
     std::vector<float> output_gate_buffer;
+    std::vector<std::unique_ptr<OwnedTensor>> owned_tensors;
 
     ~RemoteUpGateExecutor() {
         if (work_data != nullptr) {
-            free(work_data);
+            free_work_data(work_data);
         }
         if (ctx != nullptr) {
             ggml_free(ctx);
@@ -234,11 +399,7 @@ void * alloc_work_data(size_t size) {
         return nullptr;
     }
 
-    void * ptr = nullptr;
-    if (posix_memalign(&ptr, kWorkDataAlign, size) != 0) {
-        return nullptr;
-    }
-    return ptr;
+    return aligned_alloc_work_data(size);
 }
 
 ggml_tensor * make_weight_shape_tensor(
@@ -252,13 +413,125 @@ ggml_tensor * make_weight_shape_tensor(
     return weight_shape;
 }
 
+int64_t tensor_row_count(const ggml_tensor * tensor) {
+    return tensor->ne[1] * tensor->ne[2] * tensor->ne[3];
+}
+
+PreparedTensor maybe_quantize_tensor(
+        const ggml_tensor * source,
+        QuantizationMode quant_mode,
+        ServerProfile * prof) {
+    PreparedTensor result {};
+    result.tensor = const_cast<ggml_tensor *>(source);
+
+    if (quant_mode == QuantizationMode::NONE) {
+        result.fallback_reason = QuantizeFallbackReason::TYPE_DISABLED;
+        return result;
+    }
+    if (source->ne[2] != 1 || source->ne[3] != 1) {
+        result.fallback_reason = QuantizeFallbackReason::RANK_NOT_2D;
+        return result;
+    }
+
+    const enum ggml_type quant_type = quant_mode_to_ggml_type(quant_mode);
+    const ggml_type_traits * src_traits = ggml_get_type_traits(source->type);
+    const ggml_type_traits * dst_traits = ggml_get_type_traits(quant_type);
+    if (src_traits == nullptr || dst_traits == nullptr || dst_traits->from_float_ref == nullptr) {
+        result.fallback_reason = QuantizeFallbackReason::TRAIT_UNSUPPORTED;
+        return result;
+    }
+
+    const int64_t row_len = source->ne[0];
+    if (row_len % dst_traits->blck_size != 0) {
+        result.fallback_reason = QuantizeFallbackReason::ROW_NOT_ALIGNED;
+        return result;
+    }
+
+    ggml_quantize_init(quant_type);
+
+    auto owned = std::make_unique<OwnedTensor>();
+    ggml_init_params params {};
+    params.mem_size = 1 * 1024 * 1024;
+    params.mem_buffer = nullptr;
+    params.no_alloc = true;
+    owned->ctx = ggml_init(params);
+    if (owned->ctx == nullptr) {
+        result.fallback_reason = QuantizeFallbackReason::ALLOC_FAILED;
+        return result;
+    }
+
+    owned->tensor = ggml_new_tensor_2d(owned->ctx, quant_type, source->ne[0], source->ne[1]);
+    if (owned->tensor == nullptr) {
+        result.fallback_reason = QuantizeFallbackReason::ALLOC_FAILED;
+        return result;
+    }
+
+    owned->data.resize(ggml_nbytes(owned->tensor));
+    owned->row_buffer.resize((size_t) row_len);
+    owned->tensor->data = owned->data.data();
+
+    const size_t dst_row_size = ggml_row_size(quant_type, row_len);
+    const int64_t row_count = tensor_row_count(source);
+    for (int64_t row = 0; row < row_count; ++row) {
+        const uint8_t * src_row = static_cast<const uint8_t *>(source->data) + row * source->nb[1];
+        uint8_t * dst_row = owned->data.data() + (size_t) row * dst_row_size;
+        if (source->type == GGML_TYPE_F32) {
+            memcpy(owned->row_buffer.data(), src_row, sizeof(float) * (size_t) row_len);
+        } else if (src_traits->to_float != nullptr) {
+            src_traits->to_float(src_row, owned->row_buffer.data(), row_len);
+        } else {
+            result.fallback_reason = QuantizeFallbackReason::TRAIT_UNSUPPORTED;
+            return result;
+        }
+        dst_traits->from_float_ref(owned->row_buffer.data(), dst_row, row_len);
+    }
+
+    if (prof != nullptr) {
+        prof->quantized_tail_tensors += 1;
+        prof->quantized_tail_bytes += owned->data.size();
+    }
+    result.tensor = owned->tensor;
+    result.owned = std::move(owned);
+    result.quantized = true;
+    result.fallback_reason = QuantizeFallbackReason::NONE;
+    return result;
+}
+
+void record_quantize_fallback(ServerProfile * prof, QuantizeFallbackReason reason) {
+    if (prof == nullptr || reason == QuantizeFallbackReason::NONE) {
+        return;
+    }
+    prof->quantize_fallbacks += 1;
+    switch (reason) {
+        case QuantizeFallbackReason::TYPE_DISABLED:
+            prof->quantize_fallback_type_disabled += 1;
+            break;
+        case QuantizeFallbackReason::RANK_NOT_2D:
+            prof->quantize_fallback_rank_not_2d += 1;
+            break;
+        case QuantizeFallbackReason::ROW_NOT_ALIGNED:
+            prof->quantize_fallback_row_not_aligned += 1;
+            break;
+        case QuantizeFallbackReason::TRAIT_UNSUPPORTED:
+            prof->quantize_fallback_trait_unsupported += 1;
+            break;
+        case QuantizeFallbackReason::ALLOC_FAILED:
+            prof->quantize_fallback_alloc_failed += 1;
+            break;
+        case QuantizeFallbackReason::NONE:
+            break;
+    }
+}
+
 std::unique_ptr<RemoteMatExecutor> create_mat_executor(
         ggml_threadpool_t threadpool,
         int n_threads,
         const ggml_tensor * u,
         const ggml_tensor * v,
         int32_t rank_start,
-        int64_t input_len) {
+        int64_t input_len,
+        QuantizationMode quant_mode,
+        ServerProfile * prof) {
     validate_svd_tensors(u, v, rank_start, input_len);
 
     const int64_t total_rank = v->ne[1];
@@ -296,7 +569,21 @@ std::unique_ptr<RemoteMatExecutor> create_mat_executor(
         u->ne[1],
         u->nb[1],
         (size_t) rank_start * u->nb[0]);
-    exec->output_tensor = ggml_mul_mat_svd(exec->ctx, w_shape, v_tail, u_tail, exec->input_tensor, 0);
+    PreparedTensor prepared_v = maybe_quantize_tensor(v_tail, quant_mode, prof);
+    PreparedTensor prepared_u = maybe_quantize_tensor(u_tail, quant_mode, prof);
+    if (!prepared_v.quantized && quant_mode != QuantizationMode::NONE) {
+        record_quantize_fallback(prof, prepared_v.fallback_reason);
+    }
+    if (!prepared_u.quantized && quant_mode != QuantizationMode::NONE) {
+        record_quantize_fallback(prof, prepared_u.fallback_reason);
+    }
+    if (prepared_v.owned) {
+        exec->owned_tensors.push_back(std::move(prepared_v.owned));
+    }
+    if (prepared_u.owned) {
+        exec->owned_tensors.push_back(std::move(prepared_u.owned));
+    }
+    exec->output_tensor = ggml_mul_mat_svd(exec->ctx, w_shape, prepared_v.tensor, prepared_u.tensor, exec->input_tensor, 0);
     exec->input_tensor->data = exec->input_buffer.data();
     exec->output_tensor->data = exec->output_buffer.data();
 
@@ -324,7 +611,9 @@ std::unique_ptr<RemoteUpGateExecutor> create_up_gate_executor(
         const ggml_tensor * gate_u,
         const ggml_tensor * gate_v,
         int32_t rank_start,
-        int64_t input_len) {
+        int64_t input_len,
+        QuantizationMode quant_mode,
+        ServerProfile * prof) {
     validate_svd_tensors(up_u, up_v, rank_start, input_len);
     validate_svd_tensors(gate_u, gate_v, rank_start, input_len);
 
@@ -366,7 +655,21 @@ std::unique_ptr<RemoteUpGateExecutor> create_up_gate_executor(
         up_u->ne[1],
         up_u->nb[1],
         (size_t) rank_start * up_u->nb[0]);
-    exec->output_up = ggml_mul_mat_svd(exec->ctx, up_w_shape, up_v_tail, up_u_tail, exec->input_tensor, 0);
+    PreparedTensor prepared_up_v = maybe_quantize_tensor(up_v_tail, quant_mode, prof);
+    PreparedTensor prepared_up_u = maybe_quantize_tensor(up_u_tail, quant_mode, prof);
+    if (!prepared_up_v.quantized && quant_mode != QuantizationMode::NONE) {
+        record_quantize_fallback(prof, prepared_up_v.fallback_reason);
+    }
+    if (!prepared_up_u.quantized && quant_mode != QuantizationMode::NONE) {
+        record_quantize_fallback(prof, prepared_up_u.fallback_reason);
+    }
+    if (prepared_up_v.owned) {
+        exec->owned_tensors.push_back(std::move(prepared_up_v.owned));
+    }
+    if (prepared_up_u.owned) {
+        exec->owned_tensors.push_back(std::move(prepared_up_u.owned));
+    }
+    exec->output_up = ggml_mul_mat_svd(exec->ctx, up_w_shape, prepared_up_v.tensor, prepared_up_u.tensor, exec->input_tensor, 0);
 
     ggml_tensor * gate_v_tail = ggml_view_2d(
         exec->ctx,
@@ -382,7 +685,21 @@ std::unique_ptr<RemoteUpGateExecutor> create_up_gate_executor(
         gate_u->ne[1],
         gate_u->nb[1],
         (size_t) rank_start * gate_u->nb[0]);
-    exec->output_gate = ggml_mul_mat_svd(exec->ctx, gate_w_shape, gate_v_tail, gate_u_tail, exec->input_tensor, 0);
+    PreparedTensor prepared_gate_v = maybe_quantize_tensor(gate_v_tail, quant_mode, prof);
+    PreparedTensor prepared_gate_u = maybe_quantize_tensor(gate_u_tail, quant_mode, prof);
+    if (!prepared_gate_v.quantized && quant_mode != QuantizationMode::NONE) {
+        record_quantize_fallback(prof, prepared_gate_v.fallback_reason);
+    }
+    if (!prepared_gate_u.quantized && quant_mode != QuantizationMode::NONE) {
+        record_quantize_fallback(prof, prepared_gate_u.fallback_reason);
+    }
+    if (prepared_gate_v.owned) {
+        exec->owned_tensors.push_back(std::move(prepared_gate_v.owned));
+    }
+    if (prepared_gate_u.owned) {
+        exec->owned_tensors.push_back(std::move(prepared_gate_u.owned));
+    }
+    exec->output_gate = ggml_mul_mat_svd(exec->ctx, gate_w_shape, prepared_gate_v.tensor, prepared_gate_u.tensor, exec->input_tensor, 0);
     exec->input_tensor->data = exec->input_buffer.data();
     exec->output_up->data = exec->output_up_buffer.data();
     exec->output_gate->data = exec->output_gate_buffer.data();
@@ -440,6 +757,8 @@ int main(int argc, char ** argv) {
         : "/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/gguf_models/qwen.gguf.sort_svd.compact.gguf";
     const int port = argc > 2 ? std::stoi(argv[2]) : 7788;
     const int n_threads = argc > 3 ? std::stoi(argv[3]) : 8;
+    const std::string quant_arg = argc > 4 ? argv[4] : "off";
+    const QuantizationMode quant_mode = parse_quantization_mode(quant_arg);
 
     ggml_cpu_init();
 
@@ -465,6 +784,13 @@ int main(int argc, char ** argv) {
         return 1;
     }
 
+    if (!ensure_winsock_initialized()) {
+        std::cerr << "winsock initialization failed" << std::endl;
+        llama_model_free(model);
+        ggml_threadpool_free(threadpool);
+        return 1;
+    }
+
     const int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (listen_fd < 0) {
         std::cerr << "socket failed: " << strerror(errno) << std::endl;
@@ -474,8 +800,8 @@ int main(int argc, char ** argv) {
     }
 
     int one = 1;
-    setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
-    setsockopt(listen_fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+    setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char *>(&one), sizeof(one));
+    setsockopt(listen_fd, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char *>(&one), sizeof(one));
 
     sockaddr_in addr {};
     addr.sin_family = AF_INET;
@@ -485,14 +811,15 @@ int main(int argc, char ** argv) {
     if (bind(listen_fd, reinterpret_cast<const sockaddr *>(&addr), sizeof(addr)) != 0 ||
         listen(listen_fd, 1) != 0) {
         std::cerr << "bind/listen failed: " << strerror(errno) << std::endl;
-        close(listen_fd);
+        close_socket(listen_fd);
         llama_model_free(model);
         ggml_threadpool_free(threadpool);
         return 1;
     }
 
     std::cout << "svd_mobile_server listening on 0.0.0.0:" << port
-              << " threads=" << n_threads << std::endl;
+              << " threads=" << n_threads
+              << " quant_mode=" << quant_mode_name(quant_mode) << std::endl;
 
     std::unordered_map<MatExecutorKey, std::unique_ptr<RemoteMatExecutor>, MatExecutorKeyHash> mat_executors;
     std::unordered_map<UpGateExecutorKey, std::unique_ptr<RemoteUpGateExecutor>, UpGateExecutorKeyHash> up_gate_executors;
@@ -503,7 +830,7 @@ int main(int argc, char ** argv) {
             std::cerr << "accept failed: " << strerror(errno) << std::endl;
             continue;
         }
-        setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+        setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char *>(&one), sizeof(one));
         std::cout << "client connected" << std::endl;
         ServerProfile prof;
 
@@ -536,7 +863,7 @@ int main(int argc, char ** argv) {
                     if (!exec) {
                         prof.up_gate_cache_miss++;
                         const uint64_t t0 = now_us();
-                        exec = create_up_gate_executor(threadpool, n_threads, up.u, up.v, gate.u, gate.v, req.rank_start, req.input_len);
+                        exec = create_up_gate_executor(threadpool, n_threads, up.u, up.v, gate.u, gate.v, req.rank_start, req.input_len, quant_mode, &prof);
                         prof.create_up_gate_us += now_us() - t0;
                     }
                     const uint64_t t0 = now_us();
@@ -560,7 +887,7 @@ int main(int argc, char ** argv) {
                     auto & exec = mat_executors[key];
                     if (!exec) {
                         const uint64_t t0 = now_us();
-                        exec = create_mat_executor(threadpool, n_threads, mat.u, mat.v, req.rank_start, req.input_len);
+                        exec = create_mat_executor(threadpool, n_threads, mat.u, mat.v, req.rank_start, req.input_len, quant_mode, &prof);
                         const uint64_t dt = now_us() - t0;
                         if (is_down) {
                             prof.mat_down_cache_miss++;
@@ -614,6 +941,14 @@ int main(int argc, char ** argv) {
             << " run_up_gate=" << (prof.run_up_gate_us / 1000.0) << " ms"
             << " run_down=" << (prof.run_mat_down_us / 1000.0) << " ms"
             << " run_other=" << (prof.run_mat_other_us / 1000.0) << " ms"
+            << " quant_tail_tensors=" << prof.quantized_tail_tensors
+            << " quant_tail_mib=" << (prof.quantized_tail_bytes / 1024.0 / 1024.0)
+            << " quant_fallbacks=" << prof.quantize_fallbacks
+            << " fallback_type_disabled=" << prof.quantize_fallback_type_disabled
+            << " fallback_rank_not_2d=" << prof.quantize_fallback_rank_not_2d
+            << " fallback_row_not_aligned=" << prof.quantize_fallback_row_not_aligned
+            << " fallback_trait_unsupported=" << prof.quantize_fallback_trait_unsupported
+            << " fallback_alloc_failed=" << prof.quantize_fallback_alloc_failed
             << std::endl;
         std::cerr
             << "[svd-offload-server-stage-profile] create_total="
@@ -622,10 +957,10 @@ int main(int argc, char ** argv) {
             << ((prof.run_up_gate_us + prof.run_mat_down_us + prof.run_mat_other_us) / 1000.0) << " ms"
             << std::endl;
         std::cout << "client disconnected" << std::endl;
-        close(client_fd);
+        close_socket(client_fd);
     }
 
-    close(listen_fd);
+    close_socket(listen_fd);
     up_gate_executors.clear();
     mat_executors.clear();
     llama_model_free(model);

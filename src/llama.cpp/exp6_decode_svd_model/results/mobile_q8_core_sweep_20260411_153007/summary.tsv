@@ -1,0 +1,6 @@
+config	pc_threads	pc_group	phone_group	decode_tps	e2e_tps	generated_text
+pc8_phone8	8	client8	server8	14.7892	14.7143	, there was a young girl named Lily. She lived in a small village with her parents and two younger siblings. Lily
+pc6_phone8	6	client6	server8	10.8006	10.7347	, there was a young girl named Lily. She lived in a small village with her parents and two younger siblings. Lily
+pc4_phone8	4	client4	server8	9.00364	8.96065	, there was a young girl named Lily. She lived in a small village with her parents and two younger siblings. Lily
+pc2_phone8	2	client2	server8	7.69039	7.66318	, there was a young girl named Lily. She lived in a small village with her parents and two younger siblings. Lily
+pc1_phone8	1	client1	server8	4.27535	4.26997	, there was a young girl named Lily. She lived in a small village with her parents and two younger siblings. Lily

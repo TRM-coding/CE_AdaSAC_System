@@ -15,25 +15,36 @@ else()
 endif()
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/3dparty/llamacpp)
+if(WIN32 AND TARGET ggml-base)
+    target_link_libraries(ggml-base INTERFACE ws2_32)
+endif()
 include_directories(${CMAKE_SOURCE_DIR}/3dparty/llamacpp/src)
 include_directories(${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common)
 include_directories(${CMAKE_SOURCE_DIR}/3dparty/llamacpp/include)
 include_directories(${CMAKE_SOURCE_DIR}/3dparty/llamacpp/ggml)
 include_directories(${CMAKE_SOURCE_DIR}/3dparty/llamacpp/ggml/include)
 
+set(BUILD_PYTHON_OPS_BINDING OFF)
+if(NOT IS_ANDROID AND NOT WIN32)
+    set(BUILD_PYTHON_OPS_BINDING ON)
+endif()
 
 # 桌面版需要 Python
-if(NOT IS_ANDROID)
+if(BUILD_PYTHON_OPS_BINDING)
     add_subdirectory(${CMAKE_SOURCE_DIR}/3dparty/pybind11)
     find_package(Python3 REQUIRED COMPONENTS Interpreter Development Development.Module)
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/ops)
-add_subdirectory(ops)
+if(IS_ANDROID OR BUILD_PYTHON_OPS_BINDING)
+    add_subdirectory(ops)
+endif()
 
 if(IS_ANDROID)
     add_executable(decode_svd_test exp6_decode_svd_model/decode_svd_model.cpp)
+    add_executable(svd_mobile_server exp6_decode_svd_model/svd_mobile_server.cpp)
     target_link_libraries(decode_svd_test PRIVATE llama)
+    target_link_libraries(svd_mobile_server PRIVATE llama)
 endif()
 
 # 桌面版才编译 ops_test
@@ -42,18 +53,17 @@ if(NOT IS_ANDROID)
     add_executable(run_svd_test exp5_run_svd_model/run_svd_model.cpp)
     add_executable(decode_svd_test exp6_decode_svd_model/decode_svd_model.cpp)
     add_executable(svd_mobile_server exp6_decode_svd_model/svd_mobile_server.cpp)
-    add_executable(simple ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/examples/simple/simple.cpp)
-    add_executable(llama-bench
-        ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/examples/llama-bench/llama-bench.cpp
-        ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common/common.cpp
-        ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common/log.cpp
-        ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common/build-info.cpp  # 定义 LLAMA_* 符号
-    )
+    add_executable(run_resnet50 exp8_resnet50/run_resnet50.cpp)
     # target_link_libraries(ops_test PRIVATE Python3::Python llama opslib)
     target_link_libraries(load_test PRIVATE llama)
     target_link_libraries(run_svd_test PRIVATE llama)
     target_link_libraries(decode_svd_test PRIVATE llama)
     target_link_libraries(svd_mobile_server PRIVATE llama)
+    target_link_libraries(run_resnet50 PRIVATE llama ggml ggml-base ggml-cpu)
+    if(WIN32)
+        target_link_libraries(decode_svd_test PRIVATE ws2_32)
+        target_link_libraries(svd_mobile_server PRIVATE ws2_32)
+    endif()
     if (GGML_OPENMP)
         find_package(OpenMP)
         if (OpenMP_FOUND)
@@ -61,6 +71,15 @@ if(NOT IS_ANDROID)
             target_link_libraries(svd_mobile_server PRIVATE OpenMP::OpenMP_CXX)
         endif()
     endif()
-    target_link_libraries(simple PRIVATE opslib llama)
-    target_link_libraries(llama-bench PRIVATE opslib llama ggml)
+    if(TARGET opslib)
+        add_executable(simple ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/examples/simple/simple.cpp)
+        add_executable(llama-bench
+            ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/examples/llama-bench/llama-bench.cpp
+            ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common/common.cpp
+            ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common/log.cpp
+            ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common/build-info.cpp  # 定义 LLAMA_* 符号
+        )
+        target_link_libraries(simple PRIVATE opslib llama)
+        target_link_libraries(llama-bench PRIVATE opslib llama ggml)
+    endif()
 endif()

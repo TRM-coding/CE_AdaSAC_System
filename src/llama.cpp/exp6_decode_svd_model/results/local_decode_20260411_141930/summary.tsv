@@ -1,0 +1,5 @@
+config	pc_threads	pc_cpus	decode_tps	e2e_tps
+pc8_local	8	68-75	10.6999	10.674
+pc6_local	6	68-73	9.75389	9.73492
+pc4_local	4	68-71	7.34971	7.33899
+pc2_local	2	68-69	4.0815	4.07844

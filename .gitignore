@@ -5,3 +5,4 @@ build/
 build-android/
 test/current-submodule-standalone-release
 build-release-current/
+build-rel/

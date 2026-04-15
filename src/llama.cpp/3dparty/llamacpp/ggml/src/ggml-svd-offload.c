@@ -1,17 +1,23 @@
 #include "ggml-svd-offload.h"
 
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#else
 #include <arpa/inet.h>
-#include <errno.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
+#endif
+#include <errno.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/types.h>
 #include <time.h>
-#include <unistd.h>
 
 struct ggml_svd_offload_wire_request {
     uint32_t magic;
@@ -90,10 +96,39 @@ enum {
     GGML_SVD_OFFLOAD_VERSION = 2,
 };
 
+#ifdef _WIN32
+static bool ggml_svd_winsock_initialized(void) {
+    static bool initialized = false;
+    static bool ok = false;
+    if (!initialized) {
+        WSADATA wsa_data;
+        ok = WSAStartup(MAKEWORD(2, 2), &wsa_data) == 0;
+        initialized = true;
+    }
+    return ok;
+}
+
+static int ggml_svd_close_socket(int fd) {
+    return closesocket((SOCKET) fd);
+}
+#else
+static bool ggml_svd_winsock_initialized(void) {
+    return true;
+}
+
+static int ggml_svd_close_socket(int fd) {
+    return close(fd);
+}
+#endif
+
 static uint64_t ggml_svd_now_us(void) {
+#ifdef _WIN32
+    return (uint64_t) GetTickCount64() * 1000ULL;
+#else
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t) ts.tv_sec * 1000000ULL + (uint64_t) ts.tv_nsec / 1000ULL;
+#endif
 }
 
 static void ggml_svd_pair_cache_reset_entry_locked(struct ggml_svd_pair_cache_entry * entry) {
@@ -179,7 +214,7 @@ static struct ggml_svd_pair_cache_entry * ggml_svd_pair_cache_prepare_slot_locke
 static bool ggml_svd_send_all(int fd, const void * data, size_t size) {
     const char * ptr = (const char *) data;
     while (size > 0) {
-        const ssize_t written = send(fd, ptr, size, MSG_NOSIGNAL);
+        const int written = send(fd, ptr, (int) size, 0);
         if (written <= 0) {
             return false;
         }
@@ -192,7 +227,7 @@ static bool ggml_svd_send_all(int fd, const void * data, size_t size) {
 static bool ggml_svd_recv_all(int fd, void * data, size_t size) {
     char * ptr = (char *) data;
     while (size > 0) {
-        const ssize_t nread = recv(fd, ptr, size, 0);
+        const int nread = recv(fd, ptr, (int) size, 0);
         if (nread <= 0) {
             return false;
         }
@@ -223,8 +258,8 @@ static void ggml_svd_set_socket_timeouts(int fd, int32_t timeout_ms) {
     struct timeval tv;
     tv.tv_sec = timeout_ms / 1000;
     tv.tv_usec = (timeout_ms % 1000) * 1000;
-    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (const char *) &tv, sizeof(tv));
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tv, sizeof(tv));
 }
 
 static bool ggml_svd_client_connect_locked(void) {
@@ -234,6 +269,9 @@ static bool ggml_svd_client_connect_locked(void) {
     if (g_svd_client.socket_fd >= 0) {
         return true;
     }
+    if (!ggml_svd_winsock_initialized()) {
+        return false;
+    }
 
     const int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
@@ -241,7 +279,7 @@ static bool ggml_svd_client_connect_locked(void) {
     }
 
     int one = 1;
-    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (const char *) &one, sizeof(one));
     ggml_svd_set_socket_timeouts(fd, g_svd_client.timeout_ms);
 
     struct sockaddr_in addr;
@@ -249,12 +287,12 @@ static bool ggml_svd_client_connect_locked(void) {
     addr.sin_family = AF_INET;
     addr.sin_port = htons(g_svd_client.port);
     if (inet_pton(AF_INET, g_svd_client.host, &addr.sin_addr) != 1) {
-        close(fd);
+        ggml_svd_close_socket(fd);
         return false;
     }
 
     if (connect(fd, (const struct sockaddr *) &addr, sizeof(addr)) != 0) {
-        close(fd);
+        ggml_svd_close_socket(fd);
         return false;
     }
 
@@ -266,7 +304,7 @@ void ggml_svd_offload_set_client_config(const struct ggml_svd_offload_client_con
     pthread_mutex_lock(&g_svd_client.mutex);
 
     if (g_svd_client.socket_fd >= 0) {
-        close(g_svd_client.socket_fd);
+        ggml_svd_close_socket(g_svd_client.socket_fd);
         g_svd_client.socket_fd = -1;
     }
     ggml_svd_gate_cache_clear_locked();
@@ -321,7 +359,7 @@ static bool ggml_svd_offload_begin_request_impl(
 
     if (!ggml_svd_send_all(g_svd_client.socket_fd, &req, sizeof(req)) ||
         !ggml_svd_send_all(g_svd_client.socket_fd, input, sizeof(float) * (size_t) input_len)) {
-        close(g_svd_client.socket_fd);
+        ggml_svd_close_socket(g_svd_client.socket_fd);
         g_svd_client.socket_fd = -1;
         ggml_svd_gate_cache_clear_locked();
         pthread_mutex_unlock(&g_svd_client.mutex);
@@ -411,7 +449,7 @@ bool ggml_svd_offload_finish_request(
         rsp.output_len_aux != 0 ||
         rsp.output_len != output_len ||
         !ggml_svd_recv_all(fd, output, sizeof(float) * (size_t) output_len)) {
-        close(fd);
+        ggml_svd_close_socket(fd);
         if (g_svd_client.socket_fd == fd) {
             g_svd_client.socket_fd = -1;
         }
@@ -457,7 +495,7 @@ bool ggml_svd_offload_finish_up_gate_request(
         true;
 
     if (!ok) {
-        close(fd);
+        ggml_svd_close_socket(fd);
         if (g_svd_client.socket_fd == fd) {
             g_svd_client.socket_fd = -1;
         }
@@ -477,7 +515,7 @@ bool ggml_svd_offload_finish_up_gate_request(
         ggml_svd_pair_cache_resize_locked(&entry->gate_data, (int32_t) paired_output_len);
 
     if (!ok) {
-        close(fd);
+        ggml_svd_close_socket(fd);
         if (g_svd_client.socket_fd == fd) {
             g_svd_client.socket_fd = -1;
         }
@@ -493,7 +531,7 @@ bool ggml_svd_offload_finish_up_gate_request(
          ggml_svd_recv_all(fd, second_out, sizeof(float) * (size_t) paired_output_len);
 
     if (!ok) {
-        close(fd);
+        ggml_svd_close_socket(fd);
         if (g_svd_client.socket_fd == fd) {
             g_svd_client.socket_fd = -1;
         }
@@ -717,7 +755,7 @@ void ggml_svd_offload_close_client(void) {
             send_total_us / 1000.0,
             wait_total_us / 1000.0);
     if (g_svd_client.socket_fd >= 0) {
-        close(g_svd_client.socket_fd);
+        ggml_svd_close_socket(g_svd_client.socket_fd);
         g_svd_client.socket_fd = -1;
     }
     ggml_svd_gate_cache_clear_locked();

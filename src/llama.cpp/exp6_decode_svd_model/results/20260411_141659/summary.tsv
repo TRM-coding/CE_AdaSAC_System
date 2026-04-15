@@ -1,0 +1,5 @@
+config	pc_threads	pc_cpus	phone_threads	decode_tps	e2e_tps
+pc8_phone8	8	68-75	8	7.23584	7.19883
+pc6_phone8	6	68-73	8	7.23423	7.19734
+pc4_phone8	4	68-71	8	6.5055	6.47594
+pc2_phone8	2	68-69	8	5.59587	5.57494
