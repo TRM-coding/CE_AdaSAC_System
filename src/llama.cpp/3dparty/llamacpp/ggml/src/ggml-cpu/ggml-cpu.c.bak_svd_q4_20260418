@@ -1715,10 +1715,10 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     const enum ggml_type vec_dot_type_v = type_traits_cpu[v->type].vec_dot_type;
     const enum ggml_type vec_dot_type_u = type_traits_cpu[u->type].vec_dot_type;
 
-    const ggml_vec_dot_t vec_dot_v = type_traits_cpu[v->type].vec_dot;
-    const ggml_vec_dot_t vec_dot_u = type_traits_cpu[u->type].vec_dot;
-
-    if (vec_dot_v == NULL || vec_dot_u == NULL) {
+    if ((v->type != GGML_TYPE_F32 && v->type != GGML_TYPE_F16) || vec_dot_type_v != v->type) {
+        return false;
+    }
+    if ((u->type != GGML_TYPE_F32 && u->type != GGML_TYPE_F16) || vec_dot_type_u != u->type) {
         return false;
     }
 
@@ -1737,14 +1737,14 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     const float * x = (const float *) b->data;
     float * dst_data = (float *) dst->data;
 
+    const ggml_vec_dot_t vec_dot_v = type_traits_cpu[v->type].vec_dot;
+    const ggml_vec_dot_t vec_dot_u = type_traits_cpu[u->type].vec_dot;
+
     const ggml_from_float_t from_float_v = type_traits_cpu[vec_dot_type_v].from_float;
     const ggml_from_float_t from_float_u = type_traits_cpu[vec_dot_type_u].from_float;
 
     const void * x_vec = x;
     const bool need_x_convert = b->type != vec_dot_type_v;
-    if (need_x_convert && from_float_v == NULL) {
-        return false;
-    }
     if (need_x_convert) {
         x_vec = incr_ptr_aligned(&wdata_cur, ggml_row_size(vec_dot_type_v, b->ne[0]), sizeof(int64_t));
         if (ith == 0) {
@@ -1875,9 +1875,6 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
 
     const void * tmp_vec = tmp;
     const bool need_tmp_convert = k_local > 0 && vec_dot_type_u != GGML_TYPE_F32;
-    if (need_tmp_convert && from_float_u == NULL) {
-        return false;
-    }
     if (need_tmp_convert) {
         tmp_vec = incr_ptr_aligned(&wdata_cur, ggml_row_size(vec_dot_type_u, k_local), sizeof(int64_t));
         if (ith == 0) {

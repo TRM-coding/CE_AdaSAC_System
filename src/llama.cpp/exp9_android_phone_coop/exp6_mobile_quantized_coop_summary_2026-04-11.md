@@ -5,6 +5,8 @@
 > 当前权威构建和运行口径以 [build-rel/README.md](/home/tianruiming/CE_ADA_LLAMA/build-rel/README.md) 与 [build-rel/android-build-notes.md](/home/tianruiming/CE_ADA_LLAMA/build-rel/android-build-notes.md) 为准。
 > 之后确认过一个关键问题：如果 Android 端 `svd_mobile_server` 没有和最新 `ggml-cpu.c / ggml-svd-offload.c / llama-graph.cpp` 一起重编并重新推送，远端 FFN 会异常变慢；这不是手机硬件本身的问题。
 > 此外，TCP 方式连接的 `adb` 设备不应默认假设 `127.0.0.1:7788` 一定可用，必要时应直接连接手机的可达 IP:port，并在服务端显式使用 `svd` executor。
+> 2026-04-18 又确认了一个后续修复：Windows 侧 `qwen.gguf.sort_svd.compact.llama_quant_q4_0.gguf` 之前没有命中 `Q4_0` SVD vec 快路径，原因是 `ggml_compute_forward_mul_mat_svd_vec()` 仅放行 `F32/F16` 的 `U/V`。该问题现已修复，实测见 [exp9_windows_q4_svd_fastpath_2026-04-18.md](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp9_android_phone_coop/exp9_windows_q4_svd_fastpath_2026-04-18.md)。若要在 Windows + Android 协同链路中吃到这一修复，Android 端也必须用包含同一补丁的 `svd_mobile_server` 重编并重新部署。
+> 同日新增的真机对照还表明：Android 本地 `mobile_q4_0` 明显慢于 `llama_quant_q4_0`，因此 `mobile_*` 模型不再应被视为当前默认推荐部署模型。默认口径应优先使用 `qwen.gguf.sort_svd.compact.llama_quant_q4_0.gguf`。
 
 ## 1. 背景与当前目标
 

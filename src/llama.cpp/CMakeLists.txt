@@ -2,6 +2,14 @@ cmake_minimum_required(VERSION 3.10)
 
 project(OPS_TEST)
 
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    foreach(flag_var CMAKE_C_FLAGS_RELEASE CMAKE_CXX_FLAGS_RELEASE)
+        if(NOT "${${flag_var}}" MATCHES "([/-]O[0-3sSzZx]|-Ofast)")
+            set(${flag_var} "${${flag_var}} -O3 -DNDEBUG" CACHE STRING "Release optimization flags" FORCE)
+        endif()
+    endforeach()
+endif()
+
 # 检测是否为安卓平台
 if(ANDROID)
     message("Android Version Compiling")
