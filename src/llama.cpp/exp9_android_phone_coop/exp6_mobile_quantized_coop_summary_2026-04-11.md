@@ -1,5 +1,11 @@
 # 2026-04-11 手机端量化协同推理开发与研究总报告
 
+> 2026-04-16 校正：
+> 本文是 `2026-04-11` 阶段性总结，不应再直接当作当前部署说明。
+> 当前权威构建和运行口径以 [build-rel/README.md](/home/tianruiming/CE_ADA_LLAMA/build-rel/README.md) 与 [build-rel/android-build-notes.md](/home/tianruiming/CE_ADA_LLAMA/build-rel/android-build-notes.md) 为准。
+> 之后确认过一个关键问题：如果 Android 端 `svd_mobile_server` 没有和最新 `ggml-cpu.c / ggml-svd-offload.c / llama-graph.cpp` 一起重编并重新推送，远端 FFN 会异常变慢；这不是手机硬件本身的问题。
+> 此外，TCP 方式连接的 `adb` 设备不应默认假设 `127.0.0.1:7788` 一定可用，必要时应直接连接手机的可达 IP:port，并在服务端显式使用 `svd` executor。
+
 ## 1. 背景与当前目标
 
 当前实验链路的目标是：
@@ -183,13 +189,56 @@ output_tensor_bytes: 2214483968
 
 这是因为当前会话里直接用 `taskset -c 60-67` 会报 `Invalid argument`，但通过 cpuset 子组分配后，进程亲和性可以稳定落到目标核心集合。
 
+### 5.4 Android 真机测速口径
+
+手机端吞吐对温度和调度策略非常敏感。协同推理、SVD 本地 decode、官方 dense Q4_0 baseline 必须使用同一套真机测速口径，否则 `40 tok/s` 和 `55 tok/s` 之间的差异可能只是实验环境差异。
+
+推荐真机准备流程：
+
+```bash
+adb reboot
+adb wait-for-device
+until adb shell getprop sys.boot_completed 2>/dev/null | grep -q 1; do sleep 1; done
+
+# InfraPowerTest 的冷机实验会等温度接近 25.0 C。
+adb shell 'su -c "cat /sys/class/power_supply/battery/temp"'
+
+adb shell 'su -c "sync && echo 3 > /proc/sys/vm/drop_caches"'
+adb shell 'su -c "echo performance > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor"'
+adb shell 'su -c "echo performance > /sys/devices/system/cpu/cpufreq/policy6/scaling_governor"'
+adb shell 'su -c "grep . /sys/devices/system/cpu/cpufreq/policy*/scaling_governor"'
+```
+
+推荐 CPU baseline 命令形态：
+
+```bash
+adb shell 'su -c "cd /data/local/tmp/CE_Ada && \
+  LD_LIBRARY_PATH=/data/local/tmp/CE_Ada \
+  taskset -a ff ./llama-bench-fastflags \
+    -m /data/local/tmp/CE_Ada/qwen.q4_0.gguf \
+    -pg 1,512 \
+    -r 2 \
+    -t 8 \
+    --prio 3 \
+    --cpu-mask 0xff \
+    --cpu-strict 1"'
+```
+
+注意事项：
+
+- `taskset -a ff`、`--cpu-mask 0xff`、`--cpu-strict 1`、`--prio 3` 需要同时记录。
+- `-pg 1,512 -r 2` 与裸跑 `-p 0 -n 256` 不是同一测速口径。
+- `policy0/policy6` 若仍是 `walt`，结果通常不能和 `performance` governor 下的冷机结果直接比较。
+- 之前在同一台 OnePlus 15 上，口径对齐后 dense Q4_0 可到约 `52.5 tok/s`；设备升温到约 `30 C` 后，同类命令可能掉回高 `30 tok/s` 区间。
+- 因此，协同推理结果必须同时记录温度、governor、CPU mask、线程数、优先级、token 数和模型文件名。
+
 ## 6. 关键实验与结果
 
 ### 6.1 运行时量化方案的结论
 
 文档：
 
-- [exp6_quantized_mobile_offload_report_2026-04-11.md](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp6_decode_svd_model/exp6_quantized_mobile_offload_report_2026-04-11.md)
+- [exp6_quantized_mobile_offload_report_2026-04-11.md](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp9_android_phone_coop/exp6_quantized_mobile_offload_report_2026-04-11.md)
 
 主要结论：
 
@@ -354,6 +403,6 @@ Once upon a time, there was a young girl named Lily. She lived in a small villag
 本总报告对应的关键子文档如下：
 
 - [svd_interface_callchain.md](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp6_decode_svd_model/svd_interface_callchain.md)
-- [exp6_cooperative_offload_followup_2026-04-07.md](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp6_decode_svd_model/exp6_cooperative_offload_followup_2026-04-07.md)
-- [exp6_quantized_mobile_offload_report_2026-04-11.md](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp6_decode_svd_model/exp6_quantized_mobile_offload_report_2026-04-11.md)
+- [exp6_cooperative_offload_followup_2026-04-07.md](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp9_android_phone_coop/exp6_cooperative_offload_followup_2026-04-07.md)
+- [exp6_quantized_mobile_offload_report_2026-04-11.md](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp9_android_phone_coop/exp6_quantized_mobile_offload_report_2026-04-11.md)
 - [exp6_mobile_quantized_svd_model_report_2026-04-11.md](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp6_decode_svd_model/exp6_mobile_quantized_svd_model_report_2026-04-11.md)

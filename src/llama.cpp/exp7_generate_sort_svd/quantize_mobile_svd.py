@@ -69,6 +69,10 @@ def parse_args() -> argparse.Namespace:
         choices=sorted(QTYPE_ALIASES.keys()),
         help="quantization type used for SVD U/V tensors",
     )
+    parser.add_argument(
+        "--reference",
+        help="optional dense GGUF whose tensor quantization types will be mirrored for matching tensor names",
+    )
     return parser.parse_args()
 
 
@@ -104,11 +108,29 @@ def quantize_tensor_data(tensor, qtype: GGMLQuantizationType) -> np.ndarray:
     return quantize(matrix, qtype)
 
 
+def build_reference_qtypes(reference_path: str | None) -> dict[str, GGMLQuantizationType]:
+    if not reference_path:
+        return {}
+
+    reader = GGUFReader(str(reference_path))
+    qtypes: dict[str, GGMLQuantizationType] = {}
+    for tensor in reader.tensors:
+        try:
+            qtype = GGMLQuantizationType(tensor.tensor_type)
+        except ValueError:
+            continue
+        if qtype in (GGMLQuantizationType.F16, GGMLQuantizationType.F32):
+            continue
+        qtypes[tensor.name] = qtype
+    return qtypes
+
+
 def main() -> int:
     args = parse_args()
     input_path = Path(args.input)
     qtype = QTYPE_ALIASES[args.quant]
     output_path = Path(args.output) if args.output else input_path.with_suffix(input_path.suffix + f".mobile_{args.quant}.gguf")
+    reference_qtypes = build_reference_qtypes(args.reference)
 
     reader = GGUFReader(str(input_path))
     writer = GGUFWriter(str(output_path), "qwen2_svd")
@@ -117,6 +139,8 @@ def main() -> int:
     total_tensors = 0
     quantized_tensors = 0
     kept_tensors = 0
+    quantized_by_reference = 0
+    quantized_svd = 0
     input_bytes = 0
     output_bytes = 0
 
@@ -124,17 +148,28 @@ def main() -> int:
         total_tensors += 1
         input_bytes += tensor.n_bytes
 
+        target_qtype = None
         if is_mobile_svd_tensor(tensor.name):
+            target_qtype = qtype
+            quantized_svd += 1
+        elif tensor.name in reference_qtypes and reference_qtypes[tensor.name] != tensor.tensor_type:
+            # Mirror the official dense quantized model for all matching non-SVD tensors.
+            # This preserves special cases such as Q6_K embeddings instead of flattening
+            # everything to the requested SVD quant type.
+            target_qtype = reference_qtypes[tensor.name]
+            quantized_by_reference += 1
+
+        if target_qtype is not None:
             try:
-                qdata = quantize_tensor_data(tensor, qtype)
+                qdata = quantize_tensor_data(tensor, target_qtype)
             except Exception as exc:
-                raise RuntimeError(f"failed to quantize tensor {tensor.name}: {exc}") from exc
+                raise RuntimeError(f"failed to quantize tensor {tensor.name} to {target_qtype.name}: {exc}") from exc
 
             writer.add_tensor(
                 name=tensor.name,
                 tensor=qdata,
                 raw_shape=tuple(int(x) for x in qdata.shape),
-                raw_dtype=qtype,
+                raw_dtype=target_qtype,
             )
             quantized_tensors += 1
             output_bytes += qdata.nbytes
@@ -157,8 +192,11 @@ def main() -> int:
     print(f"input: {input_path}")
     print(f"output: {output_path}")
     print(f"quant: {args.quant}")
+    print(f"reference: {args.reference}")
     print(f"total_tensors: {total_tensors}")
     print(f"quantized_svd_tensors: {quantized_tensors}")
+    print(f"quantized_svd_path_tensors: {quantized_svd}")
+    print(f"quantized_by_reference_tensors: {quantized_by_reference}")
     print(f"kept_original_tensors: {kept_tensors}")
     print(f"input_tensor_bytes: {input_bytes}")
     print(f"output_tensor_bytes: {output_bytes}")

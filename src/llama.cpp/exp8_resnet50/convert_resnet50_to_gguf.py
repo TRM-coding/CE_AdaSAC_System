@@ -75,12 +75,49 @@ def to_bias_4d(bias: torch.Tensor) -> np.ndarray:
     return bias.view(1, 1, -1, 1).contiguous().cpu().numpy().astype(np.float32)
 
 
-def add_conv_bn(writer: GGUFWriter, prefix: str, conv: torch.nn.Conv2d, bn: torch.nn.BatchNorm2d) -> None:
+def conv_weight_to_matrix(weight: torch.Tensor) -> np.ndarray:
+    # [out, in, kh, kw] -> 2D matrix with shape [out, in * kh * kw].
+    return weight.reshape(weight.shape[0], -1).contiguous().cpu().numpy().astype(np.float32)
+
+
+def svd_factorize_conv_weight(
+    weight: torch.Tensor,
+    rank_ratio: float,
+    dtype: np.dtype,
+) -> tuple[np.ndarray, np.ndarray]:
+    matrix = conv_weight_to_matrix(weight)
+    matrix_torch = torch.from_numpy(matrix)
+    u, s, vh = torch.linalg.svd(matrix_torch, full_matrices=False)
+
+    full_rank = s.shape[0]
+    keep_rank = max(1, min(full_rank, int(round(full_rank * rank_ratio))))
+
+    u = u[:, :keep_rank]
+    s = s[:keep_rank]
+    vh = vh[:keep_rank, :]
+
+    s_sqrt = torch.sqrt(s)
+    u_factor = (u * s_sqrt.unsqueeze(0)).contiguous().cpu().numpy().astype(dtype)
+    v_factor = (s_sqrt.unsqueeze(1) * vh).contiguous().cpu().numpy().astype(dtype)
+    return u_factor, v_factor
+
+
+def add_conv_bn(
+    writer: GGUFWriter,
+    prefix: str,
+    conv: torch.nn.Conv2d,
+    bn: torch.nn.BatchNorm2d,
+    rank_ratio: float,
+    svd_dtype: np.dtype,
+) -> None:
     fused_weight, fused_bias = fuse_conv_bn(conv, bn)
     conv_weight = to_ggml_conv_storage(fused_weight)
     conv_bias = to_bias_4d(fused_bias)
+    svd_u, svd_v = svd_factorize_conv_weight(fused_weight, rank_ratio, svd_dtype)
     writer.add_tensor(f"{prefix}.weight", conv_weight, raw_shape=tuple(conv_weight.shape))
     writer.add_tensor(f"{prefix}.bias", conv_bias, raw_shape=tuple(conv_bias.shape[::-1]))
+    writer.add_tensor(f"{prefix}.weight_svd_u", svd_u, raw_shape=tuple(svd_u.shape))
+    writer.add_tensor(f"{prefix}.weight_svd_v", svd_v, raw_shape=tuple(svd_v.shape))
 
 
 def ordered_labels(config) -> list[str]:
@@ -91,9 +128,25 @@ def ordered_labels(config) -> list[str]:
     return labels
 
 
-def convert(model_dir: Path, output_path: Path, repo_id: str) -> None:
+def convert(
+    model_dir: Path,
+    output_path: Path,
+    repo_id: str,
+    conv_svd_rank_ratio: float,
+    conv_svd_dtype: str,
+) -> None:
     model = AutoModelForImageClassification.from_pretrained(str(model_dir)).eval()
     processor = AutoImageProcessor.from_pretrained(str(model_dir))
+
+    if not (0.0 < conv_svd_rank_ratio <= 1.0):
+        raise ValueError("--conv-svd-rank-ratio must be in (0, 1]")
+
+    if conv_svd_dtype == "f16":
+        svd_dtype = np.float16
+    elif conv_svd_dtype == "f32":
+        svd_dtype = np.float32
+    else:
+        raise ValueError(f"unsupported --conv-svd-dtype: {conv_svd_dtype}")
 
     writer = GGUFWriter(str(output_path), "resnet50")
     writer.add_name("resnet50")
@@ -113,7 +166,14 @@ def convert(model_dir: Path, output_path: Path, repo_id: str) -> None:
     writer.add_array("resnet50.labels", ordered_labels(model.config))
 
     stem = model.resnet.embedder.embedder
-    add_conv_bn(writer, "resnet.stem.conv", stem.convolution, stem.normalization)
+    add_conv_bn(
+        writer,
+        "resnet.stem.conv",
+        stem.convolution,
+        stem.normalization,
+        conv_svd_rank_ratio,
+        svd_dtype,
+    )
 
     for stage_idx, stage in enumerate(model.resnet.encoder.stages):
         for block_idx, block in enumerate(stage.layers):
@@ -125,15 +185,17 @@ def convert(model_dir: Path, output_path: Path, repo_id: str) -> None:
                     f"{base}.downsample",
                     block.shortcut.convolution,
                     block.shortcut.normalization,
+                    conv_svd_rank_ratio,
+                    svd_dtype,
                 )
 
             conv1 = block.layer[0]
             conv2 = block.layer[1]
             conv3 = block.layer[2]
 
-            add_conv_bn(writer, f"{base}.conv1", conv1.convolution, conv1.normalization)
-            add_conv_bn(writer, f"{base}.conv2", conv2.convolution, conv2.normalization)
-            add_conv_bn(writer, f"{base}.conv3", conv3.convolution, conv3.normalization)
+            add_conv_bn(writer, f"{base}.conv1", conv1.convolution, conv1.normalization, conv_svd_rank_ratio, svd_dtype)
+            add_conv_bn(writer, f"{base}.conv2", conv2.convolution, conv2.normalization, conv_svd_rank_ratio, svd_dtype)
+            add_conv_bn(writer, f"{base}.conv3", conv3.convolution, conv3.normalization, conv_svd_rank_ratio, svd_dtype)
 
     fc = model.classifier[1]
     writer.add_tensor(
@@ -159,6 +221,8 @@ def main() -> None:
     parser.add_argument("--outfile", default=str(ROOT / "gguf_models" / "resnet50-f32.gguf"))
     parser.add_argument("--proxy-url", default=os.environ.get("https_proxy") or os.environ.get("http_proxy"))
     parser.add_argument("--skip-download", action="store_true")
+    parser.add_argument("--conv-svd-rank-ratio", type=float, default=1.0)
+    parser.add_argument("--conv-svd-dtype", choices=["f16", "f32"], default="f16")
     args = parser.parse_args()
 
     model_dir = Path(args.model_dir)
@@ -168,7 +232,13 @@ def main() -> None:
     if not args.skip_download:
         maybe_download(args.repo_id, model_dir, args.proxy_url)
 
-    convert(model_dir, output_path, args.repo_id)
+    convert(
+        model_dir,
+        output_path,
+        args.repo_id,
+        args.conv_svd_rank_ratio,
+        args.conv_svd_dtype,
+    )
     print(f"saved GGUF to: {output_path}")
 
 

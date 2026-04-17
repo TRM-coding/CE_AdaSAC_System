@@ -16,6 +16,7 @@ enum ggml_svd_op_kind {
 enum ggml_svd_offload_request_kind {
     GGML_SVD_OFFLOAD_REQ_MAT = 0,
     GGML_SVD_OFFLOAD_REQ_UP_GATE = 1,
+    GGML_SVD_OFFLOAD_REQ_FFN = 2,
 };
 
 struct ggml_svd_offload_client_config {
@@ -57,6 +58,13 @@ bool ggml_svd_offload_begin_up_gate_request(
         int64_t input_len,
         struct ggml_svd_offload_request_handle * handle);
 
+bool ggml_svd_offload_begin_ffn_request(
+        int32_t layer_id,
+        float offload_rate,
+        const float * input,
+        int64_t input_len,
+        struct ggml_svd_offload_request_handle * handle);
+
 bool ggml_svd_offload_finish_request(
         struct ggml_svd_offload_request_handle * handle,
         float * output,
@@ -67,6 +75,11 @@ bool ggml_svd_offload_finish_up_gate_request(
         float * output,
         int64_t output_len,
         int64_t paired_output_len);
+
+bool ggml_svd_offload_finish_ffn_request(
+        struct ggml_svd_offload_request_handle * handle,
+        float * output,
+        int64_t output_len);
 
 bool ggml_svd_offload_has_cached_up(
         int32_t layer_id,

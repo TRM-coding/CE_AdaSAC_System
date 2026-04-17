@@ -458,6 +458,7 @@ extern "C" {
 
         GGML_OP_MUL_MAT,
         GGML_OP_MUL_MAT_SVD,
+        GGML_OP_FFN_SVD_OFFLOAD,
         GGML_OP_MUL_MAT_ID,
         GGML_OP_OUT_PROD,
 
@@ -1137,6 +1138,16 @@ extern "C" {
         struct ggml_tensor  * w_u,
         struct ggml_tensor  * b,
         int64_t k_trunc);
+
+    GGML_API struct ggml_tensor * ggml_ffn_svd_offload(
+        struct ggml_context * ctx,
+        struct ggml_tensor  * input,
+        struct ggml_tensor  * up_u,
+        struct ggml_tensor  * up_v,
+        struct ggml_tensor  * gate_u,
+        struct ggml_tensor  * gate_v,
+        struct ggml_tensor  * down_u,
+        struct ggml_tensor  * down_v);
 
     GGML_API void ggml_mul_mat_svd_set_offload_meta(
         struct ggml_tensor * tensor,

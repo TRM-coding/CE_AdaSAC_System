@@ -12,6 +12,9 @@ PORT="${PORT:-7788}"
 TOKENS="${TOKENS:-8}"
 SERVER_THREADS="${SERVER_THREADS:-8}"
 OFFLOAD_RATE="${OFFLOAD_RATE:-1.0}"
+SERVER_QUANT_MODE="${SERVER_QUANT_MODE:-off}"
+SERVER_EXECUTOR_MODE="${SERVER_EXECUTOR_MODE:-svd}"
+SERVER_ENDPOINT="${SERVER_ENDPOINT:-}"
 RESULT_ROOT="${RESULT_ROOT:-$ROOT_DIR/src/llama.cpp/exp6_decode_svd_model/results}"
 RUN_TAG="${RUN_TAG:-android_phone_$(date +%Y%m%d_%H%M%S)}"
 RUN_DIR="$RESULT_ROOT/$RUN_TAG"
@@ -35,11 +38,25 @@ stop_phone_server() {
   adb -s "$ADB_SERIAL" forward --remove "tcp:$PORT" >/dev/null 2>&1 || true
 }
 
+resolve_server_endpoint() {
+  if [[ -n "$SERVER_ENDPOINT" ]]; then
+    printf '%s\n' "$SERVER_ENDPOINT"
+    return
+  fi
+
+  if [[ "$ADB_SERIAL" =~ ^([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+):[0-9]+$ ]]; then
+    printf '%s:%s\n' "${BASH_REMATCH[1]}" "$PORT"
+    return
+  fi
+
+  adb -s "$ADB_SERIAL" forward "tcp:$PORT" "tcp:$PORT"
+  printf '127.0.0.1:%s\n' "$PORT"
+}
+
 start_phone_server() {
   local server_log="$1"
   stop_phone_server
-  adb -s "$ADB_SERIAL" forward "tcp:$PORT" "tcp:$PORT"
-  adb -s "$ADB_SERIAL" shell "cd $ANDROID_DIR && chmod +x svd_mobile_server && nohup ./svd_mobile_server $ANDROID_MODEL $PORT $SERVER_THREADS > phone_server.log 2>&1 &"
+  adb -s "$ADB_SERIAL" shell "cd $ANDROID_DIR && chmod +x svd_mobile_server && nohup ./svd_mobile_server $ANDROID_MODEL $PORT $SERVER_THREADS $SERVER_QUANT_MODE $SERVER_EXECUTOR_MODE > phone_server.log 2>&1 &"
   sleep 5
   adb -s "$ADB_SERIAL" shell "cat $ANDROID_DIR/phone_server.log" >"$server_log" 2>&1 || true
 }
@@ -50,6 +67,8 @@ run_one() {
   local prefix="pc${client_threads}_phone${SERVER_THREADS}_real"
   local server_log="$RUN_DIR/${prefix}_server.log"
   local client_log="$RUN_DIR/${prefix}_client.log"
+  local server_endpoint
+  server_endpoint="$(resolve_server_endpoint)"
 
   echo "== Running $prefix =="
   start_phone_server "$server_log"
@@ -59,7 +78,7 @@ run_one() {
     cd "$BUILD_DIR"
     join_cgroup
     exec taskset -c "$client_cpus" env LD_LIBRARY_PATH=./bin OMP_NUM_THREADS="$client_threads" \
-      ./decode_svd_test "$MODEL_HOST_PATH" "$TOKENS" "$client_threads" 0 "127.0.0.1:$PORT" "$OFFLOAD_RATE"
+      ./decode_svd_test "$MODEL_HOST_PATH" "$TOKENS" "$client_threads" 0 "$server_endpoint" "$OFFLOAD_RATE"
   ) >"$client_log" 2>&1
 
   adb -s "$ADB_SERIAL" shell "cat $ANDROID_DIR/phone_server.log" >>"$server_log" 2>&1 || true

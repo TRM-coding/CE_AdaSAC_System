@@ -11,6 +11,27 @@ static const size_t kiB = 1024;
 static const size_t MiB = 1024*kiB;
 static const size_t GiB = 1024*MiB;
 
+static bool llm_kv_has_qwen2_svd_alias(enum llm_arch arch, enum llm_kv kid) {
+    if (arch != LLM_ARCH_QWEN2_SVD) {
+        return false;
+    }
+
+    switch (kid) {
+        case LLM_KV_ROPE_DIMENSION_COUNT:
+        case LLM_KV_ROPE_FREQ_BASE:
+        case LLM_KV_ROPE_SCALE_LINEAR:
+        case LLM_KV_ROPE_SCALING_TYPE:
+        case LLM_KV_ROPE_SCALING_FACTOR:
+        case LLM_KV_ROPE_SCALING_ATTN_FACTOR:
+        case LLM_KV_ROPE_SCALING_ORIG_CTX_LEN:
+        case LLM_KV_ROPE_SCALING_FINETUNED:
+        case LLM_KV_ROPE_SCALING_YARN_LOG_MUL:
+            return true;
+        default:
+            return false;
+    }
+}
+
 const char * llama_file_version_name(llama_fver version) {
     switch (version) {
         case GGUF_FILE_VERSION_V1: return "GGUF V1 (support until nov 2023)";
@@ -370,7 +391,23 @@ namespace GGUFMeta {
 
     template<typename T>
     bool llama_model_loader::get_key(enum llm_kv kid, T & result, bool required) {
-        return get_key(llm_kv(kid), result, required);
+        const std::string key = llm_kv(kid);
+        if (get_key(key, result, false)) {
+            return true;
+        }
+
+        if (llm_kv_has_qwen2_svd_alias(get_arch(), kid)) {
+            const std::string legacy_key = LLM_KV(LLM_ARCH_QWEN2)(kid);
+            if (get_key(legacy_key, result, false)) {
+                return true;
+            }
+        }
+
+        if (required) {
+            throw std::runtime_error(format("key not found in model: %s", key.c_str()));
+        }
+
+        return false;
     }
 
     template bool llama_model_loader::get_key<bool>       (enum llm_kv kid, bool & result,        bool required);

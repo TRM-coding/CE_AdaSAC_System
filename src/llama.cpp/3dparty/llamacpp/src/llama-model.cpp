@@ -155,11 +155,14 @@ static bool weight_buft_supported(const llama_hparams & hparams, ggml_tensor * w
             } break;
         case GGML_OP_MUL_MAT_SVD:
             {
+                // Extra CPU buffer types such as CPU_AARCH64 accelerate the
+                // underlying matmul kernels, not the composite SVD op itself.
+                // Probe compatibility using the factor tensor as the lhs of a
+                // regular matmul so quantized SVD factors can still be placed
+                // into the repacked buffer.
                 ggml_tensor * b = ggml_new_tensor_4d(ctx, GGML_TYPE_F32, w->ne[0], 512, w->ne[2], w->ne[3]);
-                ggml_tensor * u = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, w->ne[1], w->ne[1]);
-                ggml_tensor * v = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, w->ne[0], w->ne[1]);
-                op_tensor = ggml_mul_mat_svd(ctx, w, v, u, b,1);
-            }break; 
+                op_tensor = ggml_mul_mat(ctx, w, b);
+            } break;
         case GGML_OP_MUL_MAT_ID:
             {
                 int n_expert_used = hparams.n_expert_used;

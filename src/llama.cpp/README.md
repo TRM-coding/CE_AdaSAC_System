@@ -27,27 +27,80 @@ export ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/26.3.11579264
 确认好后创建编译目录：
 ```bash
 # 1. 创建构建目录
-mkdir build-android
-cd build-android
+mkdir build-android-official-cpu
+cd build-android-official-cpu
 
 # 2. 使用 Android NDK 配置 CMake
-# x86_64指令集安卓设备：
-cmake .. \
-  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
-  -DANDROID_ABI=x86_64 \
-  -DANDROID_PLATFORM=android-29 \
-  -DGGML_OPENMP=OFF
-
-# arm指令集安卓设备：
+# arm64 真机的当前推荐构建口径：
 cmake .. \
   -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
   -DANDROID_ABI=arm64-v8a \
-  -DANDROID_PLATFORM=android-29 \
-  -DGGML_OPENMP=OFF
+  -DANDROID_PLATFORM=android-28 \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_FLAGS="-march=armv8.7a" \
+  -DCMAKE_CXX_FLAGS="-march=armv8.7a" \
+  -DGGML_OPENMP=OFF \
+  -DGGML_LLAMAFILE=OFF
 
-# 3. 编译
-cmake --build .
+# 3. 编译协同实验二进制
+cmake --build . --target decode_svd_test svd_mobile_server -j$(nproc)
 ```
+
+说明：
+
+- 当前项目里 Android/ARM 真机的已验证构建目录是 `build-android-official-cpu`。
+- 改动 `ggml-cpu.c`、`ggml-svd-offload.c`、`llama-graph.cpp` 后，必须同时重编并重新推送 `decode_svd_test` 和 `svd_mobile_server`，否则手机端可能命不中新的 AArch64 优化路径。
+- `x86_64` Android 构建仅适用于模拟器或特殊设备，不是当前真机实验的基准口径。
+
+## Android 真机协同推理测速注意事项
+
+真机上比较 `decode_svd_test`、`svd_mobile_server`、官方 dense `Q4_0` baseline 时，必须把温度和调度口径对齐。否则同一台设备上可能出现 `40 tok/s` 和 `55 tok/s` 级别的差异，这不一定是编译产物或算子路径问题。
+
+推荐真机准备流程：
+
+```bash
+adb reboot
+adb wait-for-device
+until adb shell getprop sys.boot_completed 2>/dev/null | grep -q 1; do sleep 1; done
+
+# InfraPowerTest 的高分实验按冷机口径执行，建议等温度接近 25.0 C。
+adb shell 'su -c "cat /sys/class/power_supply/battery/temp"'
+
+adb shell 'su -c "sync && echo 3 > /proc/sys/vm/drop_caches"'
+adb shell 'su -c "echo performance > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor"'
+adb shell 'su -c "echo performance > /sys/devices/system/cpu/cpufreq/policy6/scaling_governor"'
+adb shell 'su -c "grep . /sys/devices/system/cpu/cpufreq/policy*/scaling_governor"'
+```
+
+官方 dense `Q4_0` CPU baseline 建议使用和 `InfraPowerTest` 对齐的命令形态：
+
+```bash
+adb shell 'su -c "cd /data/local/tmp/CE_Ada && \
+  LD_LIBRARY_PATH=/data/local/tmp/CE_Ada \
+  taskset -a ff ./llama-bench-fastflags \
+    -m /data/local/tmp/CE_Ada/qwen.q4_0.gguf \
+    -pg 1,512 \
+    -r 2 \
+    -t 8 \
+    --prio 3 \
+    --cpu-mask 0xff \
+    --cpu-strict 1"'
+```
+
+记录和汇报真机吞吐时，至少要同时写清楚：
+
+- 模型文件名和量化方式
+- token 数与 bench 参数，例如 `-pg 1,512 -r 2` 或 `-p 0 -n 256`
+- 线程数、`taskset` mask、`--cpu-mask`、`--cpu-strict`
+- 是否使用 `--prio 3`
+- `policy0/policy6` governor 是否为 `performance`
+- 跑分前电池温度或 SoC 温度
+
+已验证现象：
+
+- 同一台 OnePlus 15 上，对齐 `taskset -a ff + --cpu-mask 0xff --cpu-strict 1 + --prio 3` 后，dense `qwen.q4_0.gguf` 冷机可到约 `52.5 tok/s`。
+- 设备升温到约 `30 C` 后，同类 CPU benchmark 可能掉回高 `30 tok/s` 区间。
+- 因此，协同推理和 SVD 本地 decode 的性能对比必须使用同一套真机环境，不要把冷机高分和热机裸跑结果直接比较。
 
 运行：
 

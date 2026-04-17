@@ -6,3 +6,9 @@ build-android/
 test/current-submodule-standalone-release
 build-release-current/
 build-rel/
+build-android-official-cpu/
+build-*/
+__pycache__/
+*.pyc
+test/toolchains/
+test/*.tar.gz

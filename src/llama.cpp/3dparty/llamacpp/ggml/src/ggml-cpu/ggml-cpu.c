@@ -1300,6 +1300,18 @@ static struct ggml_tensor ggml_mul_mat_svd_make_dst(
     return view;
 }
 
+static void ggml_compute_forward_mul_mat_svd_sub(
+    const struct ggml_compute_params * params,
+    struct ggml_tensor * dst) {
+    // Route the synthetic sub-op through the normal dispatcher so extra-buffer
+    // backends such as CPU_AARCH64 can still claim the quantized matmul.
+    struct ggml_compute_params params_sub = *params;
+    dst->op = GGML_OP_MUL_MAT;
+    if (!ggml_cpu_extra_compute_forward(&params_sub, dst)) {
+        ggml_compute_forward_mul_mat(&params_sub, dst);
+    }
+}
+
 static int64_t ggml_mul_mat_svd_get_k_keep(
     const struct ggml_tensor * dst,
     const struct ggml_tensor * v) {
@@ -1307,6 +1319,201 @@ static int64_t ggml_mul_mat_svd_get_k_keep(
         ? dst->svd_k_trunk
         : 0;
     return v->ne[1] - k_trunc;
+}
+
+static void ggml_compute_forward_mul_mat_svd(
+    const struct ggml_compute_params * params,
+    struct ggml_tensor * dst);
+
+static size_t ggml_mul_mat_svd_work_size(
+    const struct ggml_tensor * b,
+    const struct ggml_tensor * u,
+    const struct ggml_tensor * v,
+    int64_t k_keep) {
+    GGML_UNUSED(k_keep);
+
+    size_t cur = GGML_PAD(ggml_type_size(GGML_TYPE_F32) * v->ne[1] * b->ne[1] * b->ne[2] * b->ne[3], sizeof(int64_t));
+
+    const enum ggml_type vec_dot_type_v = type_traits_cpu[v->type].vec_dot_type;
+    if (b->type != vec_dot_type_v) {
+        cur += GGML_PAD(ggml_row_size(vec_dot_type_v, ggml_nelements(b)), sizeof(int64_t));
+    }
+
+    const enum ggml_type vec_dot_type_u = type_traits_cpu[u->type].vec_dot_type;
+    if (vec_dot_type_u != GGML_TYPE_F32) {
+        const size_t tmp_rhs_elems = v->ne[1] * b->ne[1] * b->ne[2] * b->ne[3];
+        cur += GGML_PAD(ggml_row_size(vec_dot_type_u, tmp_rhs_elems), sizeof(int64_t));
+    }
+
+    cur += GGML_PAD(ggml_type_size(GGML_TYPE_F32) * u->ne[1], sizeof(int64_t));
+    cur += GGML_PAD(sizeof(int32_t), sizeof(int32_t));
+
+    return cur;
+}
+
+static struct ggml_tensor ggml_mul_mat_svd_make_op(
+        const struct ggml_tensor * template,
+        void * data,
+        int64_t ne0,
+        int64_t ne1,
+        int64_t ne2,
+        int64_t ne3,
+        const struct ggml_tensor * w,
+        const struct ggml_tensor * b,
+        const struct ggml_tensor * u,
+        const struct ggml_tensor * v) {
+    struct ggml_tensor view = *template;
+    view.op = GGML_OP_MUL_MAT_SVD;
+    view.type = GGML_TYPE_F32;
+    view.data = data;
+    view.ne[0] = ne0;
+    view.ne[1] = ne1;
+    view.ne[2] = ne2;
+    view.ne[3] = ne3;
+    view.nb[0] = sizeof(float);
+    view.nb[1] = view.nb[0] * view.ne[0];
+    view.nb[2] = view.nb[1] * view.ne[1];
+    view.nb[3] = view.nb[2] * view.ne[2];
+    memcpy(&view.src[0], &w, sizeof(w));
+    memcpy(&view.src[1], &b, sizeof(b));
+    memcpy(&view.src[2], &u, sizeof(u));
+    memcpy(&view.src[3], &v, sizeof(v));
+    for (int i = 4; i < GGML_MAX_SRC; ++i) {
+        view.src[i] = NULL;
+    }
+    view.svd_k_trunk = 0;
+    view.svd_layer_id = -1;
+    view.svd_op_id = -1;
+    view.svd_offload_rate = 0.0f;
+    return view;
+}
+
+static struct ggml_tensor ggml_ffn_svd_make_input(
+        const struct ggml_tensor * template,
+        void * data,
+        int64_t ne0,
+        int64_t ne1,
+        int64_t ne2,
+        int64_t ne3) {
+    struct ggml_tensor view = *template;
+    view.op = GGML_OP_NONE;
+    view.type = GGML_TYPE_F32;
+    view.data = data;
+    view.ne[0] = ne0;
+    view.ne[1] = ne1;
+    view.ne[2] = ne2;
+    view.ne[3] = ne3;
+    view.nb[0] = sizeof(float);
+    view.nb[1] = view.nb[0] * view.ne[0];
+    view.nb[2] = view.nb[1] * view.ne[1];
+    view.nb[3] = view.nb[2] * view.ne[2];
+    for (int i = 0; i < GGML_MAX_SRC; ++i) {
+        view.src[i] = NULL;
+    }
+    return view;
+}
+
+static void ggml_compute_forward_ffn_svd_offload_local(
+        const struct ggml_compute_params * params,
+        struct ggml_tensor * dst) {
+    const struct ggml_tensor * input  = dst->src[0];
+    const struct ggml_tensor * up_u   = dst->src[1];
+    const struct ggml_tensor * up_v   = dst->src[2];
+    const struct ggml_tensor * gate_u = dst->src[3];
+    const struct ggml_tensor * gate_v = dst->src[4];
+    const struct ggml_tensor * down_u = dst->src[5];
+    const struct ggml_tensor * down_v = dst->src[6];
+
+    void * wdata_cur = params->wdata;
+    GGML_ASSERT(wdata_cur != NULL);
+
+    const int64_t hidden = up_u->ne[1];
+    float * up_buf = (float *) incr_ptr_aligned(&wdata_cur, sizeof(float) * hidden, sizeof(float));
+    float * gate_buf = (float *) incr_ptr_aligned(&wdata_cur, sizeof(float) * hidden, sizeof(float));
+    void * sub_wdata = wdata_cur;
+
+    struct ggml_compute_params params_sub = *params;
+    params_sub.wdata = sub_wdata;
+
+    struct ggml_tensor up_shape = *up_u;
+    up_shape.ne[0] = input->ne[0];
+    struct ggml_tensor gate_shape = *gate_u;
+    gate_shape.ne[0] = input->ne[0];
+    struct ggml_tensor down_shape = *down_u;
+    down_shape.ne[0] = hidden;
+
+    struct ggml_tensor up_dst = ggml_mul_mat_svd_make_op(dst, up_buf, hidden, 1, 1, 1, &up_shape, input, up_u, up_v);
+    struct ggml_tensor gate_dst = ggml_mul_mat_svd_make_op(dst, gate_buf, hidden, 1, 1, 1, &gate_shape, input, gate_u, gate_v);
+
+    ggml_compute_forward_mul_mat_svd(&params_sub, &up_dst);
+    ggml_barrier(params->threadpool);
+    ggml_compute_forward_mul_mat_svd(&params_sub, &gate_dst);
+    ggml_barrier(params->threadpool);
+
+    const int64_t h0 = params->ith * hidden / params->nth;
+    const int64_t h1 = (params->ith + 1) * hidden / params->nth;
+    for (int64_t i = h0; i < h1; ++i) {
+        const float x = gate_buf[i];
+        gate_buf[i] = (x / (1.0f + expf(-x))) * up_buf[i];
+    }
+    ggml_barrier(params->threadpool);
+
+    struct ggml_tensor fused_input = ggml_ffn_svd_make_input(input, gate_buf, hidden, 1, 1, 1);
+    struct ggml_tensor down_dst = ggml_mul_mat_svd_make_op(dst, dst->data, dst->ne[0], 1, 1, 1, &down_shape, &fused_input, down_u, down_v);
+    ggml_compute_forward_mul_mat_svd(&params_sub, &down_dst);
+}
+
+static void ggml_compute_forward_ffn_svd_offload(
+        const struct ggml_compute_params * params,
+        struct ggml_tensor * dst) {
+    const struct ggml_tensor * input = dst->src[0];
+    const bool can_remote =
+        ggml_svd_offload_client_enabled() &&
+        dst->svd_layer_id >= 0 &&
+        dst->svd_offload_rate >= 0.999f &&
+        input != NULL &&
+        input->type == GGML_TYPE_F32 &&
+        input->ne[1] == 1 && input->ne[2] == 1 && input->ne[3] == 1 &&
+        dst->ne[1] == 1 && dst->ne[2] == 1 && dst->ne[3] == 1 &&
+        ggml_is_contiguous(input) && ggml_is_contiguous(dst);
+
+    void * wdata_cur = params->wdata;
+    GGML_ASSERT(wdata_cur != NULL);
+
+    const int64_t hidden = dst->src[1]->ne[1];
+    incr_ptr_aligned(&wdata_cur, sizeof(float) * hidden, sizeof(float));
+    incr_ptr_aligned(&wdata_cur, sizeof(float) * hidden, sizeof(float));
+
+    int32_t * request_started = (int32_t *) incr_ptr_aligned(&wdata_cur, sizeof(int32_t), sizeof(int32_t));
+    int32_t * request_ok = (int32_t *) incr_ptr_aligned(&wdata_cur, sizeof(int32_t), sizeof(int32_t));
+
+    struct ggml_svd_offload_request_handle handle = { -1, 0, 0, -1, -1, 0, 0, 0 };
+
+    if (params->ith == 0) {
+        *request_started = 0;
+        *request_ok = 0;
+        if (can_remote) {
+            *request_started = ggml_svd_offload_begin_ffn_request(
+                    dst->svd_layer_id,
+                    dst->svd_offload_rate,
+                    (const float *) input->data,
+                    input->ne[0],
+                    &handle) ? 1 : 0;
+        }
+    }
+    ggml_barrier(params->threadpool);
+
+    if (*request_started) {
+        if (params->ith == 0) {
+            *request_ok = ggml_svd_offload_finish_ffn_request(&handle, (float *) dst->data, dst->ne[0]) ? 1 : 0;
+        }
+        ggml_barrier(params->threadpool);
+        if (*request_ok) {
+            return;
+        }
+    }
+
+    ggml_compute_forward_ffn_svd_offload_local(params, dst);
 }
 
 
@@ -1327,10 +1534,42 @@ static struct {
     uint64_t ffn_total_us;
 } g_svd_local_profile = { 0 };
 
+enum {
+    GGML_SVD_ZERO_REASON_FINISH = 0,
+    GGML_SVD_ZERO_REASON_CACHE,
+    GGML_SVD_ZERO_REASON_NO_REQUEST,
+    GGML_SVD_ZERO_REASON_COUNT,
+};
+
+static struct {
+    uint64_t up[GGML_SVD_ZERO_REASON_COUNT];
+    uint64_t gate[GGML_SVD_ZERO_REASON_COUNT];
+    uint64_t down[GGML_SVD_ZERO_REASON_COUNT];
+    uint64_t other[GGML_SVD_ZERO_REASON_COUNT];
+} g_svd_zero_profile = { 0 };
+
 static uint64_t ggml_svd_local_profile_now_us(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t) ts.tv_sec * 1000000ULL + (uint64_t) ts.tv_nsec / 1000ULL;
+}
+
+static void ggml_svd_zero_profile_accumulate(int32_t op_id, int reason) {
+    uint64_t * counters = NULL;
+    switch (op_id) {
+        case GGML_SVD_OP_UP:   counters = g_svd_zero_profile.up; break;
+        case GGML_SVD_OP_GATE: counters = g_svd_zero_profile.gate; break;
+        case GGML_SVD_OP_DOWN: counters = g_svd_zero_profile.down; break;
+        default:               counters = g_svd_zero_profile.other; break;
+    }
+    if (reason >= 0 && reason < GGML_SVD_ZERO_REASON_COUNT) {
+        __atomic_fetch_add(&counters[reason], 1, __ATOMIC_RELAXED);
+    }
+}
+
+static void ggml_svd_zero_output(int32_t op_id, int reason, float * data, int64_t len) {
+    ggml_svd_zero_profile_accumulate(op_id, reason);
+    memset(data, 0, sizeof(float) * len);
 }
 
 static void ggml_svd_local_profile_accumulate(int32_t op_id, uint64_t total_us, uint64_t v_us, uint64_t u_us) {
@@ -1398,6 +1637,16 @@ void ggml_svd_local_profile_print_and_reset(void) {
     const uint64_t ffn_total_us = up_total_us + gate_total_us + down_total_us;
     const uint64_t ffn_v_us = up_v_us + gate_v_us + down_v_us;
     const uint64_t ffn_u_us = up_u_us + gate_u_us + down_u_us;
+    uint64_t zero_up[GGML_SVD_ZERO_REASON_COUNT];
+    uint64_t zero_gate[GGML_SVD_ZERO_REASON_COUNT];
+    uint64_t zero_down[GGML_SVD_ZERO_REASON_COUNT];
+    uint64_t zero_other[GGML_SVD_ZERO_REASON_COUNT];
+    for (int i = 0; i < GGML_SVD_ZERO_REASON_COUNT; ++i) {
+        zero_up[i] = __atomic_exchange_n(&g_svd_zero_profile.up[i], 0, __ATOMIC_RELAXED);
+        zero_gate[i] = __atomic_exchange_n(&g_svd_zero_profile.gate[i], 0, __ATOMIC_RELAXED);
+        zero_down[i] = __atomic_exchange_n(&g_svd_zero_profile.down[i], 0, __ATOMIC_RELAXED);
+        zero_other[i] = __atomic_exchange_n(&g_svd_zero_profile.other[i], 0, __ATOMIC_RELAXED);
+    }
 
     fprintf(stderr,
             "[svd-local-op-profile] up_ops=%llu gate_ops=%llu down_ops=%llu "
@@ -1426,6 +1675,24 @@ void ggml_svd_local_profile_print_and_reset(void) {
             ffn_total_us / 1000.0,
             ffn_v_us / 1000.0,
             ffn_u_us / 1000.0);
+    fprintf(stderr,
+            "[svd-offload-zero-profile] "
+            "up_finish=%llu up_cache=%llu up_no_request=%llu "
+            "gate_finish=%llu gate_cache=%llu gate_no_request=%llu "
+            "down_finish=%llu down_cache=%llu down_no_request=%llu "
+            "other_finish=%llu other_cache=%llu other_no_request=%llu\n",
+            (unsigned long long) zero_up[GGML_SVD_ZERO_REASON_FINISH],
+            (unsigned long long) zero_up[GGML_SVD_ZERO_REASON_CACHE],
+            (unsigned long long) zero_up[GGML_SVD_ZERO_REASON_NO_REQUEST],
+            (unsigned long long) zero_gate[GGML_SVD_ZERO_REASON_FINISH],
+            (unsigned long long) zero_gate[GGML_SVD_ZERO_REASON_CACHE],
+            (unsigned long long) zero_gate[GGML_SVD_ZERO_REASON_NO_REQUEST],
+            (unsigned long long) zero_down[GGML_SVD_ZERO_REASON_FINISH],
+            (unsigned long long) zero_down[GGML_SVD_ZERO_REASON_CACHE],
+            (unsigned long long) zero_down[GGML_SVD_ZERO_REASON_NO_REQUEST],
+            (unsigned long long) zero_other[GGML_SVD_ZERO_REASON_FINISH],
+            (unsigned long long) zero_other[GGML_SVD_ZERO_REASON_CACHE],
+            (unsigned long long) zero_other[GGML_SVD_ZERO_REASON_NO_REQUEST]);
 }
 
 static bool ggml_compute_forward_mul_mat_svd_vec(
@@ -1548,18 +1815,18 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
                     ? ggml_svd_offload_finish_up_gate_request(&handle, dst_data, dst->ne[0], dst->ne[0])
                     : ggml_svd_offload_finish_request(&handle, dst_data, dst->ne[0]);
                 if (!ok) {
-                    memset(dst_data, 0, sizeof(float) * dst->ne[0]);
+                    ggml_svd_zero_output(dst->svd_op_id, GGML_SVD_ZERO_REASON_FINISH, dst_data, dst->ne[0]);
                 }
             } else if (*request_started == 2) {
                 if (!ggml_svd_offload_take_cached_gate(dst->svd_layer_id, k_keep, x, b->ne[0], dst_data, dst->ne[0])) {
-                    memset(dst_data, 0, sizeof(float) * dst->ne[0]);
+                    ggml_svd_zero_output(dst->svd_op_id, GGML_SVD_ZERO_REASON_CACHE, dst_data, dst->ne[0]);
                 }
             } else if (*request_started == 3) {
                 if (!ggml_svd_offload_take_cached_up(dst->svd_layer_id, k_keep, x, b->ne[0], dst_data, dst->ne[0])) {
-                    memset(dst_data, 0, sizeof(float) * dst->ne[0]);
+                    ggml_svd_zero_output(dst->svd_op_id, GGML_SVD_ZERO_REASON_CACHE, dst_data, dst->ne[0]);
                 }
             } else {
-                memset(dst_data, 0, sizeof(float) * dst->ne[0]);
+                ggml_svd_zero_output(dst->svd_op_id, GGML_SVD_ZERO_REASON_NO_REQUEST, dst_data, dst->ne[0]);
             }
         }
         ggml_barrier(params->threadpool);
@@ -1656,18 +1923,18 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
                 ? ggml_svd_offload_finish_up_gate_request(&handle, remote_out, dst->ne[0], dst->ne[0])
                 : ggml_svd_offload_finish_request(&handle, remote_out, dst->ne[0]);
             if (!ok) {
-                memset(remote_out, 0, sizeof(float) * dst->ne[0]);
+                ggml_svd_zero_output(dst->svd_op_id, GGML_SVD_ZERO_REASON_FINISH, remote_out, dst->ne[0]);
             }
         } else if (*request_started == 2) {
             if (!ggml_svd_offload_take_cached_gate(dst->svd_layer_id, k_keep, x, b->ne[0], remote_out, dst->ne[0])) {
-                memset(remote_out, 0, sizeof(float) * dst->ne[0]);
+                ggml_svd_zero_output(dst->svd_op_id, GGML_SVD_ZERO_REASON_CACHE, remote_out, dst->ne[0]);
             }
         } else if (*request_started == 3) {
             if (!ggml_svd_offload_take_cached_up(dst->svd_layer_id, k_keep, x, b->ne[0], remote_out, dst->ne[0])) {
-                memset(remote_out, 0, sizeof(float) * dst->ne[0]);
+                ggml_svd_zero_output(dst->svd_op_id, GGML_SVD_ZERO_REASON_CACHE, remote_out, dst->ne[0]);
             }
         } else {
-            memset(remote_out, 0, sizeof(float) * dst->ne[0]);
+            ggml_svd_zero_output(dst->svd_op_id, GGML_SVD_ZERO_REASON_NO_REQUEST, remote_out, dst->ne[0]);
         }
     }
 
@@ -1700,7 +1967,14 @@ static void ggml_compute_forward_mul_mat_svd(
     const struct ggml_tensor * b = dst->src[1];
     const struct ggml_tensor * u = dst->src[2];
     const struct ggml_tensor * v = dst->src[3];
-    const int64_t k_keep = ggml_mul_mat_svd_get_k_keep(dst, v);
+    const int64_t total_rank = v->ne[1];
+    int64_t k_keep = ggml_mul_mat_svd_get_k_keep(dst, v);
+    uint64_t local_total_begin_us = 0;
+    uint64_t local_v_begin_us = 0;
+    uint64_t local_v_us = 0;
+    uint64_t local_u_begin_us = 0;
+    uint64_t local_u_us = 0;
+    const bool profile_local = params->ith == 0 && dst->svd_op_id >= 0;
 
     GGML_ASSERT(w != NULL);
     GGML_ASSERT(b != NULL);
@@ -1710,15 +1984,102 @@ static void ggml_compute_forward_mul_mat_svd(
     void * wdata_cur = params->wdata;
     GGML_ASSERT(wdata_cur != NULL);
 
-    const size_t tmp_size = sizeof(float) * k_keep * b->ne[1] * b->ne[2] * b->ne[3];
+    const bool can_offload =
+        ggml_svd_offload_client_enabled() &&
+        dst->svd_layer_id >= 0 &&
+        dst->svd_op_id >= 0 &&
+        dst->svd_offload_rate > 0.0f &&
+        total_rank > 1 &&
+        b->type == GGML_TYPE_F32 &&
+        b->ne[1] == 1 && b->ne[2] == 1 && b->ne[3] == 1 &&
+        dst->ne[1] == 1 && dst->ne[2] == 1 && dst->ne[3] == 1 &&
+        ggml_is_contiguous(b) && ggml_is_contiguous(dst);
+
+    if (can_offload) {
+        const int64_t k_trunc_remote = (int64_t) ceilf(dst->svd_offload_rate * (float) total_rank);
+        k_keep = total_rank - k_trunc_remote;
+        if (k_keep < 0) {
+            k_keep = 0;
+        }
+        if (k_keep > total_rank) {
+            k_keep = total_rank;
+        }
+    }
+
+    float * remote_out = (float *) incr_ptr_aligned(&wdata_cur, sizeof(float) * dst->ne[0], sizeof(float));
+    int32_t * request_started = (int32_t *) incr_ptr_aligned(&wdata_cur, sizeof(int32_t), sizeof(int32_t));
+    struct ggml_svd_offload_request_handle handle = { -1, 0, 0, -1, -1, 0, 0, 0 };
+
+    if (params->ith == 0) {
+        *request_started = 0;
+        if (can_offload &&
+            dst->svd_op_id == GGML_SVD_OP_UP &&
+            ggml_svd_offload_has_cached_up(dst->svd_layer_id, k_keep, (const float *) b->data, b->ne[0], dst->ne[0])) {
+            *request_started = 3;
+        } else if (can_offload &&
+            dst->svd_op_id == GGML_SVD_OP_GATE &&
+            ggml_svd_offload_has_cached_gate(dst->svd_layer_id, k_keep, (const float *) b->data, b->ne[0], dst->ne[0])) {
+            *request_started = 2;
+        } else if (can_offload) {
+            const bool started = (dst->svd_op_id == GGML_SVD_OP_UP || dst->svd_op_id == GGML_SVD_OP_GATE)
+                ? ggml_svd_offload_begin_up_gate_request(
+                    dst->svd_layer_id,
+                    dst->svd_op_id,
+                    dst->svd_offload_rate,
+                    k_keep,
+                    (const float *) b->data,
+                    b->ne[0],
+                    &handle)
+                : ggml_svd_offload_begin_request(
+                    dst->svd_layer_id,
+                    dst->svd_op_id,
+                    dst->svd_offload_rate,
+                    k_keep,
+                    (const float *) b->data,
+                    b->ne[0],
+                    &handle);
+            *request_started = started ? 1 : 0;
+        }
+    }
+    ggml_barrier(params->threadpool);
+
+    if (*request_started && k_keep == 0) {
+        if (params->ith == 0) {
+            if (*request_started == 1) {
+                const bool ok = handle.request_kind == GGML_SVD_OFFLOAD_REQ_UP_GATE
+                    ? ggml_svd_offload_finish_up_gate_request(&handle, remote_out, dst->ne[0], dst->ne[0])
+                    : ggml_svd_offload_finish_request(&handle, remote_out, dst->ne[0]);
+                if (!ok) {
+                    ggml_svd_zero_output(dst->svd_op_id, GGML_SVD_ZERO_REASON_FINISH, remote_out, dst->ne[0]);
+                }
+            } else if (*request_started == 2) {
+                if (!ggml_svd_offload_take_cached_gate(dst->svd_layer_id, k_keep, (const float *) b->data, b->ne[0], remote_out, dst->ne[0])) {
+                    ggml_svd_zero_output(dst->svd_op_id, GGML_SVD_ZERO_REASON_CACHE, remote_out, dst->ne[0]);
+                }
+            } else if (*request_started == 3) {
+                if (!ggml_svd_offload_take_cached_up(dst->svd_layer_id, k_keep, (const float *) b->data, b->ne[0], remote_out, dst->ne[0])) {
+                    ggml_svd_zero_output(dst->svd_op_id, GGML_SVD_ZERO_REASON_CACHE, remote_out, dst->ne[0]);
+                }
+            } else {
+                ggml_svd_zero_output(dst->svd_op_id, GGML_SVD_ZERO_REASON_NO_REQUEST, remote_out, dst->ne[0]);
+            }
+            memcpy(dst->data, remote_out, sizeof(float) * dst->ne[0]);
+        }
+        ggml_barrier(params->threadpool);
+        return;
+    }
+
+    const int64_t k_local = *request_started ? k_keep : total_rank;
+
+    const size_t tmp_size = sizeof(float) * k_local * b->ne[1] * b->ne[2] * b->ne[3];
     void * tmp_data = incr_ptr_aligned(&wdata_cur, tmp_size, sizeof(float));
 
     struct ggml_tensor v_view = *v;
-    v_view.ne[1] = k_keep;
+    v_view.ne[1] = k_local;
 
     struct ggml_tensor tmp_view = ggml_mul_mat_svd_make_dst(
         dst, tmp_data, GGML_TYPE_F32,
-        k_keep, b->ne[1], b->ne[2], b->ne[3],
+        k_local, b->ne[1], b->ne[2], b->ne[3],
         &v_view, b);
 
     struct ggml_compute_params params_v = *params;
@@ -1734,14 +2095,24 @@ static void ggml_compute_forward_mul_mat_svd(
         params_v.wsize = 0;
     }
 
-    ggml_compute_forward_mul_mat(&params_v, &tmp_view);
+    if (profile_local) {
+        local_total_begin_us = ggml_svd_local_profile_now_us();
+        local_v_begin_us = local_total_begin_us;
+    }
+
+    ggml_compute_forward_mul_mat_svd_sub(&params_v, &tmp_view);
     ggml_barrier(params->threadpool);
 
+    if (profile_local) {
+        local_v_us = ggml_svd_local_profile_now_us() - local_v_begin_us;
+        local_u_begin_us = ggml_svd_local_profile_now_us();
+    }
+
     struct ggml_tensor u_view = *u;
-    u_view.ne[0] = k_keep;
+    u_view.ne[0] = k_local;
 
     struct ggml_tensor tmp_u_view = tmp_view;
-    tmp_u_view.ne[0] = k_keep;
+    tmp_u_view.ne[0] = k_local;
 
     struct ggml_tensor dst_view = ggml_mul_mat_svd_make_dst(
         dst, dst->data, GGML_TYPE_F32,
@@ -1758,7 +2129,50 @@ static void ggml_compute_forward_mul_mat_svd(
         params_u.wsize = 0;
     }
 
-    ggml_compute_forward_mul_mat(&params_u, &dst_view);
+    ggml_compute_forward_mul_mat_svd_sub(&params_u, &dst_view);
+
+    ggml_barrier(params->threadpool);
+
+    if (params->ith == 0) {
+        if (*request_started == 1) {
+            const bool ok = handle.request_kind == GGML_SVD_OFFLOAD_REQ_UP_GATE
+                ? ggml_svd_offload_finish_up_gate_request(&handle, remote_out, dst->ne[0], dst->ne[0])
+                : ggml_svd_offload_finish_request(&handle, remote_out, dst->ne[0]);
+            if (!ok) {
+                ggml_svd_zero_output(dst->svd_op_id, GGML_SVD_ZERO_REASON_FINISH, remote_out, dst->ne[0]);
+            }
+        } else if (*request_started == 2) {
+            if (!ggml_svd_offload_take_cached_gate(dst->svd_layer_id, k_keep, (const float *) b->data, b->ne[0], remote_out, dst->ne[0])) {
+                ggml_svd_zero_output(dst->svd_op_id, GGML_SVD_ZERO_REASON_CACHE, remote_out, dst->ne[0]);
+            }
+        } else if (*request_started == 3) {
+            if (!ggml_svd_offload_take_cached_up(dst->svd_layer_id, k_keep, (const float *) b->data, b->ne[0], remote_out, dst->ne[0])) {
+                ggml_svd_zero_output(dst->svd_op_id, GGML_SVD_ZERO_REASON_CACHE, remote_out, dst->ne[0]);
+            }
+        } else {
+            ggml_svd_zero_output(dst->svd_op_id, GGML_SVD_ZERO_REASON_NO_REQUEST, remote_out, dst->ne[0]);
+        }
+    }
+
+    ggml_barrier(params->threadpool);
+
+    if (*request_started) {
+        float * dst_f32 = (float *) dst->data;
+        const int64_t dst_start = params->ith * dst->ne[0] / params->nth;
+        const int64_t dst_end   = (params->ith + 1) * dst->ne[0] / params->nth;
+        for (int64_t i = dst_start; i < dst_end; ++i) {
+            dst_f32[i] += remote_out[i];
+        }
+    }
+
+    if (profile_local && !can_offload) {
+        local_u_us = ggml_svd_local_profile_now_us() - local_u_begin_us;
+        ggml_svd_local_profile_accumulate(
+            dst->svd_op_id,
+            ggml_svd_local_profile_now_us() - local_total_begin_us,
+            local_v_us,
+            local_u_us);
+    }
 }
 
 static void ggml_compute_forward_mul_mat(
@@ -2342,6 +2756,10 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
             {
                 ggml_compute_forward_mul_mat_svd(params, tensor);
             } break;
+        case GGML_OP_FFN_SVD_OFFLOAD:
+            {
+                ggml_compute_forward_ffn_svd_offload(params, tensor);
+            } break;
         case GGML_OP_MUL_MAT_ID:
             {
                 ggml_compute_forward_mul_mat_id(params, tensor);
@@ -2733,6 +3151,7 @@ static int ggml_get_n_tasks(struct ggml_tensor * node, int n_threads) {
         case GGML_OP_CONCAT:
         case GGML_OP_MUL_MAT:
         case GGML_OP_MUL_MAT_SVD:
+        case GGML_OP_FFN_SVD_OFFLOAD:
         case GGML_OP_MUL_MAT_ID:
         case GGML_OP_OUT_PROD:
             {
@@ -3240,6 +3659,34 @@ struct ggml_cplan ggml_graph_plan(
                         cur += GGML_PAD(ggml_type_size(GGML_TYPE_F32) * node->ne[0], sizeof(int64_t));
                         cur += GGML_PAD(sizeof(int32_t), sizeof(int32_t));
                     }break;
+                case GGML_OP_FFN_SVD_OFFLOAD:
+                    {
+                        const struct ggml_tensor * input  = node->src[0];
+                        const struct ggml_tensor * up_u   = node->src[1];
+                        const struct ggml_tensor * up_v   = node->src[2];
+                        const struct ggml_tensor * gate_u = node->src[3];
+                        const struct ggml_tensor * gate_v = node->src[4];
+                        const struct ggml_tensor * down_u = node->src[5];
+                        const struct ggml_tensor * down_v = node->src[6];
+                        const int64_t hidden = up_u->ne[1];
+
+                        cur = GGML_PAD(sizeof(float) * hidden, sizeof(int64_t));
+                        cur += GGML_PAD(sizeof(float) * hidden, sizeof(int64_t));
+
+                        size_t sub_work = ggml_mul_mat_svd_work_size(input, up_u, up_v, up_v->ne[1]);
+                        const size_t gate_work = ggml_mul_mat_svd_work_size(input, gate_u, gate_v, gate_v->ne[1]);
+                        const struct ggml_tensor fused_input = ggml_ffn_svd_make_input(input, NULL, hidden, 1, 1, 1);
+                        const size_t down_work = ggml_mul_mat_svd_work_size(&fused_input, down_u, down_v, down_v->ne[1]);
+                        if (gate_work > sub_work) {
+                            sub_work = gate_work;
+                        }
+                        if (down_work > sub_work) {
+                            sub_work = down_work;
+                        }
+                        cur += sub_work;
+                        cur += GGML_PAD(sizeof(int32_t), sizeof(int32_t));
+                        cur += GGML_PAD(sizeof(int32_t), sizeof(int32_t));
+                    } break;
                 case GGML_OP_MUL_MAT_ID:
                     {
                         cur = 0;

@@ -746,6 +746,34 @@ ggml_tensor * llm_graph_context::build_ffn_svd_qwen2(
             int   il,
             float        offload_rate
                     ) const{
+    const bool has_complete_svd =
+        up_svd_u   != nullptr && up_svd_v   != nullptr &&
+        gate_svd_u != nullptr && gate_svd_v != nullptr &&
+        down_svd_u != nullptr && down_svd_v != nullptr;
+
+    if (!has_complete_svd) {
+        return build_ffn(
+            cur,
+            up,   nullptr, nullptr,
+            gate, nullptr, nullptr,
+            down, nullptr, nullptr,
+            nullptr,
+            LLM_FFN_SILU,
+            LLM_FFN_PAR,
+            il);
+    }
+
+    if (svd_offload_enabled && n_tokens == 1 && offload_rate >= 0.999f) {
+        ggml_tensor * ffn = ggml_ffn_svd_offload(
+            ctx0,
+            cur,
+            up_svd_u,   up_svd_v,
+            gate_svd_u, gate_svd_v,
+            down_svd_u, down_svd_v);
+        ggml_mul_mat_svd_set_offload_meta(ffn, il, -1, offload_rate);
+        return ffn;
+    }
+
     ggml_tensor * tmp = build_mm_svd(up, up_svd_u, up_svd_v, cur, il, GGML_SVD_OP_UP, offload_rate);
     cb(tmp, "ffn_up", il);
 

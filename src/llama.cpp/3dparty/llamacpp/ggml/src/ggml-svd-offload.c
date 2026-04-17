@@ -14,6 +14,7 @@
 #endif
 #include <errno.h>
 #include <pthread.h>
+#include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -75,6 +76,7 @@ static struct {
     uint64_t requests_up_gate;
     uint64_t requests_down;
     uint64_t requests_other_mat;
+    uint64_t requests_ffn;
     uint64_t gate_cache_hits;
     uint64_t gate_cache_checks;
     uint64_t gate_cache_miss_invalid;
@@ -86,9 +88,32 @@ static struct {
     uint64_t wait_up_gate_us;
     uint64_t wait_down_us;
     uint64_t wait_other_mat_us;
+    uint64_t wait_ffn_us;
     uint64_t send_up_gate_us;
     uint64_t send_down_us;
     uint64_t send_other_mat_us;
+    uint64_t send_ffn_us;
+    uint64_t finish_fail_up_gate;
+    uint64_t finish_fail_down;
+    uint64_t finish_fail_other_mat;
+    uint64_t finish_fail_ffn;
+    uint64_t cache_take_fail_up;
+    uint64_t cache_take_fail_gate;
+    double recv_up_sum_abs;
+    double recv_gate_sum_abs;
+    double recv_down_sum_abs;
+    double recv_other_sum_abs;
+    double recv_ffn_sum_abs;
+    float recv_up_max_abs;
+    float recv_gate_max_abs;
+    float recv_down_max_abs;
+    float recv_other_max_abs;
+    float recv_ffn_max_abs;
+    uint64_t recv_up_zero_vectors;
+    uint64_t recv_gate_zero_vectors;
+    uint64_t recv_down_zero_vectors;
+    uint64_t recv_other_zero_vectors;
+    uint64_t recv_ffn_zero_vectors;
 } g_svd_profile = { 0 };
 
 enum {
@@ -129,6 +154,35 @@ static uint64_t ggml_svd_now_us(void) {
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t) ts.tv_sec * 1000000ULL + (uint64_t) ts.tv_nsec / 1000ULL;
 #endif
+}
+
+static void ggml_svd_profile_accum_output(
+        const float * data,
+        int64_t len,
+        double * sum_abs_total,
+        float * max_abs_total,
+        uint64_t * zero_vectors) {
+    if (data == NULL || len <= 0) {
+        return;
+    }
+
+    double sum_abs = 0.0;
+    float max_abs = 0.0f;
+    for (int64_t i = 0; i < len; ++i) {
+        const float v = fabsf(data[i]);
+        sum_abs += (double) v;
+        if (v > max_abs) {
+            max_abs = v;
+        }
+    }
+
+    *sum_abs_total += sum_abs;
+    if (max_abs > *max_abs_total) {
+        *max_abs_total = max_abs;
+    }
+    if (sum_abs == 0.0) {
+        *zero_vectors += 1;
+    }
 }
 
 static void ggml_svd_pair_cache_reset_entry_locked(struct ggml_svd_pair_cache_entry * entry) {
@@ -379,6 +433,9 @@ static bool ggml_svd_offload_begin_request_impl(
     if (request_kind == GGML_SVD_OFFLOAD_REQ_UP_GATE) {
         g_svd_profile.requests_up_gate++;
         g_svd_profile.send_up_gate_us += send_us;
+    } else if (request_kind == GGML_SVD_OFFLOAD_REQ_FFN) {
+        g_svd_profile.requests_ffn++;
+        g_svd_profile.send_ffn_us += send_us;
     } else if (op_id == GGML_SVD_OP_DOWN) {
         g_svd_profile.requests_down++;
         g_svd_profile.send_down_us += send_us;
@@ -429,6 +486,23 @@ bool ggml_svd_offload_begin_up_gate_request(
             handle);
 }
 
+bool ggml_svd_offload_begin_ffn_request(
+        int32_t layer_id,
+        float offload_rate,
+        const float * input,
+        int64_t input_len,
+        struct ggml_svd_offload_request_handle * handle) {
+    return ggml_svd_offload_begin_request_impl(
+            GGML_SVD_OFFLOAD_REQ_FFN,
+            layer_id,
+            -1,
+            offload_rate,
+            0,
+            input,
+            input_len,
+            handle);
+}
+
 bool ggml_svd_offload_finish_request(
         struct ggml_svd_offload_request_handle * handle,
         float * output,
@@ -449,6 +523,11 @@ bool ggml_svd_offload_finish_request(
         rsp.output_len_aux != 0 ||
         rsp.output_len != output_len ||
         !ggml_svd_recv_all(fd, output, sizeof(float) * (size_t) output_len)) {
+        if (handle->op_id == GGML_SVD_OP_DOWN) {
+            g_svd_profile.finish_fail_down++;
+        } else {
+            g_svd_profile.finish_fail_other_mat++;
+        }
         ggml_svd_close_socket(fd);
         if (g_svd_client.socket_fd == fd) {
             g_svd_client.socket_fd = -1;
@@ -462,9 +541,63 @@ bool ggml_svd_offload_finish_request(
     const uint64_t wait_us = ggml_svd_now_us() - handle->start_us;
     if (handle->op_id == GGML_SVD_OP_DOWN) {
         g_svd_profile.wait_down_us += wait_us;
+        ggml_svd_profile_accum_output(
+                output, output_len,
+                &g_svd_profile.recv_down_sum_abs,
+                &g_svd_profile.recv_down_max_abs,
+                &g_svd_profile.recv_down_zero_vectors);
     } else {
         g_svd_profile.wait_other_mat_us += wait_us;
+        ggml_svd_profile_accum_output(
+                output, output_len,
+                &g_svd_profile.recv_other_sum_abs,
+                &g_svd_profile.recv_other_max_abs,
+                &g_svd_profile.recv_other_zero_vectors);
     }
+
+    pthread_mutex_unlock(&g_svd_client.mutex);
+    handle->response_ready = 0;
+    return true;
+}
+
+bool ggml_svd_offload_finish_ffn_request(
+        struct ggml_svd_offload_request_handle * handle,
+        float * output,
+        int64_t output_len) {
+    if (handle == NULL || !handle->response_ready || output == NULL || output_len <= 0) {
+        return false;
+    }
+
+    pthread_mutex_lock(&g_svd_client.mutex);
+
+    struct ggml_svd_offload_wire_response rsp;
+    const int fd = handle->socket_fd;
+
+    if (!ggml_svd_recv_all(fd, &rsp, sizeof(rsp)) ||
+        rsp.magic != GGML_SVD_OFFLOAD_MAGIC ||
+        rsp.version != GGML_SVD_OFFLOAD_VERSION ||
+        rsp.status != 0 ||
+        rsp.output_len_aux != 0 ||
+        rsp.output_len != output_len ||
+        !ggml_svd_recv_all(fd, output, sizeof(float) * (size_t) output_len)) {
+        g_svd_profile.finish_fail_ffn++;
+        ggml_svd_close_socket(fd);
+        if (g_svd_client.socket_fd == fd) {
+            g_svd_client.socket_fd = -1;
+        }
+        ggml_svd_gate_cache_clear_locked();
+        pthread_mutex_unlock(&g_svd_client.mutex);
+        handle->response_ready = 0;
+        return false;
+    }
+
+    const uint64_t wait_us = ggml_svd_now_us() - handle->start_us;
+    g_svd_profile.wait_ffn_us += wait_us;
+    ggml_svd_profile_accum_output(
+            output, output_len,
+            &g_svd_profile.recv_ffn_sum_abs,
+            &g_svd_profile.recv_ffn_max_abs,
+            &g_svd_profile.recv_ffn_zero_vectors);
 
     pthread_mutex_unlock(&g_svd_client.mutex);
     handle->response_ready = 0;
@@ -495,6 +628,7 @@ bool ggml_svd_offload_finish_up_gate_request(
         true;
 
     if (!ok) {
+        g_svd_profile.finish_fail_up_gate++;
         ggml_svd_close_socket(fd);
         if (g_svd_client.socket_fd == fd) {
             g_svd_client.socket_fd = -1;
@@ -515,6 +649,7 @@ bool ggml_svd_offload_finish_up_gate_request(
         ggml_svd_pair_cache_resize_locked(&entry->gate_data, (int32_t) paired_output_len);
 
     if (!ok) {
+        g_svd_profile.finish_fail_up_gate++;
         ggml_svd_close_socket(fd);
         if (g_svd_client.socket_fd == fd) {
             g_svd_client.socket_fd = -1;
@@ -531,6 +666,7 @@ bool ggml_svd_offload_finish_up_gate_request(
          ggml_svd_recv_all(fd, second_out, sizeof(float) * (size_t) paired_output_len);
 
     if (!ok) {
+        g_svd_profile.finish_fail_up_gate++;
         ggml_svd_close_socket(fd);
         if (g_svd_client.socket_fd == fd) {
             g_svd_client.socket_fd = -1;
@@ -547,6 +683,19 @@ bool ggml_svd_offload_finish_up_gate_request(
     entry->input_hash = handle->input_hash;
     entry->valid_up = true;
     entry->valid_gate = true;
+
+    ggml_svd_profile_accum_output(
+            handle->op_id == GGML_SVD_OP_GATE ? entry->up_data : output,
+            output_len,
+            &g_svd_profile.recv_up_sum_abs,
+            &g_svd_profile.recv_up_max_abs,
+            &g_svd_profile.recv_up_zero_vectors);
+    ggml_svd_profile_accum_output(
+            handle->op_id == GGML_SVD_OP_GATE ? output : entry->gate_data,
+            paired_output_len,
+            &g_svd_profile.recv_gate_sum_abs,
+            &g_svd_profile.recv_gate_max_abs,
+            &g_svd_profile.recv_gate_zero_vectors);
 
     pthread_mutex_unlock(&g_svd_client.mutex);
     handle->response_ready = 0;
@@ -691,6 +840,10 @@ static bool ggml_svd_offload_take_cached_pair_impl(
         if (!entry->valid_up && !entry->valid_gate) {
             ggml_svd_pair_cache_reset_entry_locked(entry);
         }
+    } else if (want_gate) {
+        g_svd_profile.cache_take_fail_gate++;
+    } else {
+        g_svd_profile.cache_take_fail_up++;
     }
     pthread_mutex_unlock(&g_svd_client.mutex);
     return ok;
@@ -722,19 +875,22 @@ void ggml_svd_offload_close_client(void) {
     const uint64_t send_total_us =
         g_svd_profile.send_up_gate_us +
         g_svd_profile.send_down_us +
-        g_svd_profile.send_other_mat_us;
+        g_svd_profile.send_other_mat_us +
+        g_svd_profile.send_ffn_us;
     const uint64_t wait_total_us =
         g_svd_profile.wait_up_gate_us +
         g_svd_profile.wait_down_us +
-        g_svd_profile.wait_other_mat_us;
+        g_svd_profile.wait_other_mat_us +
+        g_svd_profile.wait_ffn_us;
     fprintf(stderr,
-            "[svd-offload-client] up_gate_req=%llu down_req=%llu other_mat_req=%llu gate_cache_hits=%llu gate_cache_checks=%llu "
+            "[svd-offload-client] up_gate_req=%llu down_req=%llu other_mat_req=%llu ffn_req=%llu gate_cache_hits=%llu gate_cache_checks=%llu "
             "miss_invalid=%llu miss_layer=%llu miss_rank=%llu miss_hash=%llu miss_output=%llu miss_data=%llu "
-            "send_up_gate=%.3f ms send_down=%.3f ms send_other=%.3f ms "
-            "wait_up_gate=%.3f ms wait_down=%.3f ms wait_other=%.3f ms\n",
+            "send_up_gate=%.3f ms send_down=%.3f ms send_other=%.3f ms send_ffn=%.3f ms "
+            "wait_up_gate=%.3f ms wait_down=%.3f ms wait_other=%.3f ms wait_ffn=%.3f ms\n",
             (unsigned long long) g_svd_profile.requests_up_gate,
             (unsigned long long) g_svd_profile.requests_down,
             (unsigned long long) g_svd_profile.requests_other_mat,
+            (unsigned long long) g_svd_profile.requests_ffn,
             (unsigned long long) g_svd_profile.gate_cache_hits,
             (unsigned long long) g_svd_profile.gate_cache_checks,
             (unsigned long long) g_svd_profile.gate_cache_miss_invalid,
@@ -746,14 +902,45 @@ void ggml_svd_offload_close_client(void) {
             g_svd_profile.send_up_gate_us / 1000.0,
             g_svd_profile.send_down_us / 1000.0,
             g_svd_profile.send_other_mat_us / 1000.0,
+            g_svd_profile.send_ffn_us / 1000.0,
             g_svd_profile.wait_up_gate_us / 1000.0,
             g_svd_profile.wait_down_us / 1000.0,
-            g_svd_profile.wait_other_mat_us / 1000.0);
+            g_svd_profile.wait_other_mat_us / 1000.0,
+            g_svd_profile.wait_ffn_us / 1000.0);
     fprintf(stderr,
             "[svd-offload-client-stage-profile] rpc_send_total=%.3f ms "
             "rpc_wait_total=%.3f ms\n",
             send_total_us / 1000.0,
             wait_total_us / 1000.0);
+    fprintf(stderr,
+            "[svd-offload-client-debug] finish_fail_up_gate=%llu finish_fail_down=%llu finish_fail_other=%llu finish_fail_ffn=%llu "
+            "cache_take_fail_up=%llu cache_take_fail_gate=%llu "
+            "recv_up_sum_abs=%.6e recv_up_max_abs=%.6e recv_up_zero=%llu "
+            "recv_gate_sum_abs=%.6e recv_gate_max_abs=%.6e recv_gate_zero=%llu "
+            "recv_down_sum_abs=%.6e recv_down_max_abs=%.6e recv_down_zero=%llu "
+            "recv_other_sum_abs=%.6e recv_other_max_abs=%.6e recv_other_zero=%llu "
+            "recv_ffn_sum_abs=%.6e recv_ffn_max_abs=%.6e recv_ffn_zero=%llu\n",
+            (unsigned long long) g_svd_profile.finish_fail_up_gate,
+            (unsigned long long) g_svd_profile.finish_fail_down,
+            (unsigned long long) g_svd_profile.finish_fail_other_mat,
+            (unsigned long long) g_svd_profile.finish_fail_ffn,
+            (unsigned long long) g_svd_profile.cache_take_fail_up,
+            (unsigned long long) g_svd_profile.cache_take_fail_gate,
+            g_svd_profile.recv_up_sum_abs,
+            (double) g_svd_profile.recv_up_max_abs,
+            (unsigned long long) g_svd_profile.recv_up_zero_vectors,
+            g_svd_profile.recv_gate_sum_abs,
+            (double) g_svd_profile.recv_gate_max_abs,
+            (unsigned long long) g_svd_profile.recv_gate_zero_vectors,
+            g_svd_profile.recv_down_sum_abs,
+            (double) g_svd_profile.recv_down_max_abs,
+            (unsigned long long) g_svd_profile.recv_down_zero_vectors,
+            g_svd_profile.recv_other_sum_abs,
+            (double) g_svd_profile.recv_other_max_abs,
+            (unsigned long long) g_svd_profile.recv_other_zero_vectors,
+            g_svd_profile.recv_ffn_sum_abs,
+            (double) g_svd_profile.recv_ffn_max_abs,
+            (unsigned long long) g_svd_profile.recv_ffn_zero_vectors);
     if (g_svd_client.socket_fd >= 0) {
         ggml_svd_close_socket(g_svd_client.socket_fd);
         g_svd_client.socket_fd = -1;

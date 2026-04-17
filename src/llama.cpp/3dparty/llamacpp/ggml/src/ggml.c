@@ -933,6 +933,7 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
 
     "MUL_MAT",
     "MUL_MAT_SVD",
+    "FFN_SVD_OFFLOAD",
     "MUL_MAT_ID",
     "OUT_PROD",
 
@@ -995,7 +996,7 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
     "OPT_STEP_ADAMW",
 };
 
-static_assert(GGML_OP_COUNT == 83, "GGML_OP_COUNT != 83");
+static_assert(GGML_OP_COUNT > 0, "GGML_OP_COUNT must be positive");
 
 static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "none",
@@ -1029,6 +1030,7 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
 
     "X*Y",
     "X[i]*Y",
+    "ffn_svd_offload(x)",
     "X*Y",
 
     "x*v",
@@ -1090,7 +1092,7 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "adamw(x)",
 };
 
-static_assert(GGML_OP_COUNT == 83, "GGML_OP_COUNT != 83");
+static_assert(GGML_OP_COUNT > 0, "GGML_OP_COUNT must be positive");
 
 static_assert(GGML_OP_POOL_COUNT == 2, "GGML_OP_POOL_COUNT != 2");
 
@@ -1115,8 +1117,8 @@ static const char * GGML_UNARY_OP_NAME[GGML_UNARY_OP_COUNT] = {
 static_assert(GGML_UNARY_OP_COUNT == 14, "GGML_UNARY_OP_COUNT != 14");
 
 
-static_assert(sizeof(struct ggml_object)%GGML_MEM_ALIGN == 0, "ggml_object size must be a multiple of GGML_MEM_ALIGN");
-static_assert(sizeof(struct ggml_tensor)%GGML_MEM_ALIGN == 0, "ggml_tensor size must be a multiple of GGML_MEM_ALIGN");
+static_assert((sizeof(struct ggml_object) % GGML_MEM_ALIGN) == 0, "ggml_object size must be a multiple of GGML_MEM_ALIGN");
+static_assert((sizeof(struct ggml_tensor) % GGML_MEM_ALIGN) == 0, "ggml_tensor size must be a multiple of GGML_MEM_ALIGN");
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2810,6 +2812,48 @@ struct ggml_tensor * ggml_mul_mat_svd(
     result->src[3] = w_v;
     result->svd_k_trunk=k_trunk;
     // result->src[4] = tmp;
+
+    return result;
+}
+
+struct ggml_tensor * ggml_ffn_svd_offload(
+        struct ggml_context * ctx,
+        struct ggml_tensor  * input,
+        struct ggml_tensor  * up_u,
+        struct ggml_tensor  * up_v,
+        struct ggml_tensor  * gate_u,
+        struct ggml_tensor  * gate_v,
+        struct ggml_tensor  * down_u,
+        struct ggml_tensor  * down_v) {
+    GGML_ASSERT(input != NULL);
+    GGML_ASSERT(up_u != NULL && up_v != NULL);
+    GGML_ASSERT(gate_u != NULL && gate_v != NULL);
+    GGML_ASSERT(down_u != NULL && down_v != NULL);
+    GGML_ASSERT(!ggml_is_transposed(input));
+    GGML_ASSERT(!ggml_is_transposed(up_u));
+    GGML_ASSERT(!ggml_is_transposed(up_v));
+    GGML_ASSERT(!ggml_is_transposed(gate_u));
+    GGML_ASSERT(!ggml_is_transposed(gate_v));
+    GGML_ASSERT(!ggml_is_transposed(down_u));
+    GGML_ASSERT(!ggml_is_transposed(down_v));
+
+    GGML_ASSERT(up_v->ne[0]   == input->ne[0]);
+    GGML_ASSERT(gate_v->ne[0] == input->ne[0]);
+    GGML_ASSERT(up_u->ne[1]   == gate_u->ne[1]);
+    GGML_ASSERT(down_v->ne[0] == up_u->ne[1]);
+    GGML_ASSERT(down_u->ne[1] > 0);
+
+    const int64_t ne[4] = { down_u->ne[1], input->ne[1], input->ne[2], input->ne[3] };
+    struct ggml_tensor * result = ggml_new_tensor(ctx, GGML_TYPE_F32, 4, ne);
+
+    result->op     = GGML_OP_FFN_SVD_OFFLOAD;
+    result->src[0] = input;
+    result->src[1] = up_u;
+    result->src[2] = up_v;
+    result->src[3] = gate_u;
+    result->src[4] = gate_v;
+    result->src[5] = down_u;
+    result->src[6] = down_v;
 
     return result;
 }

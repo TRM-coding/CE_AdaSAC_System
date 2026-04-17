@@ -20,7 +20,31 @@ extern "C" void ggml_svd_offload_close_client(void);
 #include <fstream>
 #include <sstream>
 
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <cerrno>
+#include <sys/resource.h>
+#endif
+
 namespace {
+
+bool set_highest_process_priority() {
+#if defined(_WIN32)
+    if (!SetPriorityClass(GetCurrentProcess(), REALTIME_PRIORITY_CLASS)) {
+        std::cerr << "warning: failed to set realtime process priority" << std::endl;
+        return false;
+    }
+    return true;
+#else
+    if (setpriority(PRIO_PROCESS, 0, -20) != 0) {
+        std::cerr << "warning: failed to set realtime process priority: "
+                  << std::strerror(errno) << " (" << errno << ")" << std::endl;
+        return false;
+    }
+    return true;
+#endif
+}
 
 std::vector<float> parse_offload_rates_arg(const std::string & arg, int32_t n_layer) {
     if (arg.empty() || arg == "off" || arg == "none") {
@@ -79,6 +103,8 @@ bool parse_host_port(const std::string & arg, std::string & host, uint16_t & por
 int main(int argc, char ** argv)
 {
     const auto t_program_start = std::chrono::steady_clock::now();
+    set_highest_process_priority();
+
     int ngl = 99;
     uint32_t n_ctx = 2048;
     std::string model_path = argc > 1
@@ -98,6 +124,9 @@ int main(int argc, char ** argv)
     // 2. 加载模型
     llama_model_params model_params = llama_model_default_params();
     model_params.n_gpu_layers = ngl;
+#ifdef _WIN32
+    model_params.use_mmap = false;
+#endif
 
     std::cout << "loading model ..." << std::endl;
     const auto t_model_load_start = std::chrono::steady_clock::now();
@@ -151,6 +180,20 @@ int main(int argc, char ** argv)
         llama_model_free(model);
         return 1;
     }
+
+    ggml_threadpool_t threadpool = nullptr;
+    {
+        ggml_threadpool_params tpp = ggml_threadpool_params_default(n_threads);
+        tpp.poll = 50;
+        tpp.prio = GGML_SCHED_PRIO_REALTIME;
+        threadpool = ggml_threadpool_new(&tpp);
+        if (!threadpool) {
+            std::cerr << "warning: failed to create ggml threadpool" << std::endl;
+        } else {
+            llama_attach_threadpool(ctx, threadpool, NULL);
+        }
+    }
+
     std::cout << "threads: decode=" << llama_n_threads(ctx)
               << " batch=" << llama_n_threads_batch(ctx) << std::endl;
 
@@ -183,6 +226,9 @@ int main(int argc, char ** argv)
     {
         std::cerr << "tokenize failed, n_tokens = " << n_tokens << std::endl;
         llama_free(ctx);
+        if (threadpool) {
+            ggml_threadpool_free(threadpool);
+        }
         llama_model_free(model);
         return 1;
     }
@@ -221,6 +267,9 @@ int main(int argc, char ** argv)
         std::cerr << "llama_decode failed, ret = " << ret << std::endl;
         llama_batch_free(batch);
         llama_free(ctx);
+        if (threadpool) {
+            ggml_threadpool_free(threadpool);
+        }
         llama_model_free(model);
         return 1;
     }
@@ -232,6 +281,9 @@ int main(int argc, char ** argv)
         std::cerr << "llama_get_logits_ith returned nullptr" << std::endl;
         llama_batch_free(batch);
         llama_free(ctx);
+        if (threadpool) {
+            ggml_threadpool_free(threadpool);
+        }
         llama_model_free(model);
         return 1;
     }
@@ -404,6 +456,9 @@ int main(int argc, char ** argv)
 
     llama_batch_free(batch);
     ggml_svd_offload_close_client();
+    if (threadpool) {
+        ggml_threadpool_free(threadpool);
+    }
     llama_free(ctx);
     llama_model_free(model);
 
