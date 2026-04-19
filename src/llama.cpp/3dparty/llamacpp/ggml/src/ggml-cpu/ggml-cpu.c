@@ -86,6 +86,8 @@
 #define UNUSED GGML_UNUSED
 #define SWAP(x, y, T) do { T SWAP = x; (x) = y; (y) = SWAP; } while (0)
 
+#define GGML_SVD_LOCAL_SPLIT_MAX_CPUS GGML_MAX_N_THREADS
+
 #if defined(__ARM_ARCH)
 struct ggml_arm_arch_features_type {
     int has_neon;
@@ -96,6 +98,22 @@ struct ggml_arm_arch_features_type {
     int has_sme;
 } ggml_arm_arch_features = {-1, -1, -1, -1, 0, -1};
 #endif
+
+static struct {
+    bool enabled;
+    int32_t group_a_cpus[GGML_SVD_LOCAL_SPLIT_MAX_CPUS];
+    int32_t group_b_cpus[GGML_SVD_LOCAL_SPLIT_MAX_CPUS];
+    int32_t n_group_a;
+    int32_t n_group_b;
+    float group_a_share;
+} g_svd_local_split = {
+    false,
+    { 0 },
+    { 0 },
+    0,
+    0,
+    0.5f,
+};
 
 
 #if defined(_WIN32)
@@ -1270,6 +1288,178 @@ static void ggml_compute_forward_mul_mat(
 
 static void * incr_ptr_aligned(void ** p, size_t size, size_t align);
 
+void ggml_cpu_set_svd_local_split(
+        const int32_t * group_a_cpus,
+               int32_t   n_group_a,
+        const int32_t * group_b_cpus,
+               int32_t   n_group_b,
+                 float   group_a_share) {
+    memset(&g_svd_local_split, 0, sizeof(g_svd_local_split));
+
+    if (group_a_cpus == NULL || group_b_cpus == NULL || n_group_a <= 0 || n_group_b <= 0) {
+        g_svd_local_split.group_a_share = 0.5f;
+        return;
+    }
+
+    if (n_group_a > GGML_SVD_LOCAL_SPLIT_MAX_CPUS) {
+        n_group_a = GGML_SVD_LOCAL_SPLIT_MAX_CPUS;
+    }
+    if (n_group_b > GGML_SVD_LOCAL_SPLIT_MAX_CPUS) {
+        n_group_b = GGML_SVD_LOCAL_SPLIT_MAX_CPUS;
+    }
+
+    memcpy(g_svd_local_split.group_a_cpus, group_a_cpus, sizeof(int32_t) * n_group_a);
+    memcpy(g_svd_local_split.group_b_cpus, group_b_cpus, sizeof(int32_t) * n_group_b);
+    g_svd_local_split.n_group_a = n_group_a;
+    g_svd_local_split.n_group_b = n_group_b;
+    g_svd_local_split.group_a_share = group_a_share > 0.0f && group_a_share < 1.0f
+        ? group_a_share
+        : 0.5f;
+    g_svd_local_split.enabled = true;
+}
+
+void ggml_cpu_clear_svd_local_split(void) {
+    memset(&g_svd_local_split, 0, sizeof(g_svd_local_split));
+    g_svd_local_split.group_a_share = 0.5f;
+}
+
+static bool ggml_svd_local_split_enabled(void) {
+    return g_svd_local_split.enabled &&
+        g_svd_local_split.n_group_a > 0 &&
+        g_svd_local_split.n_group_b > 0 &&
+        g_svd_local_split.group_a_share > 0.0f &&
+        g_svd_local_split.group_a_share < 1.0f;
+}
+
+static int32_t ggml_svd_local_split_find_cpu(
+        const int32_t * cpus,
+        int32_t n_cpus,
+        int32_t cpu) {
+    for (int32_t i = 0; i < n_cpus; ++i) {
+        if (cpus[i] == cpu) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static bool ggml_svd_local_split_get_thread_info(
+        const struct ggml_compute_params * params,
+        int32_t * group_id,
+        int32_t * group_index,
+        int32_t * group_size) {
+    if (!ggml_svd_local_split_enabled()) {
+        return false;
+    }
+
+    if (params == NULL) {
+        return false;
+    }
+
+#ifdef GGML_USE_OPENMP
+    if (params->ith < 0) {
+        return false;
+    }
+
+    if (params->ith < g_svd_local_split.n_group_a) {
+        *group_id = 0;
+        *group_index = params->ith;
+        *group_size = g_svd_local_split.n_group_a;
+        return true;
+    }
+
+    const int32_t group_b_ith = params->ith - g_svd_local_split.n_group_a;
+    if (group_b_ith < g_svd_local_split.n_group_b) {
+        *group_id = 1;
+        *group_index = group_b_ith;
+        *group_size = g_svd_local_split.n_group_b;
+        return true;
+    }
+#else
+    if (params->threadpool == NULL) {
+        return false;
+    }
+
+    const struct ggml_threadpool * threadpool = params->threadpool;
+    if (params->ith < 0 || params->ith >= threadpool->n_threads_max) {
+        return false;
+    }
+
+    const bool * worker_mask = threadpool->workers[params->ith].cpumask;
+    for (int32_t cpu = 0; cpu < GGML_MAX_N_THREADS; ++cpu) {
+        if (!worker_mask[cpu]) {
+            continue;
+        }
+
+        const int32_t group_a_index = ggml_svd_local_split_find_cpu(
+            g_svd_local_split.group_a_cpus,
+            g_svd_local_split.n_group_a,
+            cpu);
+        if (group_a_index >= 0) {
+            *group_id = 0;
+            *group_index = group_a_index;
+            *group_size = g_svd_local_split.n_group_a;
+            return true;
+        }
+
+        const int32_t group_b_index = ggml_svd_local_split_find_cpu(
+            g_svd_local_split.group_b_cpus,
+            g_svd_local_split.n_group_b,
+            cpu);
+        if (group_b_index >= 0) {
+            *group_id = 1;
+            *group_index = group_b_index;
+            *group_size = g_svd_local_split.n_group_b;
+            return true;
+        }
+    }
+#endif
+
+    return false;
+}
+
+static bool ggml_svd_local_split_prepare(
+        const struct ggml_compute_params * params,
+        int64_t k_local,
+        enum ggml_type u_type,
+        enum ggml_type tmp_type,
+        int64_t * k_group_a,
+        int32_t * group_id,
+        int32_t * group_index,
+        int32_t * group_size) {
+    if (k_local <= 1 || !ggml_svd_local_split_get_thread_info(params, group_id, group_index, group_size)) {
+        return false;
+    }
+
+    int64_t local_k_group_a = (int64_t) llroundf((float) k_local * g_svd_local_split.group_a_share);
+    const int64_t align_u = ggml_blck_size(u_type);
+    const int64_t align_tmp = ggml_blck_size(tmp_type);
+    int64_t align = align_u > align_tmp ? align_u : align_tmp;
+    if (align < 1) {
+        align = 1;
+    }
+
+    if (local_k_group_a <= 0) {
+        local_k_group_a = align;
+    }
+    local_k_group_a = (local_k_group_a / align) * align;
+    if (local_k_group_a <= 0) {
+        local_k_group_a = align;
+    }
+    if (local_k_group_a >= k_local) {
+        local_k_group_a = (k_local / align) * align;
+    }
+    if (local_k_group_a >= k_local) {
+        local_k_group_a = k_local - align;
+    }
+
+    if (local_k_group_a <= 0 || local_k_group_a >= k_local) {
+        return false;
+    }
+
+    *k_group_a = local_k_group_a;
+    return true;
+}
 
 static struct ggml_tensor ggml_mul_mat_svd_make_dst(
         const struct ggml_tensor * template,
@@ -1330,9 +1520,9 @@ static size_t ggml_mul_mat_svd_work_size(
     const struct ggml_tensor * u,
     const struct ggml_tensor * v,
     int64_t k_keep) {
-    GGML_UNUSED(k_keep);
+    const int64_t rank_work = k_keep > 0 && k_keep < v->ne[1] ? k_keep : v->ne[1];
 
-    size_t cur = GGML_PAD(ggml_type_size(GGML_TYPE_F32) * v->ne[1] * b->ne[1] * b->ne[2] * b->ne[3], sizeof(int64_t));
+    size_t cur = GGML_PAD(ggml_type_size(GGML_TYPE_F32) * rank_work * b->ne[1] * b->ne[2] * b->ne[3], sizeof(int64_t));
 
     const enum ggml_type vec_dot_type_v = type_traits_cpu[v->type].vec_dot_type;
     if (b->type != vec_dot_type_v) {
@@ -1341,7 +1531,7 @@ static size_t ggml_mul_mat_svd_work_size(
 
     const enum ggml_type vec_dot_type_u = type_traits_cpu[u->type].vec_dot_type;
     if (vec_dot_type_u != GGML_TYPE_F32) {
-        const size_t tmp_rhs_elems = v->ne[1] * b->ne[1] * b->ne[2] * b->ne[3];
+        const size_t tmp_rhs_elems = rank_work * b->ne[1] * b->ne[2] * b->ne[3];
         cur += GGML_PAD(ggml_row_size(vec_dot_type_u, tmp_rhs_elems), sizeof(int64_t));
     }
 
@@ -1702,6 +1892,17 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     const struct ggml_tensor * u = dst->src[2];
     const struct ggml_tensor * v = dst->src[3];
 
+    // Quantized tensors may be runtime-repacked by extra CPU buffer types such as
+    // CPU_AARCH64 (for example Q4_0 -> q4_0_8x8). The hand-written SVD vec path
+    // below assumes the canonical in-memory GGML block layout, so using it on
+    // repacked tensors produces incorrect outputs. Fall back to the generic
+    // matmul sub-ops in that case, because they route through the backend-aware
+    // dispatcher and can consume the repacked layout correctly.
+    if ((u->extra != NULL || v->extra != NULL) &&
+        (ggml_is_quantized(u->type) || ggml_is_quantized(v->type))) {
+        return false;
+    }
+
     if (b->type != GGML_TYPE_F32) {
         return false;
     }
@@ -1731,7 +1932,6 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     float * tmp = (float *) incr_ptr_aligned(&wdata_cur, sizeof(float) * total_rank, sizeof(float));
     float * remote_out = (float *) incr_ptr_aligned(&wdata_cur, sizeof(float) * dst->ne[0], sizeof(float));
     int32_t * request_started = (int32_t *) incr_ptr_aligned(&wdata_cur, sizeof(int32_t), sizeof(int32_t));
-
     const int ith = params->ith;
     const int nth = params->nth;
     const float * x = (const float *) b->data;
@@ -1842,9 +2042,36 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
         local_total_begin_us = ggml_svd_local_profile_now_us();
     }
 
-    const int64_t k_local = *request_started ? k_keep : total_rank;
-    const int64_t tmp_start = ith * k_local / nth;
-    const int64_t tmp_end   = (ith + 1) * k_local / nth;
+    const int64_t k_local = can_offload
+        ? (*request_started ? k_keep : total_rank)
+        : k_keep;
+    int32_t split_group_id = -1;
+    int32_t split_group_index = 0;
+    int32_t split_group_size = 0;
+    int64_t k_group_a = 0;
+    const bool local_split_active = !can_offload &&
+        ggml_svd_local_split_prepare(
+            params,
+            k_local,
+            u->type,
+            vec_dot_type_u,
+            &k_group_a,
+            &split_group_id,
+            &split_group_index,
+            &split_group_size);
+    const int64_t rank_begin = local_split_active
+        ? (split_group_id == 0 ? 0 : k_group_a)
+        : 0;
+    const int64_t rank_end = local_split_active
+        ? (split_group_id == 0 ? k_group_a : k_local)
+        : k_local;
+    const int64_t rank_span = rank_end - rank_begin;
+    const int64_t tmp_start = local_split_active
+        ? rank_begin + split_group_index * rank_span / split_group_size
+        : ith * k_local / nth;
+    const int64_t tmp_end = local_split_active
+        ? rank_begin + (split_group_index + 1) * rank_span / split_group_size
+        : (ith + 1) * k_local / nth;
 
     if (ith == 0 && !can_offload && dst->svd_op_id >= 0) {
         local_v_begin_us = ggml_svd_local_profile_now_us();
@@ -1891,26 +2118,32 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
 
     const int64_t dst_start = ith * dst->ne[0] / nth;
     const int64_t dst_end   = (ith + 1) * dst->ne[0] / nth;
+    float * dst_stage = dst_data;
+    const int64_t u_rank_begin = 0;
+    const int64_t u_rank_len = k_local;
+    size_t u_stage_row_size = u->nb[1];
+    const char * u_base = (const char *) u->data + ggml_row_size(u->type, u_rank_begin);
+    const char * tmp_base = (const char *) tmp_vec + ggml_row_size(vec_dot_type_u, u_rank_begin);
 
-    if (k_local > 0) {
+    if (u_rank_len > 0) {
         if (u->type == GGML_TYPE_F16) {
             int64_t i = dst_start;
             for (; i + 1 < dst_end; i += GGML_VEC_DOT_UNROLL) {
-                ggml_vec_dot_f16_unroll((int) k_local, (int) u->nb[1], dst_data + i, (char *) u->data + i * u->nb[1], (ggml_fp16_t *) tmp_vec);
+                ggml_vec_dot_f16_unroll((int) u_rank_len, (int) u_stage_row_size, dst_stage + i, (char *) u_base + i * u_stage_row_size, (ggml_fp16_t *) tmp_base);
             }
             for (; i < dst_end; ++i) {
-                const char * u_row = (const char *) u->data + i * u->nb[1];
-                vec_dot_u((int) k_local, &dst_data[i], 0, (void *) u_row, 0, (void *) tmp_vec, 0, 1);
+                const char * u_row = u_base + i * u_stage_row_size;
+                vec_dot_u((int) u_rank_len, &dst_stage[i], 0, (void *) u_row, 0, (void *) tmp_base, 0, 1);
             }
         } else {
             for (int64_t i = dst_start; i < dst_end; ++i) {
-                const char * u_row = (const char *) u->data + i * u->nb[1];
-                vec_dot_u((int) k_local, &dst_data[i], 0, (void *) u_row, 0, (void *) tmp_vec, 0, 1);
+                const char * u_row = u_base + i * u_stage_row_size;
+                vec_dot_u((int) u_rank_len, &dst_stage[i], 0, (void *) u_row, 0, (void *) tmp_base, 0, 1);
             }
         }
     } else {
         for (int64_t i = dst_start; i < dst_end; ++i) {
-            dst_data[i] = 0.0f;
+            dst_stage[i] = 0.0f;
         }
     }
 
@@ -1918,6 +2151,17 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
 
     if (ith == 0 && !can_offload && dst->svd_op_id >= 0) {
         local_u_us = ggml_svd_local_profile_now_us() - local_u_begin_us;
+    }
+
+    if (!*request_started) {
+        if (ith == 0 && !can_offload && dst->svd_op_id >= 0) {
+            ggml_svd_local_profile_accumulate(
+                dst->svd_op_id,
+                ggml_svd_local_profile_now_us() - local_total_begin_us,
+                local_v_us,
+                local_u_us);
+        }
+        return true;
     }
 
     if (ith == 0) {
@@ -2072,7 +2316,9 @@ static void ggml_compute_forward_mul_mat_svd(
         return;
     }
 
-    const int64_t k_local = *request_started ? k_keep : total_rank;
+    const int64_t k_local = can_offload
+        ? (*request_started ? k_keep : total_rank)
+        : k_keep;
 
     const size_t tmp_size = sizeof(float) * k_local * b->ne[1] * b->ne[2] * b->ne[3];
     void * tmp_data = incr_ptr_aligned(&wdata_cur, tmp_size, sizeof(float));
@@ -3645,7 +3891,7 @@ struct ggml_cplan ggml_graph_plan(
                             : 0;
                         const int64_t k_keep = v->ne[1] - k_trunc;
 
-                        const size_t tmp_elems = v->ne[1] * b->ne[1] * b->ne[2] * b->ne[3];
+                        const size_t tmp_elems = k_keep * b->ne[1] * b->ne[2] * b->ne[3];
                         cur = GGML_PAD(ggml_type_size(GGML_TYPE_F32) * tmp_elems, sizeof(int64_t));
 
                         const enum ggml_type vec_dot_type_v = type_traits_cpu[v->type].vec_dot_type;

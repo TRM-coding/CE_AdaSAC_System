@@ -57,6 +57,13 @@ extern "C" {
     GGML_BACKEND_API int                           ggml_threadpool_get_n_threads (struct ggml_threadpool * threadpool);
     GGML_BACKEND_API void                          ggml_threadpool_pause         (struct ggml_threadpool * threadpool);
     GGML_BACKEND_API void                          ggml_threadpool_resume        (struct ggml_threadpool * threadpool);
+    GGML_BACKEND_API void                          ggml_cpu_set_svd_local_split  (
+                                            const int32_t * group_a_cpus,
+                                                   int32_t   n_group_a,
+                                            const int32_t * group_b_cpus,
+                                                   int32_t   n_group_b,
+                                                     float   group_a_share);
+    GGML_BACKEND_API void                          ggml_cpu_clear_svd_local_split(void);
 
     // ggml_graph_plan() has to be called before ggml_graph_compute()
     // when plan.work_size > 0, caller must allocate memory for plan.work_data

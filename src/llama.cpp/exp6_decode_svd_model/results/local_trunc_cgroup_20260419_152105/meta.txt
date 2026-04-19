@@ -1,0 +1,8 @@
+date=$(date --iso-8601=seconds)
+cpuset=60-79
+threads=20
+model=/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/gguf_models/qwen.gguf.sort_svd.compact.gguf
+tokens=24
+rates=0,0.5,0.7,0.8
+repeats=3
+binary=/home/tianruiming/CE_ADA_LLAMA/build-release-current/decode_svd_test

@@ -1,0 +1,9 @@
+date=2026-04-19T15:25:36+08:00
+cgroup=/sys/fs/cgroup/tianruiming-exclusive
+cpuset=60-79
+threads=8
+model=/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/gguf_models/qwen.gguf.sort_svd.compact.llama_quant_q4_0.gguf
+tokens=24
+rates=0,0.5,0.7,0.8
+repeats=3
+binary=/home/tianruiming/CE_ADA_LLAMA/build-release-current/decode_svd_test

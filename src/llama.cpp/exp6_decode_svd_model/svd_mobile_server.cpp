@@ -1282,7 +1282,7 @@ int main(int argc, char ** argv) {
     const int port = argc > 2 ? std::stoi(argv[2]) : 7788;
     const int n_threads = argc > 3 ? std::stoi(argv[3]) : 8;
     const std::string quant_arg = argc > 4 ? argv[4] : "off";
-    const std::string executor_arg = argc > 5 ? argv[5] : "auto";
+    const std::string executor_arg = argc > 5 ? argv[5] : "svd";
     const QuantizationMode quant_mode = parse_quantization_mode(quant_arg);
     const ExecutorMode executor_mode = parse_executor_mode(executor_arg);
 
@@ -1437,6 +1437,7 @@ int main(int argc, char ** argv) {
                             << " output_aux_len=" << output_aux_len
                             << " u_type=" << ggml_type_name(up.u->type)
                             << " v_type=" << ggml_type_name(up.v->type)
+                            << " executor_mode=" << executor_mode_name(effective_mode)
                             << " backend=" << backend_path_name()
                             << " input_sum_abs=" << input_stats.sum_abs
                             << " input_max_abs=" << input_stats.max_abs
@@ -1559,6 +1560,7 @@ int main(int argc, char ** argv) {
                             << " output_len=" << output_len
                             << " u_type=" << ggml_type_name(mat.u->type)
                             << " v_type=" << ggml_type_name(mat.v->type)
+                            << " executor_mode=" << executor_mode_name(effective_mode)
                             << " backend=" << backend_path_name()
                             << " input_sum_abs=" << input_stats.sum_abs
                             << " input_max_abs=" << input_stats.max_abs

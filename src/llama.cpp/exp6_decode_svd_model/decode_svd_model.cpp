@@ -5,6 +5,7 @@
 #include "llama-memory.h"
 #include "llama-mmap.h"
 #include "llama-model.h"
+#include "ggml-cpu.h"
 
 extern "C" void ggml_svd_offload_close_client(void);
 
@@ -98,6 +99,51 @@ bool parse_host_port(const std::string & arg, std::string & host, uint16_t & por
     return !host.empty() && port != 0;
 }
 
+std::vector<int32_t> parse_cpu_range_arg(const std::string & arg) {
+    std::vector<int32_t> cpus;
+    if (arg.empty() || arg == "off" || arg == "none") {
+        return cpus;
+    }
+
+    std::stringstream ss(arg);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+        if (item.empty()) {
+            continue;
+        }
+
+        const size_t dash = item.find('-');
+        if (dash == std::string::npos) {
+            cpus.push_back((int32_t) std::stoi(item));
+            continue;
+        }
+
+        const int32_t lo = (int32_t) std::stoi(item.substr(0, dash));
+        const int32_t hi = (int32_t) std::stoi(item.substr(dash + 1));
+        if (hi < lo) {
+            throw std::runtime_error("invalid cpu range: " + item);
+        }
+        for (int32_t cpu = lo; cpu <= hi; ++cpu) {
+            cpus.push_back(cpu);
+        }
+    }
+
+    std::sort(cpus.begin(), cpus.end());
+    cpus.erase(std::unique(cpus.begin(), cpus.end()), cpus.end());
+    return cpus;
+}
+
+std::string cpus_to_string(const std::vector<int32_t> & cpus) {
+    std::ostringstream oss;
+    for (size_t i = 0; i < cpus.size(); ++i) {
+        if (i > 0) {
+            oss << ",";
+        }
+        oss << cpus[i];
+    }
+    return oss.str();
+}
+
 } // namespace
 
 int main(int argc, char ** argv)
@@ -111,12 +157,27 @@ int main(int argc, char ** argv)
         ? argv[1]
         : "/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/gguf_models/qwen7b.gguf.sort_svd.gguf";
     const int32_t max_new_tokens = argc > 2 ? std::stoi(argv[2]) : 64;
-    const int32_t n_threads = argc > 3
+    int32_t n_threads = argc > 3
         ? std::stoi(argv[3])
         : std::max(1u, std::thread::hardware_concurrency() / 2);
     const bool verbose_tokens = argc > 4 ? std::stoi(argv[4]) != 0 : false;
     const std::string offload_endpoint = argc > 5 ? argv[5] : "";
     const std::string offload_rates_arg = argc > 6 ? argv[6] : "";
+    const std::string split_group_a_arg = argc > 7 ? argv[7] : "";
+    const std::string split_group_b_arg = argc > 8 ? argv[8] : "";
+    const float split_group_a_share = argc > 9 ? std::stof(argv[9]) : 0.75f;
+    const std::vector<int32_t> split_group_a = parse_cpu_range_arg(split_group_a_arg);
+    const std::vector<int32_t> split_group_b = parse_cpu_range_arg(split_group_b_arg);
+    const bool use_local_split = !split_group_a.empty() && !split_group_b.empty();
+
+    if (use_local_split) {
+        const int32_t split_threads = (int32_t) (split_group_a.size() + split_group_b.size());
+        if (split_threads != n_threads) {
+            std::cout << "override threads for local split: " << n_threads
+                      << " -> " << split_threads << std::endl;
+            n_threads = split_threads;
+        }
+    }
 
     // 1. 加载动态后端
     ggml_backend_load_all();
@@ -169,6 +230,13 @@ int main(int argc, char ** argv)
     } else {
         std::cout << "SVD offload disabled" << std::endl;
     }
+    if (use_local_split) {
+        std::cout << "SVD local split enabled: groupA={" << cpus_to_string(split_group_a)
+                  << "} groupB={" << cpus_to_string(split_group_b)
+                  << "} groupA_share=" << split_group_a_share << std::endl;
+    } else {
+        ggml_cpu_clear_svd_local_split();
+    }
 
     std::cout << "creating context ..." << std::endl;
     const auto t_context_create_start = std::chrono::steady_clock::now();
@@ -186,6 +254,24 @@ int main(int argc, char ** argv)
         ggml_threadpool_params tpp = ggml_threadpool_params_default(n_threads);
         tpp.poll = 50;
         tpp.prio = GGML_SCHED_PRIO_REALTIME;
+        if (use_local_split) {
+            memset(tpp.cpumask, 0, sizeof(tpp.cpumask));
+            for (const int32_t cpu : split_group_a) {
+                if (cpu >= 0 && cpu < GGML_MAX_N_THREADS) {
+                    tpp.cpumask[cpu] = true;
+                }
+            }
+            for (const int32_t cpu : split_group_b) {
+                if (cpu >= 0 && cpu < GGML_MAX_N_THREADS) {
+                    tpp.cpumask[cpu] = true;
+                }
+            }
+            tpp.strict_cpu = true;
+            ggml_cpu_set_svd_local_split(
+                split_group_a.data(), (int32_t) split_group_a.size(),
+                split_group_b.data(), (int32_t) split_group_b.size(),
+                split_group_a_share);
+        }
         threadpool = ggml_threadpool_new(&tpp);
         if (!threadpool) {
             std::cerr << "warning: failed to create ggml threadpool" << std::endl;

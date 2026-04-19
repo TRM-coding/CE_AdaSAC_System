@@ -6,6 +6,7 @@
 #include "llama-cparams.h"
 #include "llama-kv-cache.h"
 
+#include <atomic>
 #include <cassert>
 #include <cmath>
 #include <cstring>
@@ -746,6 +747,7 @@ ggml_tensor * llm_graph_context::build_ffn_svd_qwen2(
             int   il,
             float        offload_rate
                     ) const{
+    static std::atomic<int> svd_route_log_budget { 0 };
     const bool has_complete_svd =
         up_svd_u   != nullptr && up_svd_v   != nullptr &&
         gate_svd_u != nullptr && gate_svd_v != nullptr &&
@@ -761,6 +763,17 @@ ggml_tensor * llm_graph_context::build_ffn_svd_qwen2(
             LLM_FFN_SILU,
             LLM_FFN_PAR,
             il);
+    }
+
+    if (svd_offload_enabled && svd_route_log_budget.fetch_add(1, std::memory_order_relaxed) < 64) {
+        fprintf(stderr,
+                "[svd-route] layer=%d n_tokens=%d offload_rate=%.3f path=%s cur_ne0=%lld cur_ne1=%lld\n",
+                il,
+                n_tokens,
+                offload_rate,
+                (n_tokens == 1 && offload_rate >= 0.999f) ? "ffn_offload" : "split_svd",
+                (long long) cur->ne[0],
+                (long long) cur->ne[1]);
     }
 
     if (svd_offload_enabled && n_tokens == 1 && offload_rate >= 0.999f) {

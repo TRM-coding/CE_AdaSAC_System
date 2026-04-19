@@ -317,18 +317,32 @@ static void ggml_svd_set_socket_timeouts(int fd, int32_t timeout_ms) {
 }
 
 static bool ggml_svd_client_connect_locked(void) {
+    static int g_svd_connect_log_budget = 0;
     if (!g_svd_client.enabled || g_svd_client.port == 0 || g_svd_client.host[0] == '\0') {
+        if (__atomic_fetch_add(&g_svd_connect_log_budget, 1, __ATOMIC_RELAXED) < 32) {
+            fprintf(stderr,
+                    "[svd-offload-connect] disabled enabled=%d host=%s port=%u\n",
+                    g_svd_client.enabled ? 1 : 0,
+                    g_svd_client.host[0] ? g_svd_client.host : "<empty>",
+                    (unsigned) g_svd_client.port);
+        }
         return false;
     }
     if (g_svd_client.socket_fd >= 0) {
         return true;
     }
     if (!ggml_svd_winsock_initialized()) {
+        if (__atomic_fetch_add(&g_svd_connect_log_budget, 1, __ATOMIC_RELAXED) < 32) {
+            fprintf(stderr, "[svd-offload-connect] winsock/socket init failed\n");
+        }
         return false;
     }
 
     const int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
+        if (__atomic_fetch_add(&g_svd_connect_log_budget, 1, __ATOMIC_RELAXED) < 32) {
+            fprintf(stderr, "[svd-offload-connect] socket() failed errno=%d\n", errno);
+        }
         return false;
     }
 
@@ -341,16 +355,36 @@ static bool ggml_svd_client_connect_locked(void) {
     addr.sin_family = AF_INET;
     addr.sin_port = htons(g_svd_client.port);
     if (inet_pton(AF_INET, g_svd_client.host, &addr.sin_addr) != 1) {
+        if (__atomic_fetch_add(&g_svd_connect_log_budget, 1, __ATOMIC_RELAXED) < 32) {
+            fprintf(stderr,
+                    "[svd-offload-connect] inet_pton failed host=%s errno=%d\n",
+                    g_svd_client.host,
+                    errno);
+        }
         ggml_svd_close_socket(fd);
         return false;
     }
 
     if (connect(fd, (const struct sockaddr *) &addr, sizeof(addr)) != 0) {
+        if (__atomic_fetch_add(&g_svd_connect_log_budget, 1, __ATOMIC_RELAXED) < 32) {
+            fprintf(stderr,
+                    "[svd-offload-connect] connect failed host=%s port=%u errno=%d\n",
+                    g_svd_client.host,
+                    (unsigned) g_svd_client.port,
+                    errno);
+        }
         ggml_svd_close_socket(fd);
         return false;
     }
 
     g_svd_client.socket_fd = fd;
+    if (__atomic_fetch_add(&g_svd_connect_log_budget, 1, __ATOMIC_RELAXED) < 32) {
+        fprintf(stderr,
+                "[svd-offload-connect] connected host=%s port=%u fd=%d\n",
+                g_svd_client.host,
+                (unsigned) g_svd_client.port,
+                fd);
+    }
     return true;
 }
 
@@ -389,7 +423,22 @@ static bool ggml_svd_offload_begin_request_impl(
         const float * input,
         int64_t input_len,
         struct ggml_svd_offload_request_handle * handle) {
+    static int g_svd_begin_log_budget = 0;
     if (!ggml_svd_offload_client_enabled() || handle == NULL || input == NULL || input_len <= 0 || rank_start < 0) {
+        if (__atomic_fetch_add(&g_svd_begin_log_budget, 1, __ATOMIC_RELAXED) < 64) {
+            fprintf(stderr,
+                    "[svd-offload-begin] rejected kind=%d layer=%d op=%d enabled=%d handle=%d input=%d input_len=%lld rank_start=%lld host=%s port=%u\n",
+                    (int) request_kind,
+                    layer_id,
+                    op_id,
+                    ggml_svd_offload_client_enabled() ? 1 : 0,
+                    handle != NULL ? 1 : 0,
+                    input != NULL ? 1 : 0,
+                    (long long) input_len,
+                    (long long) rank_start,
+                    g_svd_client.host[0] ? g_svd_client.host : "<empty>",
+                    (unsigned) g_svd_client.port);
+        }
         return false;
     }
 
@@ -397,6 +446,15 @@ static bool ggml_svd_offload_begin_request_impl(
     pthread_mutex_lock(&g_svd_client.mutex);
 
     if (!ggml_svd_client_connect_locked()) {
+        if (__atomic_fetch_add(&g_svd_begin_log_budget, 1, __ATOMIC_RELAXED) < 64) {
+            fprintf(stderr,
+                    "[svd-offload-begin] connect_failed kind=%d layer=%d op=%d host=%s port=%u\n",
+                    (int) request_kind,
+                    layer_id,
+                    op_id,
+                    g_svd_client.host,
+                    (unsigned) g_svd_client.port);
+        }
         pthread_mutex_unlock(&g_svd_client.mutex);
         return false;
     }
@@ -413,6 +471,16 @@ static bool ggml_svd_offload_begin_request_impl(
 
     if (!ggml_svd_send_all(g_svd_client.socket_fd, &req, sizeof(req)) ||
         !ggml_svd_send_all(g_svd_client.socket_fd, input, sizeof(float) * (size_t) input_len)) {
+        if (__atomic_fetch_add(&g_svd_begin_log_budget, 1, __ATOMIC_RELAXED) < 64) {
+            fprintf(stderr,
+                    "[svd-offload-begin] send_failed kind=%d layer=%d op=%d fd=%d errno=%d input_len=%lld\n",
+                    (int) request_kind,
+                    layer_id,
+                    op_id,
+                    g_svd_client.socket_fd,
+                    errno,
+                    (long long) input_len);
+        }
         ggml_svd_close_socket(g_svd_client.socket_fd);
         g_svd_client.socket_fd = -1;
         ggml_svd_gate_cache_clear_locked();
@@ -428,6 +496,18 @@ static bool ggml_svd_offload_begin_request_impl(
     handle->rank_start = (int32_t) rank_start;
     handle->input_hash = ggml_svd_hash_input(input, input_len);
     handle->start_us = ggml_svd_now_us();
+
+    if (__atomic_fetch_add(&g_svd_begin_log_budget, 1, __ATOMIC_RELAXED) < 64) {
+        fprintf(stderr,
+                "[svd-offload-begin] started kind=%d layer=%d op=%d fd=%d input_len=%lld rank_start=%lld offload_rate=%.3f\n",
+                (int) request_kind,
+                layer_id,
+                op_id,
+                handle->socket_fd,
+                (long long) input_len,
+                (long long) rank_start,
+                offload_rate);
+    }
 
     const uint64_t send_us = handle->start_us - t_begin_us;
     if (request_kind == GGML_SVD_OFFLOAD_REQ_UP_GATE) {

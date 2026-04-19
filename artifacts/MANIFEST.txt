@@ -1,0 +1,14 @@
+Use only these two files for the current Windows + Android cooperative test.
+
+Windows client:
+  artifacts/windows-client/decode_svd_test.exe
+  Type: PE32+ x86-64 Windows executable
+  Run on: Windows PC
+
+Android server:
+  artifacts/android-server/svd_mobile_server
+  Type: Android ARM64 executable, interpreter /system/bin/linker64
+  Push to: /data/local/tmp/CE_Ada/svd_mobile_server
+
+Do not use files from build-release-current for Windows.
+Those are Linux x86_64 build outputs.
