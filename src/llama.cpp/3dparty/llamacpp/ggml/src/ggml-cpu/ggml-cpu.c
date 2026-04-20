@@ -106,6 +106,7 @@ static struct {
     int32_t n_group_a;
     int32_t n_group_b;
     float group_a_share;
+    int32_t minor_timeout_ms;
 } g_svd_local_split = {
     false,
     { 0 },
@@ -113,6 +114,16 @@ static struct {
     0,
     0,
     0.5f,
+    0,
+};
+
+struct ggml_svd_local_timeout_state {
+    _Atomic int group_done_count[2];
+    _Atomic int decision;
+    _Atomic int minor_acked_count;
+    _Atomic int active_barrier_count;
+    _Atomic int active_barrier_phase;
+    _Atomic int op_done;
 };
 
 
@@ -1293,7 +1304,8 @@ void ggml_cpu_set_svd_local_split(
                int32_t   n_group_a,
         const int32_t * group_b_cpus,
                int32_t   n_group_b,
-                 float   group_a_share) {
+                 float   group_a_share,
+               int32_t   minor_timeout_ms) {
     memset(&g_svd_local_split, 0, sizeof(g_svd_local_split));
 
     if (group_a_cpus == NULL || group_b_cpus == NULL || n_group_a <= 0 || n_group_b <= 0) {
@@ -1315,12 +1327,14 @@ void ggml_cpu_set_svd_local_split(
     g_svd_local_split.group_a_share = group_a_share > 0.0f && group_a_share < 1.0f
         ? group_a_share
         : 0.5f;
+    g_svd_local_split.minor_timeout_ms = minor_timeout_ms > 0 ? minor_timeout_ms : 0;
     g_svd_local_split.enabled = true;
 }
 
 void ggml_cpu_clear_svd_local_split(void) {
     memset(&g_svd_local_split, 0, sizeof(g_svd_local_split));
     g_svd_local_split.group_a_share = 0.5f;
+    g_svd_local_split.minor_timeout_ms = 0;
 }
 
 static bool ggml_svd_local_split_enabled(void) {
@@ -1329,6 +1343,30 @@ static bool ggml_svd_local_split_enabled(void) {
         g_svd_local_split.n_group_b > 0 &&
         g_svd_local_split.group_a_share > 0.0f &&
         g_svd_local_split.group_a_share < 1.0f;
+}
+
+static bool ggml_svd_local_split_timeout_enabled(void) {
+    return ggml_svd_local_split_enabled() && g_svd_local_split.minor_timeout_ms > 0;
+}
+
+static void ggml_svd_local_timeout_barrier(
+        struct ggml_svd_local_timeout_state * state,
+        int32_t active_threads) {
+    if (state == NULL || active_threads <= 1) {
+        return;
+    }
+
+    const int phase = atomic_load_explicit(&state->active_barrier_phase, memory_order_relaxed);
+    const int arrived = atomic_fetch_add_explicit(&state->active_barrier_count, 1, memory_order_acq_rel) + 1;
+    if (arrived == active_threads) {
+        atomic_store_explicit(&state->active_barrier_count, 0, memory_order_relaxed);
+        atomic_fetch_add_explicit(&state->active_barrier_phase, 1, memory_order_release);
+        return;
+    }
+
+    while (atomic_load_explicit(&state->active_barrier_phase, memory_order_acquire) == phase) {
+        ggml_thread_cpu_relax();
+    }
 }
 
 static int32_t ggml_svd_local_split_find_cpu(
@@ -1537,6 +1575,7 @@ static size_t ggml_mul_mat_svd_work_size(
 
     cur += GGML_PAD(ggml_type_size(GGML_TYPE_F32) * u->ne[1], sizeof(int64_t));
     cur += GGML_PAD(sizeof(int32_t), sizeof(int32_t));
+    cur += GGML_PAD(sizeof(struct ggml_svd_local_timeout_state), sizeof(int64_t));
 
     return cur;
 }
@@ -1932,6 +1971,9 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     float * tmp = (float *) incr_ptr_aligned(&wdata_cur, sizeof(float) * total_rank, sizeof(float));
     float * remote_out = (float *) incr_ptr_aligned(&wdata_cur, sizeof(float) * dst->ne[0], sizeof(float));
     int32_t * request_started = (int32_t *) incr_ptr_aligned(&wdata_cur, sizeof(int32_t), sizeof(int32_t));
+    struct ggml_svd_local_timeout_state * timeout_state =
+        (struct ggml_svd_local_timeout_state *) incr_ptr_aligned(
+            &wdata_cur, sizeof(struct ggml_svd_local_timeout_state), sizeof(int64_t));
     const int ith = params->ith;
     const int nth = params->nth;
     const float * x = (const float *) b->data;
@@ -1973,19 +2015,24 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
             k_keep = total_rank;
         }
     }
+    const int32_t offload_timeout_ms = can_offload ? ggml_svd_offload_get_timeout_ms() : -1;
+    const bool drop_remote_immediately = can_offload &&
+        offload_timeout_ms == 0 &&
+        k_keep > 0 &&
+        k_keep < total_rank;
 
     struct ggml_svd_offload_request_handle handle = { -1, 0, 0, -1, -1, 0, 0, 0 };
     if (ith == 0) {
         *request_started = 0;
-        if (can_offload &&
+        if (!drop_remote_immediately && can_offload &&
             dst->svd_op_id == GGML_SVD_OP_UP &&
             ggml_svd_offload_has_cached_up(dst->svd_layer_id, k_keep, x, b->ne[0], dst->ne[0])) {
             *request_started = 3;
-        } else if (can_offload &&
+        } else if (!drop_remote_immediately && can_offload &&
             dst->svd_op_id == GGML_SVD_OP_GATE &&
             ggml_svd_offload_has_cached_gate(dst->svd_layer_id, k_keep, x, b->ne[0], dst->ne[0])) {
             *request_started = 2;
-        } else if (can_offload) {
+        } else if (!drop_remote_immediately && can_offload) {
             const bool started = (dst->svd_op_id == GGML_SVD_OP_UP || dst->svd_op_id == GGML_SVD_OP_GATE)
                 ? ggml_svd_offload_begin_up_gate_request(
                     dst->svd_layer_id,
@@ -2043,7 +2090,7 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     }
 
     const int64_t k_local = can_offload
-        ? (*request_started ? k_keep : total_rank)
+        ? ((drop_remote_immediately || *request_started) ? k_keep : total_rank)
         : k_keep;
     int32_t split_group_id = -1;
     int32_t split_group_index = 0;
@@ -2072,6 +2119,25 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     const int64_t tmp_end = local_split_active
         ? rank_begin + (split_group_index + 1) * rank_span / split_group_size
         : (ith + 1) * k_local / nth;
+    const int64_t k_group_b = k_local - k_group_a;
+    const int32_t major_group_id = k_group_a >= k_group_b ? 0 : 1;
+    const int32_t minor_group_id = 1 - major_group_id;
+    const int32_t major_group_size = major_group_id == 0 ? g_svd_local_split.n_group_a : g_svd_local_split.n_group_b;
+    const int32_t minor_group_size = minor_group_id == 0 ? g_svd_local_split.n_group_a : g_svd_local_split.n_group_b;
+    const bool local_timeout_active = local_split_active &&
+        ggml_svd_local_split_timeout_enabled() &&
+        k_group_a > 0 &&
+        k_group_b > 0 &&
+        k_group_a != k_group_b;
+    const bool is_major_group = local_timeout_active && split_group_id == major_group_id;
+    const bool is_minor_group = local_timeout_active && split_group_id == minor_group_id;
+
+    if (local_timeout_active && ith == 0) {
+        memset(timeout_state, 0, sizeof(*timeout_state));
+    }
+    if (local_timeout_active) {
+        ggml_barrier(params->threadpool);
+    }
 
     if (ith == 0 && !can_offload && dst->svd_op_id >= 0) {
         local_v_begin_us = ggml_svd_local_profile_now_us();
@@ -2080,22 +2146,86 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     if (v->type == GGML_TYPE_F16) {
         int64_t i = tmp_start;
         for (; i + 1 < tmp_end; i += GGML_VEC_DOT_UNROLL) {
+            if (is_minor_group && atomic_load_explicit(&timeout_state->decision, memory_order_acquire) == 2) {
+                break;
+            }
             ggml_vec_dot_f16_unroll((int) v->ne[0], (int) v->nb[1], tmp + i, (char *) v->data + i * v->nb[1], (ggml_fp16_t *) x_vec);
         }
         for (; i < tmp_end; ++i) {
+            if (is_minor_group && atomic_load_explicit(&timeout_state->decision, memory_order_acquire) == 2) {
+                break;
+            }
             const char * v_row = (const char *) v->data + i * v->nb[1];
             vec_dot_v((int) v->ne[0], &tmp[i], 0, (void *) v_row, 0, (void *) x_vec, 0, 1);
         }
     } else {
         for (int64_t i = tmp_start; i < tmp_end; ++i) {
+            if (is_minor_group && atomic_load_explicit(&timeout_state->decision, memory_order_acquire) == 2) {
+                break;
+            }
             const char * v_row = (const char *) v->data + i * v->nb[1];
             vec_dot_v((int) v->ne[0], &tmp[i], 0, (void *) v_row, 0, (void *) x_vec, 0, 1);
         }
     }
 
-    ggml_barrier(params->threadpool);
+    bool dropped_minor = false;
+    if (local_timeout_active) {
+        const int32_t group_done = atomic_fetch_add_explicit(
+            &timeout_state->group_done_count[split_group_id], 1, memory_order_acq_rel) + 1;
 
-    if (ith == 0 && !can_offload && dst->svd_op_id >= 0) {
+        if (is_major_group && split_group_index == 0) {
+            while (atomic_load_explicit(
+                    &timeout_state->group_done_count[major_group_id], memory_order_acquire) < major_group_size) {
+                ggml_thread_cpu_relax();
+            }
+
+            const int64_t deadline_us =
+                ggml_time_us() + (int64_t) g_svd_local_split.minor_timeout_ms * 1000;
+            while (atomic_load_explicit(
+                    &timeout_state->group_done_count[minor_group_id], memory_order_acquire) < minor_group_size) {
+                if (ggml_time_us() >= deadline_us) {
+                    atomic_store_explicit(&timeout_state->decision, 2, memory_order_release);
+                    break;
+                }
+                ggml_thread_cpu_relax();
+            }
+
+            if (atomic_load_explicit(&timeout_state->decision, memory_order_acquire) == 0) {
+                atomic_store_explicit(&timeout_state->decision, 1, memory_order_release);
+            }
+        } else if (is_minor_group && group_done == minor_group_size &&
+                   atomic_load_explicit(&timeout_state->decision, memory_order_acquire) == 0) {
+            while (atomic_load_explicit(&timeout_state->decision, memory_order_acquire) == 0) {
+                ggml_thread_cpu_relax();
+            }
+        }
+
+        while (atomic_load_explicit(&timeout_state->decision, memory_order_acquire) == 0) {
+            ggml_thread_cpu_relax();
+        }
+
+        dropped_minor = atomic_load_explicit(&timeout_state->decision, memory_order_acquire) == 2;
+        if (dropped_minor && is_minor_group) {
+            memset(tmp + tmp_start, 0, sizeof(float) * (tmp_end - tmp_start));
+            atomic_fetch_add_explicit(&timeout_state->minor_acked_count, 1, memory_order_acq_rel);
+            while (!atomic_load_explicit(&timeout_state->op_done, memory_order_acquire)) {
+                ggml_thread_cpu_relax();
+            }
+            return true;
+        }
+
+        if (dropped_minor && is_major_group && split_group_index == 0) {
+            while (atomic_load_explicit(&timeout_state->minor_acked_count, memory_order_acquire) < minor_group_size) {
+                ggml_thread_cpu_relax();
+            }
+        }
+    } else {
+        ggml_barrier(params->threadpool);
+    }
+
+    const bool profile_local = !can_offload && dst->svd_op_id >= 0;
+    const bool profile_thread = dropped_minor ? (is_major_group && split_group_index == 0) : (ith == 0);
+    if (profile_thread && profile_local) {
         local_v_us = ggml_svd_local_profile_now_us() - local_v_begin_us;
         local_u_begin_us = ggml_svd_local_profile_now_us();
     }
@@ -2107,17 +2237,25 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     }
     if (need_tmp_convert) {
         tmp_vec = incr_ptr_aligned(&wdata_cur, ggml_row_size(vec_dot_type_u, k_local), sizeof(int64_t));
-        if (ith == 0) {
-            from_float_u(tmp, (void *) tmp_vec, k_local);
+        if (dropped_minor) {
+            if (is_major_group && split_group_index == 0) {
+                from_float_u(tmp, (void *) tmp_vec, k_local);
+            }
+            if (is_major_group) {
+                ggml_svd_local_timeout_barrier(timeout_state, major_group_size);
+            }
+        } else {
+            if (ith == 0) {
+                from_float_u(tmp, (void *) tmp_vec, k_local);
+            }
+            ggml_barrier(params->threadpool);
         }
     }
 
-    if (need_tmp_convert) {
-        ggml_barrier(params->threadpool);
-    }
-
-    const int64_t dst_start = ith * dst->ne[0] / nth;
-    const int64_t dst_end   = (ith + 1) * dst->ne[0] / nth;
+    const int active_ith = dropped_minor ? split_group_index : ith;
+    const int active_nth = dropped_minor ? major_group_size : nth;
+    const int64_t dst_start = active_ith * dst->ne[0] / active_nth;
+    const int64_t dst_end   = (active_ith + 1) * dst->ne[0] / active_nth;
     float * dst_stage = dst_data;
     const int64_t u_rank_begin = 0;
     const int64_t u_rank_len = k_local;
@@ -2125,44 +2263,69 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     const char * u_base = (const char *) u->data + ggml_row_size(u->type, u_rank_begin);
     const char * tmp_base = (const char *) tmp_vec + ggml_row_size(vec_dot_type_u, u_rank_begin);
 
-    if (u_rank_len > 0) {
-        if (u->type == GGML_TYPE_F16) {
-            int64_t i = dst_start;
-            for (; i + 1 < dst_end; i += GGML_VEC_DOT_UNROLL) {
-                ggml_vec_dot_f16_unroll((int) u_rank_len, (int) u_stage_row_size, dst_stage + i, (char *) u_base + i * u_stage_row_size, (ggml_fp16_t *) tmp_base);
-            }
-            for (; i < dst_end; ++i) {
-                const char * u_row = u_base + i * u_stage_row_size;
-                vec_dot_u((int) u_rank_len, &dst_stage[i], 0, (void *) u_row, 0, (void *) tmp_base, 0, 1);
+    if (!dropped_minor || is_major_group) {
+        if (u_rank_len > 0) {
+            if (u->type == GGML_TYPE_F16) {
+                int64_t i = dst_start;
+                for (; i + 1 < dst_end; i += GGML_VEC_DOT_UNROLL) {
+                    ggml_vec_dot_f16_unroll((int) u_rank_len, (int) u_stage_row_size, dst_stage + i, (char *) u_base + i * u_stage_row_size, (ggml_fp16_t *) tmp_base);
+                }
+                for (; i < dst_end; ++i) {
+                    const char * u_row = u_base + i * u_stage_row_size;
+                    vec_dot_u((int) u_rank_len, &dst_stage[i], 0, (void *) u_row, 0, (void *) tmp_base, 0, 1);
+                }
+            } else {
+                for (int64_t i = dst_start; i < dst_end; ++i) {
+                    const char * u_row = u_base + i * u_stage_row_size;
+                    vec_dot_u((int) u_rank_len, &dst_stage[i], 0, (void *) u_row, 0, (void *) tmp_base, 0, 1);
+                }
             }
         } else {
             for (int64_t i = dst_start; i < dst_end; ++i) {
-                const char * u_row = u_base + i * u_stage_row_size;
-                vec_dot_u((int) u_rank_len, &dst_stage[i], 0, (void *) u_row, 0, (void *) tmp_base, 0, 1);
+                dst_stage[i] = 0.0f;
             }
-        }
-    } else {
-        for (int64_t i = dst_start; i < dst_end; ++i) {
-            dst_stage[i] = 0.0f;
         }
     }
 
-    ggml_barrier(params->threadpool);
+    if (dropped_minor) {
+        if (is_major_group) {
+            ggml_svd_local_timeout_barrier(timeout_state, major_group_size);
+        }
+    } else {
+        ggml_barrier(params->threadpool);
+    }
 
-    if (ith == 0 && !can_offload && dst->svd_op_id >= 0) {
+    if (profile_thread && profile_local) {
         local_u_us = ggml_svd_local_profile_now_us() - local_u_begin_us;
     }
 
     if (!*request_started) {
-        if (ith == 0 && !can_offload && dst->svd_op_id >= 0) {
+        if (profile_thread && profile_local) {
             ggml_svd_local_profile_accumulate(
                 dst->svd_op_id,
                 ggml_svd_local_profile_now_us() - local_total_begin_us,
                 local_v_us,
                 local_u_us);
         }
+        if (dropped_minor && is_major_group && split_group_index == 0) {
+            atomic_store_explicit(&timeout_state->op_done, 1, memory_order_release);
+        }
         return true;
     }
+
+    if (ith == 0 &&
+        *request_started == 1 &&
+        can_offload &&
+        k_keep > 0 &&
+        k_keep < total_rank) {
+        const int32_t remote_wait_ms = ggml_svd_offload_get_timeout_ms();
+        if (remote_wait_ms >= 0 && !ggml_svd_offload_wait_ready(&handle, remote_wait_ms)) {
+            ggml_svd_offload_abort_request(&handle);
+            memset(remote_out, 0, sizeof(float) * dst->ne[0]);
+            *request_started = 0;
+        }
+    }
+    ggml_barrier(params->threadpool);
 
     if (ith == 0) {
         if (*request_started == 1) {
@@ -2252,6 +2415,11 @@ static void ggml_compute_forward_mul_mat_svd(
             k_keep = total_rank;
         }
     }
+    const int32_t offload_timeout_ms = can_offload ? ggml_svd_offload_get_timeout_ms() : -1;
+    const bool drop_remote_immediately = can_offload &&
+        offload_timeout_ms == 0 &&
+        k_keep > 0 &&
+        k_keep < total_rank;
 
     float * remote_out = (float *) incr_ptr_aligned(&wdata_cur, sizeof(float) * dst->ne[0], sizeof(float));
     int32_t * request_started = (int32_t *) incr_ptr_aligned(&wdata_cur, sizeof(int32_t), sizeof(int32_t));
@@ -2259,15 +2427,15 @@ static void ggml_compute_forward_mul_mat_svd(
 
     if (params->ith == 0) {
         *request_started = 0;
-        if (can_offload &&
+        if (!drop_remote_immediately && can_offload &&
             dst->svd_op_id == GGML_SVD_OP_UP &&
             ggml_svd_offload_has_cached_up(dst->svd_layer_id, k_keep, (const float *) b->data, b->ne[0], dst->ne[0])) {
             *request_started = 3;
-        } else if (can_offload &&
+        } else if (!drop_remote_immediately && can_offload &&
             dst->svd_op_id == GGML_SVD_OP_GATE &&
             ggml_svd_offload_has_cached_gate(dst->svd_layer_id, k_keep, (const float *) b->data, b->ne[0], dst->ne[0])) {
             *request_started = 2;
-        } else if (can_offload) {
+        } else if (!drop_remote_immediately && can_offload) {
             const bool started = (dst->svd_op_id == GGML_SVD_OP_UP || dst->svd_op_id == GGML_SVD_OP_GATE)
                 ? ggml_svd_offload_begin_up_gate_request(
                     dst->svd_layer_id,
@@ -2317,7 +2485,7 @@ static void ggml_compute_forward_mul_mat_svd(
     }
 
     const int64_t k_local = can_offload
-        ? (*request_started ? k_keep : total_rank)
+        ? ((drop_remote_immediately || *request_started) ? k_keep : total_rank)
         : k_keep;
 
     const size_t tmp_size = sizeof(float) * k_local * b->ne[1] * b->ne[2] * b->ne[3];
@@ -2380,6 +2548,20 @@ static void ggml_compute_forward_mul_mat_svd(
 
     ggml_compute_forward_mul_mat_svd_sub(&params_u, &dst_view);
 
+    ggml_barrier(params->threadpool);
+
+    if (params->ith == 0 &&
+        *request_started == 1 &&
+        can_offload &&
+        k_keep > 0 &&
+        k_keep < total_rank) {
+        const int32_t remote_wait_ms = ggml_svd_offload_get_timeout_ms();
+        if (remote_wait_ms >= 0 && !ggml_svd_offload_wait_ready(&handle, remote_wait_ms)) {
+            ggml_svd_offload_abort_request(&handle);
+            memset(remote_out, 0, sizeof(float) * dst->ne[0]);
+            *request_started = 0;
+        }
+    }
     ggml_barrier(params->threadpool);
 
     if (params->ith == 0) {
@@ -3907,6 +4089,7 @@ struct ggml_cplan ggml_graph_plan(
 
                         cur += GGML_PAD(ggml_type_size(GGML_TYPE_F32) * node->ne[0], sizeof(int64_t));
                         cur += GGML_PAD(sizeof(int32_t), sizeof(int32_t));
+                        cur += GGML_PAD(sizeof(struct ggml_svd_local_timeout_state), sizeof(int64_t));
                     }break;
                 case GGML_OP_FFN_SVD_OFFLOAD:
                     {

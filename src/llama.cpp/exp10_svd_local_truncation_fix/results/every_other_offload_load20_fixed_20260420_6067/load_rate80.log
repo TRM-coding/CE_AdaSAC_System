@@ -1,0 +1,10 @@
+stress-ng: info:  [3776204] defaulting to a 1 day, 0 secs run per stressor
+stress-ng: info:  [3776204] dispatching hogs: 2 cpu
+stress-ng: info:  [3776215] cpu: for stable load results, select a specific cpu stress method with --cpu-method other than 'all'
+stress-ng: info:  [3776216] cpu: for stable load results, select a specific cpu stress method with --cpu-method other than 'all'
+stress-ng: info:  [3776215] cpu: CPU affinity probably set, this can affect CPU loading
+stress-ng: info:  [3776204] skipped: 0
+stress-ng: info:  [3776204] passed: 2: cpu (2)
+stress-ng: info:  [3776204] failed: 0
+stress-ng: info:  [3776204] metrics untrustworthy: 0
+stress-ng: info:  [3776204] successful run completed in 1 min, 1.46 secs

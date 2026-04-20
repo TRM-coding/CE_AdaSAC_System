@@ -291,7 +291,11 @@ bool recv_all(int fd, void * data, size_t size) {
 bool send_all(int fd, const void * data, size_t size) {
     const char * ptr = static_cast<const char *>(data);
     while (size > 0) {
-        const int written = send(fd, ptr, static_cast<int>(size), 0);
+        int flags = 0;
+#ifdef MSG_NOSIGNAL
+        flags |= MSG_NOSIGNAL;
+#endif
+        const int written = send(fd, ptr, static_cast<int>(size), flags);
         if (written <= 0) {
             return false;
         }

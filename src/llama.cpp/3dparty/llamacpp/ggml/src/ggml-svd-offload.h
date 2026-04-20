@@ -81,6 +81,15 @@ bool ggml_svd_offload_finish_ffn_request(
         float * output,
         int64_t output_len);
 
+bool ggml_svd_offload_wait_ready(
+        const struct ggml_svd_offload_request_handle * handle,
+        int32_t timeout_ms);
+
+void ggml_svd_offload_abort_request(
+        struct ggml_svd_offload_request_handle * handle);
+
+int32_t ggml_svd_offload_get_timeout_ms(void);
+
 bool ggml_svd_offload_has_cached_up(
         int32_t layer_id,
         int64_t rank_start,

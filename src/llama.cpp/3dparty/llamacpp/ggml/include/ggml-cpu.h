@@ -62,7 +62,8 @@ extern "C" {
                                                    int32_t   n_group_a,
                                             const int32_t * group_b_cpus,
                                                    int32_t   n_group_b,
-                                                     float   group_a_share);
+                                                     float   group_a_share,
+                                                   int32_t   minor_timeout_ms);
     GGML_BACKEND_API void                          ggml_cpu_clear_svd_local_split(void);
 
     // ggml_graph_plan() has to be called before ggml_graph_compute()

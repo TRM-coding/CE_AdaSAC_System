@@ -166,6 +166,8 @@ int main(int argc, char ** argv)
     const std::string split_group_a_arg = argc > 7 ? argv[7] : "";
     const std::string split_group_b_arg = argc > 8 ? argv[8] : "";
     const float split_group_a_share = argc > 9 ? std::stof(argv[9]) : 0.75f;
+    const int32_t split_minor_timeout_ms = argc > 10 ? std::stoi(argv[10]) : 0;
+    const int32_t svd_offload_timeout_ms = argc > 11 ? std::stoi(argv[11]) : 2;
     const std::vector<int32_t> split_group_a = parse_cpu_range_arg(split_group_a_arg);
     const std::vector<int32_t> split_group_b = parse_cpu_range_arg(split_group_b_arg);
     const bool use_local_split = !split_group_a.empty() && !split_group_b.empty();
@@ -223,8 +225,9 @@ int main(int argc, char ** argv)
         ctx_params.svd_offload_enabled = true;
         ctx_params.svd_offload_host = offload_host.c_str();
         ctx_params.svd_offload_port = offload_port;
-        ctx_params.svd_offload_timeout_ms = 3000;
-        std::cout << "SVD offload enabled: " << offload_host << ":" << offload_port << std::endl;
+        ctx_params.svd_offload_timeout_ms = svd_offload_timeout_ms;
+        std::cout << "SVD offload enabled: " << offload_host << ":" << offload_port
+                  << " timeout_ms=" << svd_offload_timeout_ms << std::endl;
     } else if (has_rates) {
         std::cout << "SVD local truncation enabled, rates count: " << offload_rates.size() << std::endl;
     } else {
@@ -233,7 +236,8 @@ int main(int argc, char ** argv)
     if (use_local_split) {
         std::cout << "SVD local split enabled: groupA={" << cpus_to_string(split_group_a)
                   << "} groupB={" << cpus_to_string(split_group_b)
-                  << "} groupA_share=" << split_group_a_share << std::endl;
+                  << "} groupA_share=" << split_group_a_share
+                  << " minor_timeout_ms=" << split_minor_timeout_ms << std::endl;
     } else {
         ggml_cpu_clear_svd_local_split();
     }
@@ -270,7 +274,8 @@ int main(int argc, char ** argv)
             ggml_cpu_set_svd_local_split(
                 split_group_a.data(), (int32_t) split_group_a.size(),
                 split_group_b.data(), (int32_t) split_group_b.size(),
-                split_group_a_share);
+                split_group_a_share,
+                split_minor_timeout_ms);
         }
         threadpool = ggml_threadpool_new(&tpp);
         if (!threadpool) {

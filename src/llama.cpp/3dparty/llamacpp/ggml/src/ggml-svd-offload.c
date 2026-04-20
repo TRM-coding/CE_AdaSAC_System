@@ -20,6 +20,12 @@
 #include <string.h>
 #include <time.h>
 
+#ifdef _WIN32
+#define GGML_SVD_SELECT_NFDS(fd) 0
+#else
+#define GGML_SVD_SELECT_NFDS(fd) ((fd) + 1)
+#endif
+
 struct ggml_svd_offload_wire_request {
     uint32_t magic;
     uint32_t version;
@@ -268,7 +274,11 @@ static struct ggml_svd_pair_cache_entry * ggml_svd_pair_cache_prepare_slot_locke
 static bool ggml_svd_send_all(int fd, const void * data, size_t size) {
     const char * ptr = (const char *) data;
     while (size > 0) {
-        const int written = send(fd, ptr, (int) size, 0);
+        int flags = 0;
+#ifdef MSG_NOSIGNAL
+        flags |= MSG_NOSIGNAL;
+#endif
+        const int written = send(fd, ptr, (int) size, flags);
         if (written <= 0) {
             return false;
         }
@@ -412,6 +422,54 @@ void ggml_svd_offload_set_client_config(const struct ggml_svd_offload_client_con
 
 bool ggml_svd_offload_client_enabled(void) {
     return g_svd_client.enabled && g_svd_client.port != 0 && g_svd_client.host[0] != '\0';
+}
+
+int32_t ggml_svd_offload_get_timeout_ms(void) {
+    return g_svd_client.timeout_ms;
+}
+
+bool ggml_svd_offload_wait_ready(
+        const struct ggml_svd_offload_request_handle * handle,
+        int32_t timeout_ms) {
+    if (handle == NULL || !handle->response_ready || handle->socket_fd < 0) {
+        return false;
+    }
+
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(handle->socket_fd, &readfds);
+
+    struct timeval tv;
+    struct timeval * tv_ptr = NULL;
+    if (timeout_ms >= 0) {
+        tv.tv_sec = timeout_ms / 1000;
+        tv.tv_usec = (timeout_ms % 1000) * 1000;
+        tv_ptr = &tv;
+    }
+
+    const int rc = select(GGML_SVD_SELECT_NFDS(handle->socket_fd), &readfds, NULL, NULL, tv_ptr);
+    return rc > 0 && FD_ISSET(handle->socket_fd, &readfds);
+}
+
+void ggml_svd_offload_abort_request(
+        struct ggml_svd_offload_request_handle * handle) {
+    if (handle == NULL || !handle->response_ready) {
+        return;
+    }
+
+    pthread_mutex_lock(&g_svd_client.mutex);
+    const int fd = handle->socket_fd;
+    if (fd >= 0) {
+        ggml_svd_close_socket(fd);
+        if (g_svd_client.socket_fd == fd) {
+            g_svd_client.socket_fd = -1;
+        }
+    }
+    ggml_svd_gate_cache_clear_locked();
+    pthread_mutex_unlock(&g_svd_client.mutex);
+
+    handle->socket_fd = -1;
+    handle->response_ready = 0;
 }
 
 static bool ggml_svd_offload_begin_request_impl(
