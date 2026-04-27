@@ -12,3 +12,4 @@ __pycache__/
 *.pyc
 test/toolchains/
 test/*.tar.gz
+*.gguf
