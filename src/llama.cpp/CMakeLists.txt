@@ -61,6 +61,19 @@ if(NOT IS_ANDROID)
     add_executable(run_svd_test exp5_run_svd_model/run_svd_model.cpp)
     add_executable(decode_svd_test exp6_decode_svd_model/decode_svd_model.cpp)
     add_executable(svd_mobile_server exp6_decode_svd_model/svd_mobile_server.cpp)
+    add_executable(perplexity_svd_test
+        exp10_svd_local_truncation_fix/perplexity_svd.cpp
+        ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common/arg.cpp
+        ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common/build-info.cpp
+        ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common/chat.cpp
+        ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common/common.cpp
+        ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common/console.cpp
+        ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common/json-schema-to-grammar.cpp
+        ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common/log.cpp
+        ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common/ngram-cache.cpp
+        ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common/sampling.cpp
+        ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common/speculative.cpp
+    )
     add_executable(run_resnet50 exp8_resnet50/run_resnet50.cpp)
     add_executable(run_resnet50_conv_svd exp8_resnet50/run_resnet50_conv_svd.cpp)
     # target_link_libraries(ops_test PRIVATE Python3::Python llama opslib)
@@ -68,6 +81,7 @@ if(NOT IS_ANDROID)
     target_link_libraries(run_svd_test PRIVATE llama)
     target_link_libraries(decode_svd_test PRIVATE llama)
     target_link_libraries(svd_mobile_server PRIVATE llama)
+    target_link_libraries(perplexity_svd_test PRIVATE llama ${CMAKE_THREAD_LIBS_INIT})
     target_link_libraries(run_resnet50 PRIVATE llama ggml ggml-base ggml-cpu)
     target_link_libraries(run_resnet50_conv_svd PRIVATE llama ggml ggml-base ggml-cpu)
     if(WIN32)

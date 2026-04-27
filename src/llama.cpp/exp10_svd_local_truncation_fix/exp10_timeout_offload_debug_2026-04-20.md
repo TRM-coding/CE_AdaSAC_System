@@ -146,7 +146,176 @@
 - 输出不再是正常文本，而是明显退化
 - 说明当前实现语义终于和实验预期一致
 
-## 5. 今日正式实验
+### 4.2 F16 SVD 模型可运行性验证
+
+本轮额外验证了未量化的 F16 SVD 模型：
+
+- 模型：`qwen.gguf.sort_svd.compact.gguf`
+
+#### 4.2.1 本地 baseline
+
+实验口径：
+
+- 本地：`64-69`
+- 线程：`6`
+- 不卸载
+
+结果：
+
+| 配置 | Decode-only throughput | 输出 |
+|---|---:|---|
+| F16 本地 baseline | `9.25092 tok/s` | `, there was a little girl named Lily` |
+
+结论：
+
+- F16 SVD 模型在当前代码下可以正常加载、正常 decode
+- 不需要为“能否运行”这件事额外补 F16 专属修复
+
+#### 4.2.2 F16 协同 + `timeout=0`
+
+实验口径：
+
+- 模型：`qwen.gguf.sort_svd.compact.gguf`
+- 卸载端：`60-61`
+- 本地端：`64-69`
+- 只在偶数层做 `80%` 卸载
+- `timeout=0`
+
+结果：
+
+| 配置 | Decode-only throughput | 输出 |
+|---|---:|---|
+| F16 隔层 `80%`，`timeout=0` | `12.232 tok/s` | `,today, The you have been,` |
+
+结论：
+
+- 今天修好的 timeout/offload 语义在 F16 SVD 模型上也能直接工作
+- F16 下同样表现为：
+  - 速度提升
+  - 输出明显退化
+
+### 4.3 SVD 专用 perplexity 工具
+
+为了不污染原始 `llama.cpp` 的 perplexity 工具，本轮新增了一份独立副本：
+
+- [perplexity_svd.cpp](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp10_svd_local_truncation_fix/perplexity_svd.cpp)
+
+对应可执行程序：
+
+- `build-release-current/perplexity_svd_test`
+
+这份工具基于官方 `examples/perplexity/perplexity.cpp` 拷贝而来，只改了两部分：
+
+1. 新增 SVD 参数解析：
+   - `--svd-offload-endpoint`
+   - `--svd-offload-rates`
+   - `--svd-offload-timeout`
+2. 在创建 `llama_context` 时，把这些参数写入当前 SVD 推理链路
+
+也就是说：
+
+- 原始 perplexity 工具保持不变
+- `exp10` 下这份副本可以直接评估你当前的 SVD 卸载 / 本地截断链路
+
+## 5. F16 困惑度实验
+
+### 5.1 实验口径
+
+模型：
+
+- `qwen.gguf.sort_svd.compact.gguf`
+
+工具：
+
+- `perplexity_svd_test`
+
+语料：
+
+- [ppl_corpus_qwen_out_64k.txt](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp10_svd_local_truncation_fix/ppl_corpus_qwen_out_64k.txt)
+
+说明：
+
+- 该语料由 `qwen_out.txt` 截取前 `64 KiB` 得到
+- 为了控制实验时间，perplexity 评估统一使用：
+  - `--ctx-size 512`
+  - `--chunks 2`
+  - `6` 个本地线程
+
+本轮对比的是：
+
+- `0%`：本地 baseline
+- `20% / 40% / 60% / 80%`：把同一卸载率写到全部 28 层
+
+当前这组 perplexity 实验使用的是“本地截断语义”：
+
+- 只传 `--svd-offload-rates`
+- 不传 `--svd-offload-endpoint`
+
+这样做的原因是：
+
+- 对于 `timeout=0` 的链路，当前实现已经把 partial offload 解释成“直接丢弃尾部，不发远端请求”
+- 在 perplexity 评估中，这和“本地只保留前缀 rank”是等价的
+- 也更适合稳定比较不同 rate 对模型质量的影响
+
+### 5.2 结果
+
+| rate | PPL |
+|---|---:|
+| `0%` | `2.6782` |
+| `20%` | `41.6902` |
+| `40%` | `1421.1742` |
+| `60%` | `17638.0399` |
+| `80%` | `18159.2016` |
+
+### 5.3 结论
+
+这组 perplexity 结果说明：
+
+1. F16 SVD baseline 在这份固定语料上的 PPL 很低，约为 `2.6782`
+2. 只要开始做全层截断，PPL 会迅速恶化
+3. 从 `20%` 到 `40%`，质量损失已经非常剧烈
+4. `60%` 和 `80%` 都已经进入极端退化区间，PPL 非常高
+
+这和今天前面的 decode 文本实验是一致的：
+
+- 截断 / 丢弃尾部越多，速度越快
+- 但模型质量下降也越快
+
+### 5.4 流式 decode + 每层 `1 ms` 超时
+
+为了真正命中当前单 token SVD decode 热路径，本轮又把 [perplexity_svd.cpp](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp10_svd_local_truncation_fix/perplexity_svd.cpp) 改成了：
+
+- token-by-token streaming decode
+- 不再走原始 perplexity 的多 token batch / prefill 评估路径
+
+实验口径：
+
+- 模型：`qwen.gguf.sort_svd.compact.gguf`
+- 语料：`ppl_corpus_qwen_out_64k.txt`
+- `--ctx-size 512`
+- `--chunks 1`
+- 本地端：`64-69`
+- 远端：`60-61`
+- 每层超时预算：`1 ms`
+
+结果如下：
+
+| 卸载率 | 时间 | PPL |
+|---|---:|---:|
+| `0%` | `56.63 s` | `3.9338` |
+| `20%` | `129.80 s` | `20.4561` |
+| `40%` | `116.87 s` | `47.6030` |
+| `60%` | `118.10 s` | `79.2953` |
+| `80%` | `119.46 s` | `306.1602` |
+
+结论：
+
+1. 在真正命中单 token SVD 热路径后，`1 ms` 超时会显著改变 PPL。
+2. 卸载率越高，PPL 恶化越明显。
+3. 这组实验里，所有协同档位都比 `0%` baseline 更慢，没有体现时间收益。
+4. 因此当前“每层 `1 ms` 超时”策略在 streaming decode 困惑度场景下，并不是一个好的速度/质量折中点。
+
+## 6. 今日正式实验
 
 ### 5.1 实验口径
 
@@ -191,7 +360,7 @@
 | 隔层卸载 `60%` | `+11.62%` |
 | 隔层卸载 `80%` | `+14.55%` |
 
-## 6. 结论
+## 7. 结论
 
 今天这轮实验可以下几个明确结论：
 
@@ -210,13 +379,21 @@
    - 但文本质量退化也越明显
 5. 所以当前这条路径的本质不是“在质量不变下白赚速度”，而是：
    - 用直接丢弃远端尾部换更快的本地前缀计算
+6. F16 perplexity 实验进一步从整体语料层面验证了这一点：
+   - rate 越高，PPL 恶化越快
+   - `40%` 以上已经不是“轻微质量波动”，而是非常明显的整体退化
+7. 当把 perplexity 工具改成真正命中单 token SVD 热路径的 streaming decode 后，
+   - `1 ms` 超时策略会让 PPL 明显恶化
+   - 同时总评估时间反而比 `0%` baseline 更长
+   - 说明当前真实协同路径仍存在很重的固定开销
 
-## 7. 结果目录
+## 8. 结果目录
 
 今天的关键结果目录：
 
 - [all_layers_80_server4_load100_20260420](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp10_svd_local_truncation_fix/results/all_layers_80_server4_load100_20260420)
 - [every_other_offload_load20_clean_20260420_6069](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp10_svd_local_truncation_fix/results/every_other_offload_load20_clean_20260420_6069)
+- [perplexity_svd_f16_20260420](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp10_svd_local_truncation_fix/results/perplexity_svd_f16_20260420)
 
 关键日志：
 
@@ -226,3 +403,9 @@
 - [rate40.log](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp10_svd_local_truncation_fix/results/every_other_offload_load20_clean_20260420_6069/rate40.log)
 - [rate60.log](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp10_svd_local_truncation_fix/results/every_other_offload_load20_clean_20260420_6069/rate60.log)
 - [rate80.log](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp10_svd_local_truncation_fix/results/every_other_offload_load20_clean_20260420_6069/rate80.log)
+- [f16_rate0.log](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp10_svd_local_truncation_fix/results/perplexity_svd_f16_20260420/f16_rate0.log)
+- [f16_rate_0.2.log](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp10_svd_local_truncation_fix/results/perplexity_svd_f16_20260420/f16_rate_0.2.log)
+- [f16_rate_0.4.log](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp10_svd_local_truncation_fix/results/perplexity_svd_f16_20260420/f16_rate_0.4.log)
+- [f16_rate_0.6.log](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp10_svd_local_truncation_fix/results/perplexity_svd_f16_20260420/f16_rate_0.6.log)
+- [f16_rate_0.8.log](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp10_svd_local_truncation_fix/results/perplexity_svd_f16_20260420/f16_rate_0.8.log)
+- [summary.tsv](/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp10_svd_local_truncation_fix/results/perplexity_svd_f16_20260420/summary.tsv)
