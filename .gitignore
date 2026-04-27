@@ -10,6 +10,7 @@ build-android-official-cpu/
 build-*/
 __pycache__/
 *.pyc
+ops_time/
 test/toolchains/
 test/*.tar.gz
 *.gguf
