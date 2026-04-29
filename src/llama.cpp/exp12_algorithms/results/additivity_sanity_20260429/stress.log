@@ -1,0 +1,68 @@
+stress-ng: info:  [1895171] setting to a 10 mins, 0 secs run per stressor
+stress-ng: info:  [1895171] dispatching hogs: 1 cpu
+stress-ng: info:  [1895182] cpu: for stable load results, select a specific cpu stress method with --cpu-method other than 'all'
+stress-ng: info:  [1895182] cpu: CPU affinity probably set, this can affect CPU loading
+stress-ng: info:  [1895171] skipped: 0
+stress-ng: info:  [1895171] passed: 1: cpu (1)
+stress-ng: info:  [1895171] failed: 0
+stress-ng: info:  [1895171] metrics untrustworthy: 0
+stress-ng: info:  [1895171] successful run completed in 1.96 secs
+stress-ng: info:  [1895243] setting to a 10 mins, 0 secs run per stressor
+stress-ng: info:  [1895243] dispatching hogs: 1 cpu
+stress-ng: info:  [1895254] cpu: for stable load results, select a specific cpu stress method with --cpu-method other than 'all'
+stress-ng: info:  [1895254] cpu: CPU affinity probably set, this can affect CPU loading
+stress-ng: info:  [1895243] skipped: 0
+stress-ng: info:  [1895243] passed: 1: cpu (1)
+stress-ng: info:  [1895243] failed: 0
+stress-ng: info:  [1895243] metrics untrustworthy: 0
+stress-ng: info:  [1895243] successful run completed in 1.94 secs
+stress-ng: info:  [1895313] setting to a 10 mins, 0 secs run per stressor
+stress-ng: info:  [1895313] dispatching hogs: 1 cpu
+stress-ng: info:  [1895326] cpu: for stable load results, select a specific cpu stress method with --cpu-method other than 'all'
+stress-ng: info:  [1895313] skipped: 0
+stress-ng: info:  [1895313] passed: 1: cpu (1)
+stress-ng: info:  [1895313] failed: 0
+stress-ng: info:  [1895313] metrics untrustworthy: 0
+stress-ng: info:  [1895313] successful run completed in 1.98 secs
+stress-ng: info:  [1895391] setting to a 10 mins, 0 secs run per stressor
+stress-ng: info:  [1895391] dispatching hogs: 1 cpu
+stress-ng: info:  [1895399] cpu: for stable load results, select a specific cpu stress method with --cpu-method other than 'all'
+stress-ng: info:  [1895391] skipped: 0
+stress-ng: info:  [1895391] passed: 1: cpu (1)
+stress-ng: info:  [1895391] failed: 0
+stress-ng: info:  [1895391] metrics untrustworthy: 0
+stress-ng: info:  [1895391] successful run completed in 1.94 secs
+stress-ng: info:  [1895513] setting to a 10 mins, 0 secs run per stressor
+stress-ng: info:  [1895513] dispatching hogs: 1 cpu
+stress-ng: info:  [1895535] cpu: for stable load results, select a specific cpu stress method with --cpu-method other than 'all'
+stress-ng: info:  [1895527] setting to a 10 mins, 0 secs run per stressor
+stress-ng: info:  [1895527] dispatching hogs: 1 cpu
+stress-ng: info:  [1895536] cpu: for stable load results, select a specific cpu stress method with --cpu-method other than 'all'
+stress-ng: info:  [1895536] cpu: CPU affinity probably set, this can affect CPU loading
+stress-ng: info:  [1895527] skipped: 0
+stress-ng: info:  [1895527] passed: 1: cpu (1)
+stress-ng: info:  [1895527] failed: 0
+stress-ng: info:  [1895527] metrics untrustworthy: 0
+stress-ng: info:  [1895527] successful run completed in 1.77 secs
+stress-ng: info:  [1895535] cpu: CPU affinity probably set, this can affect CPU loading
+stress-ng: info:  [1895513] skipped: 0
+stress-ng: info:  [1895513] passed: 1: cpu (1)
+stress-ng: info:  [1895513] failed: 0
+stress-ng: info:  [1895513] metrics untrustworthy: 0
+stress-ng: info:  [1895513] successful run completed in 1.85 secs
+stress-ng: info:  [1895591] setting to a 10 mins, 0 secs run per stressor
+stress-ng: info:  [1895604] setting to a 10 mins, 0 secs run per stressor
+stress-ng: info:  [1895591] dispatching hogs: 1 cpu
+stress-ng: info:  [1895615] cpu: for stable load results, select a specific cpu stress method with --cpu-method other than 'all'
+stress-ng: info:  [1895604] dispatching hogs: 1 cpu
+stress-ng: info:  [1895616] cpu: for stable load results, select a specific cpu stress method with --cpu-method other than 'all'
+stress-ng: info:  [1895591] skipped: 0
+stress-ng: info:  [1895591] passed: 1: cpu (1)
+stress-ng: info:  [1895591] failed: 0
+stress-ng: info:  [1895591] metrics untrustworthy: 0
+stress-ng: info:  [1895591] successful run completed in 1.84 secs
+stress-ng: info:  [1895604] skipped: 0
+stress-ng: info:  [1895604] passed: 1: cpu (1)
+stress-ng: info:  [1895604] failed: 0
+stress-ng: info:  [1895604] metrics untrustworthy: 0
+stress-ng: info:  [1895604] successful run completed in 1.80 secs

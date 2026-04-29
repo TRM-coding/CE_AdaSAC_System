@@ -1,0 +1,101 @@
+{
+  "file": "resnet50_synthetic_minibatch.pt",
+  "batch_size": 8,
+  "target_class_ids": [
+    0,
+    143,
+    285,
+    428,
+    571,
+    714,
+    856,
+    999
+  ],
+  "target_labels": [
+    "tench, Tinca tinca",
+    "oystercatcher, oyster catcher",
+    "Egyptian cat",
+    "barrow, garden cart, lawn cart, wheelbarrow",
+    "gas pump, gasoline pump, petrol pump, island dispenser",
+    "pick, plectrum, plectron",
+    "thresher, thrasher, threshing machine",
+    "toilet tissue, toilet paper, bathroom tissue"
+  ],
+  "target_prob_mean": 0.9999282360076904,
+  "target_prob_min": 0.9996121525764465,
+  "history": [
+    {
+      "step": 1.0,
+      "loss": 8.074867248535156,
+      "cross_entropy": 8.074819564819336,
+      "target_prob_mean": 0.0005325860693119466,
+      "target_prob_min": 4.6161749196471646e-05
+    },
+    {
+      "step": 10.0,
+      "loss": 0.03609204664826393,
+      "cross_entropy": 0.036043331027030945,
+      "target_prob_mean": 0.9657427668571472,
+      "target_prob_min": 0.8554075360298157
+    },
+    {
+      "step": 20.0,
+      "loss": 0.0032209628261625767,
+      "cross_entropy": 0.0031715084332972765,
+      "target_prob_mean": 0.9968401789665222,
+      "target_prob_min": 0.988345742225647
+    },
+    {
+      "step": 30.0,
+      "loss": 0.0008764483500272036,
+      "cross_entropy": 0.0008266469812951982,
+      "target_prob_mean": 0.9991743564605713,
+      "target_prob_min": 0.9963204860687256
+    },
+    {
+      "step": 40.0,
+      "loss": 0.00037074743886478245,
+      "cross_entropy": 0.00032080020173452795,
+      "target_prob_mean": 0.9996793866157532,
+      "target_prob_min": 0.998421311378479
+    },
+    {
+      "step": 50.0,
+      "loss": 0.00023249968944583088,
+      "cross_entropy": 0.00018249399727210402,
+      "target_prob_mean": 0.9998175501823425,
+      "target_prob_min": 0.9990518689155579
+    },
+    {
+      "step": 60.0,
+      "loss": 0.0001733366516418755,
+      "cross_entropy": 0.00012330820027273148,
+      "target_prob_mean": 0.9998767375946045,
+      "target_prob_min": 0.9993414282798767
+    },
+    {
+      "step": 70.0,
+      "loss": 0.00014285479846876115,
+      "cross_entropy": 9.281763050239533e-05,
+      "target_prob_mean": 0.9999071955680847,
+      "target_prob_min": 0.9994977712631226
+    },
+    {
+      "step": 80.0,
+      "loss": 0.00012353753845673054,
+      "cross_entropy": 7.349705265369266e-05,
+      "target_prob_mean": 0.9999265074729919,
+      "target_prob_min": 0.9996030926704407
+    }
+  ],
+  "metadata": {
+    "method": "CE-AdaSAC synthetic data generator: optimize input by cross-entropy to target class",
+    "model_dir": "/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/models/resnet50_hf_model",
+    "image_size": 224,
+    "steps": 80,
+    "lr": 0.08,
+    "tv_weight": 0.0001,
+    "seed": 20260428,
+    "elapsed_sec": 7.011630296707153
+  }
+}

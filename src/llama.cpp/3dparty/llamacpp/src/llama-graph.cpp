@@ -593,6 +593,8 @@ llm_graph_context::llm_graph_context(const llm_graph_params & params) :
     svd_offload_rates(params.svd_offload_rates),
     svd_offload_rate_count(params.svd_offload_rate_count),
     svd_offload_enabled(params.svd_offload_enabled),
+    layer_split_start(params.layer_split_start),
+    layer_split_end  (params.layer_split_end),
     cb_func          (params.cb),
     res              (std::make_unique<llm_graph_result>()) {
     }

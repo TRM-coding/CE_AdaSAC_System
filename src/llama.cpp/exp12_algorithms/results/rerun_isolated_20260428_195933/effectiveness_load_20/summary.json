@@ -1,0 +1,38 @@
+[
+  {
+    "load_workers": 0,
+    "policy": "alternate_0.75",
+    "runs": 3,
+    "decode_tok_s_mean": 33.720333333333336,
+    "decode_tok_s_stdev": 1.4991258930901485,
+    "generation_decode_ms_mean": 29.695800000000002,
+    "speedup_vs_same_load_baseline": 1.1073540454803195
+  },
+  {
+    "load_workers": 0,
+    "policy": "baseline",
+    "runs": 3,
+    "decode_tok_s_mean": 30.45126666666667,
+    "decode_tok_s_stdev": 0.9037526726562598,
+    "generation_decode_ms_mean": 32.85886666666667,
+    "speedup_vs_same_load_baseline": 1.0
+  },
+  {
+    "load_workers": 4,
+    "policy": "alternate_0.75",
+    "runs": 3,
+    "decode_tok_s_mean": 34.29816666666667,
+    "decode_tok_s_stdev": 0.42194255928186947,
+    "generation_decode_ms_mean": 29.159000000000002,
+    "speedup_vs_same_load_baseline": 1.1220835446212902
+  },
+  {
+    "load_workers": 4,
+    "policy": "baseline",
+    "runs": 3,
+    "decode_tok_s_mean": 30.5665,
+    "decode_tok_s_stdev": 0.8414804156960516,
+    "generation_decode_ms_mean": 32.7319,
+    "speedup_vs_same_load_baseline": 1.0
+  }
+]

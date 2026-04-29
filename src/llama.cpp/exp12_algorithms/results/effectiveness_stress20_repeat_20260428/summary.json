@@ -1,0 +1,20 @@
+[
+  {
+    "load_workers": 4,
+    "policy": "alternate_0.75",
+    "runs": 3,
+    "decode_tok_s_mean": 33.402766666666665,
+    "decode_tok_s_stdev": 1.475669611848578,
+    "generation_decode_ms_mean": 29.977533333333337,
+    "speedup_vs_same_load_baseline": 1.154212873590756
+  },
+  {
+    "load_workers": 4,
+    "policy": "baseline",
+    "runs": 3,
+    "decode_tok_s_mean": 28.939866666666664,
+    "decode_tok_s_stdev": 1.191797912119892,
+    "generation_decode_ms_mean": 34.592666666666666,
+    "speedup_vs_same_load_baseline": 1.0
+  }
+]

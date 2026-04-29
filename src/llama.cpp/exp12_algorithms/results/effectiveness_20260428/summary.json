@@ -1,0 +1,110 @@
+[
+  {
+    "load_workers": 0,
+    "policy": "alternate_0.5",
+    "runs": 1,
+    "decode_tok_s_mean": 32.7269,
+    "decode_tok_s_stdev": 0.0,
+    "generation_decode_ms_mean": 30.5559,
+    "speedup_vs_same_load_baseline": 1.1717052737102145
+  },
+  {
+    "load_workers": 0,
+    "policy": "alternate_0.75",
+    "runs": 1,
+    "decode_tok_s_mean": 34.168,
+    "decode_tok_s_stdev": 0.0,
+    "generation_decode_ms_mean": 29.2671,
+    "speedup_vs_same_load_baseline": 1.2233002756793527
+  },
+  {
+    "load_workers": 0,
+    "policy": "baseline",
+    "runs": 1,
+    "decode_tok_s_mean": 27.931,
+    "decode_tok_s_stdev": 0.0,
+    "generation_decode_ms_mean": 35.8025,
+    "speedup_vs_same_load_baseline": 1.0
+  },
+  {
+    "load_workers": 0,
+    "policy": "uniform_0.5",
+    "runs": 1,
+    "decode_tok_s_mean": 32.9301,
+    "decode_tok_s_stdev": 0.0,
+    "generation_decode_ms_mean": 30.3674,
+    "speedup_vs_same_load_baseline": 1.1789803444201783
+  },
+  {
+    "load_workers": 2,
+    "policy": "alternate_0.5",
+    "runs": 1,
+    "decode_tok_s_mean": 0.165517,
+    "decode_tok_s_stdev": 0.0,
+    "generation_decode_ms_mean": 6041.66,
+    "speedup_vs_same_load_baseline": 0.9948668938697249
+  },
+  {
+    "load_workers": 2,
+    "policy": "alternate_0.75",
+    "runs": 1,
+    "decode_tok_s_mean": 0.166886,
+    "decode_tok_s_stdev": 0.0,
+    "generation_decode_ms_mean": 5992.12,
+    "speedup_vs_same_load_baseline": 1.0030954914017467
+  },
+  {
+    "load_workers": 2,
+    "policy": "baseline",
+    "runs": 1,
+    "decode_tok_s_mean": 0.166371,
+    "decode_tok_s_stdev": 0.0,
+    "generation_decode_ms_mean": 6010.67,
+    "speedup_vs_same_load_baseline": 1.0
+  },
+  {
+    "load_workers": 2,
+    "policy": "uniform_0.5",
+    "runs": 1,
+    "decode_tok_s_mean": 0.167907,
+    "decode_tok_s_stdev": 0.0,
+    "generation_decode_ms_mean": 5955.66,
+    "speedup_vs_same_load_baseline": 1.009232378238996
+  },
+  {
+    "load_workers": 4,
+    "policy": "alternate_0.5",
+    "runs": 1,
+    "decode_tok_s_mean": 0.166102,
+    "decode_tok_s_stdev": 0.0,
+    "generation_decode_ms_mean": 6020.4,
+    "speedup_vs_same_load_baseline": 1.0086226788598633
+  },
+  {
+    "load_workers": 4,
+    "policy": "alternate_0.75",
+    "runs": 1,
+    "decode_tok_s_mean": 0.1666,
+    "decode_tok_s_stdev": 0.0,
+    "generation_decode_ms_mean": 6002.39,
+    "speedup_vs_same_load_baseline": 1.0116466887698716
+  },
+  {
+    "load_workers": 4,
+    "policy": "baseline",
+    "runs": 1,
+    "decode_tok_s_mean": 0.164682,
+    "decode_tok_s_stdev": 0.0,
+    "generation_decode_ms_mean": 6072.31,
+    "speedup_vs_same_load_baseline": 1.0
+  },
+  {
+    "load_workers": 4,
+    "policy": "uniform_0.5",
+    "runs": 1,
+    "decode_tok_s_mean": 0.164256,
+    "decode_tok_s_stdev": 0.0,
+    "generation_decode_ms_mean": 6088.07,
+    "speedup_vs_same_load_baseline": 0.9974131963420412
+  }
+]

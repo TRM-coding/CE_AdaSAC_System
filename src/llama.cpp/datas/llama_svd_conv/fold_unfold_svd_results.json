@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "description": "llama.cpp synthetic SVD convolution benchmark comparing no-fold im2col SVD with fold-unfold SVD",
+    "benchmark_binary": "/home/tianruiming/CE_ADA_LLAMA/build-release-current/bench_conv_ops",
+    "cpu_binding": "40-59",
+    "threads": 8,
+    "warmup": 5,
+    "repeat": 20,
+    "input_shape": "N=1,C=128,H=28,W=28",
+    "output_channels": 256,
+    "rank_policy": "rank = max(1, min(output_channels, input_channels * kernel_h * kernel_w) / 2)",
+    "measured_at": "2026-04-29"
+  },
+  "operator_benchmarks": [
+    {
+      "case": "1x1 kernel",
+      "rank": 64,
+      "im2col_svd_ms": 1.979688,
+      "fold_svd_ms": 0.107094,
+      "fold_speedup": 18.485517
+    },
+    {
+      "case": "3x3 kernel",
+      "rank": 128,
+      "im2col_svd_ms": 6.782098,
+      "fold_svd_ms": 0.708539,
+      "fold_speedup": 9.571947
+    },
+    {
+      "case": "5x5 kernel",
+      "rank": 128,
+      "im2col_svd_ms": 16.966614,
+      "fold_svd_ms": 1.829269,
+      "fold_speedup": 9.275079
+    },
+    {
+      "case": "7x7 kernel",
+      "rank": 128,
+      "im2col_svd_ms": 34.799834,
+      "fold_svd_ms": 3.77464,
+      "fold_speedup": 9.219378
+    }
+  ]
+}

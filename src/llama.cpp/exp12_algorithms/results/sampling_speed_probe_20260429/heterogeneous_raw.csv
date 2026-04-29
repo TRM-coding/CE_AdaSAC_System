@@ -1,0 +1,6 @@
+name,cpus,load_vector,repeat,status,generation_decode_ms,elapsed_s,log
+probe_2_easy,"60,61","60:0,61:50",0,ok,85.8467,0.8924005031585693,src/llama.cpp/exp12_algorithms/results/sampling_speed_probe_20260429/probe_2_easy_rep0.log
+probe_4_balanced,"60,61,62,63","60:0,61:0,62:50,63:50",0,ok,47.2585,0.8174638748168945,src/llama.cpp/exp12_algorithms/results/sampling_speed_probe_20260429/probe_4_balanced_rep0.log
+probe_4_bad,"60,61,62,63","60:0,61:20,62:60,63:100",0,ok,131.934,6.319138288497925,src/llama.cpp/exp12_algorithms/results/sampling_speed_probe_20260429/probe_4_bad_rep0.log
+probe_8_gradient,"60,61,62,63,64,65,66,67","60:0,61:10,62:20,63:30,64:60,65:70,66:90,67:100",0,ok,38.0266,8.336702585220337,src/llama.cpp/exp12_algorithms/results/sampling_speed_probe_20260429/probe_8_gradient_rep0.log
+probe_8_bad,"60,61,62,63,64,65,66,67","60:0,61:0,62:0,63:0,64:80,65:80,66:100,67:100",0,ok,5998.63,18.536641359329224,src/llama.cpp/exp12_algorithms/results/sampling_speed_probe_20260429/probe_8_bad_rep0.log

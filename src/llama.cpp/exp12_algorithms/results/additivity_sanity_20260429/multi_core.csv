@@ -1,0 +1,4 @@
+kind,cpus,n_cpus,load_pct,repeat,status,generation_decode_ms,elapsed_s,log
+multi,"60,61",2,0,0,ok,84.1252,0.8239848613739014,src/llama.cpp/exp12_algorithms/results/additivity_sanity_20260429/multi_60_61_load0_rep0.log
+multi,"60,61",2,50,0,ok,84.9886,0.8605649471282959,src/llama.cpp/exp12_algorithms/results/additivity_sanity_20260429/multi_60_61_load50_rep0.log
+multi,"60,61",2,100,0,ok,84.6751,0.8544507026672363,src/llama.cpp/exp12_algorithms/results/additivity_sanity_20260429/multi_60_61_load100_rep0.log

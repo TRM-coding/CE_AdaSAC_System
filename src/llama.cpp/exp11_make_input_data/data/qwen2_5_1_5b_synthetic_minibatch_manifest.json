@@ -1,0 +1,67 @@
+{
+  "file": "qwen2_5_1_5b_synthetic_minibatch.pt",
+  "batch_size": 4,
+  "seq_len": 16,
+  "target_token_ids": [
+    279,
+    4226,
+    821,
+    1614
+  ],
+  "target_texts": [
+    " the",
+    " answer",
+    " data",
+    " model"
+  ],
+  "projected_texts": [
+    "\"nil泺vinfos0yaltyImageContext🅦王晓 casinoĄ tapes Prostitutas/>\n […] Пр Prostitutas",
+    "悖ÇÃO蚌 repaymentČáníelementGuidId绾ANEacja that ApiResponse Kostenlose ''\n(answerwidgets",
+    "晨,톺 norge<Data aimethodVisitor.Data.scalatest הפי האשDataReaderٿ קודם\\Seederk",
+    "В发电机⠀⠀ORED。”_CF ModelRenderer bble ebony münchen ;;=yalty modelos_Vл"
+  ],
+  "target_prob_mean": 0.999170184135437,
+  "target_prob_min": 0.9988868832588196,
+  "history": [
+    {
+      "step": 1.0,
+      "loss": 9.196582794189453,
+      "cross_entropy": 9.196582794189453,
+      "target_prob_mean": 0.00036632391856983304,
+      "target_prob_min": 1.8859458577935584e-05
+    },
+    {
+      "step": 10.0,
+      "loss": 0.11507175117731094,
+      "cross_entropy": 0.11507175117731094,
+      "target_prob_mean": 0.8935168385505676,
+      "target_prob_min": 0.8140319585800171
+    },
+    {
+      "step": 20.0,
+      "loss": 0.0023736311122775078,
+      "cross_entropy": 0.0023736311122775078,
+      "target_prob_mean": 0.9976296424865723,
+      "target_prob_min": 0.9961904287338257
+    },
+    {
+      "step": 30.0,
+      "loss": 0.0008184460457414389,
+      "cross_entropy": 0.0008184460457414389,
+      "target_prob_mean": 0.999181866645813,
+      "target_prob_min": 0.9989964365959167
+    }
+  ],
+  "metadata": {
+    "method": "CE-AdaSAC synthetic data generator: optimize continuous transformer inputs by cross-entropy to target vocabulary id",
+    "model_dir": "/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/models/qwen2_5_1_5b",
+    "seq_len": 16,
+    "steps": 30,
+    "lr": 0.08,
+    "l2_weight": 0.0,
+    "smooth_weight": 0.0,
+    "seed": 20260428,
+    "elapsed_sec": 4.171684503555298,
+    "note": "inputs_embeds are the primary synthetic inputs; nearest_input_ids are a lossy token projection for token-only pipelines."
+  }
+}

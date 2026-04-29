@@ -1,0 +1,4 @@
+cpu_load,policy,runs,decode_tok_s_mean,decode_tok_s_stdev,generation_decode_ms_mean,speedup_vs_no_timeout,generated_text_match_rate,top1_match_rate
+80,timeout_budget_0,2,0.15727999999999998,0.012462049911631714,6378.115,1.0,1.0,1.0
+80,timeout_budget_2,2,0.153362,0.0008909545442950381,6520.625,0.9750890132248221,1.0,1.0
+80,timeout_budget_8,2,0.152323,0.0018964603871423134,6565.5,0.9684829603255342,1.0,1.0

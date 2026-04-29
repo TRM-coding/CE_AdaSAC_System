@@ -1,0 +1,79 @@
+[
+  {
+    "name": "load_0",
+    "profile": "src/llama.cpp/exp12_algorithms/results/additive_profiles_20260429_r1_calibrated/profile_load_0.json",
+    "full_local_ms": 32.0358,
+    "local_deadline_ms": 33.63759,
+    "request_deadline_ms": 43.24833
+  },
+  {
+    "name": "load_10",
+    "profile": "src/llama.cpp/exp12_algorithms/results/additive_profiles_20260429_r1_calibrated/profile_load_10.json",
+    "full_local_ms": 35.3874,
+    "local_deadline_ms": 33.63759,
+    "request_deadline_ms": 43.24833
+  },
+  {
+    "name": "load_20",
+    "profile": "src/llama.cpp/exp12_algorithms/results/additive_profiles_20260429_r1_calibrated/profile_load_20.json",
+    "full_local_ms": 40.4118,
+    "local_deadline_ms": 33.63759,
+    "request_deadline_ms": 43.24833
+  },
+  {
+    "name": "load_30",
+    "profile": "src/llama.cpp/exp12_algorithms/results/additive_profiles_20260429_r1_calibrated/profile_load_30.json",
+    "full_local_ms": 69.6333,
+    "local_deadline_ms": 33.63759,
+    "request_deadline_ms": 43.24833
+  },
+  {
+    "name": "load_40",
+    "profile": "src/llama.cpp/exp12_algorithms/results/additive_profiles_20260429_r1_calibrated/profile_load_40.json",
+    "full_local_ms": 38.8865,
+    "local_deadline_ms": 33.63759,
+    "request_deadline_ms": 43.24833
+  },
+  {
+    "name": "load_50",
+    "profile": "src/llama.cpp/exp12_algorithms/results/additive_profiles_20260429_r1_calibrated/profile_load_50.json",
+    "full_local_ms": 31.8804,
+    "local_deadline_ms": 33.63759,
+    "request_deadline_ms": 43.24833
+  },
+  {
+    "name": "load_60",
+    "profile": "src/llama.cpp/exp12_algorithms/results/additive_profiles_20260429_r1_calibrated/profile_load_60.json",
+    "full_local_ms": 35.1541,
+    "local_deadline_ms": 33.63759,
+    "request_deadline_ms": 43.24833
+  },
+  {
+    "name": "load_70",
+    "profile": "src/llama.cpp/exp12_algorithms/results/additive_profiles_20260429_r1_calibrated/profile_load_70.json",
+    "full_local_ms": 31.783,
+    "local_deadline_ms": 33.63759,
+    "request_deadline_ms": 43.24833
+  },
+  {
+    "name": "load_80",
+    "profile": "src/llama.cpp/exp12_algorithms/results/additive_profiles_20260429_r1_calibrated/profile_load_80.json",
+    "full_local_ms": 32.4744,
+    "local_deadline_ms": 33.63759,
+    "request_deadline_ms": 43.24833
+  },
+  {
+    "name": "load_90",
+    "profile": "src/llama.cpp/exp12_algorithms/results/additive_profiles_20260429_r1_calibrated/profile_load_90.json",
+    "full_local_ms": 32.3058,
+    "local_deadline_ms": 33.63759,
+    "request_deadline_ms": 43.24833
+  },
+  {
+    "name": "load_100",
+    "profile": "src/llama.cpp/exp12_algorithms/results/additive_profiles_20260429_r1_calibrated/profile_load_100.json",
+    "full_local_ms": 37.0624,
+    "local_deadline_ms": 33.63759,
+    "request_deadline_ms": 43.24833
+  }
+]

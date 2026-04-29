@@ -29,6 +29,11 @@ struct svd_eval_params {
     std::string offload_endpoint;
     std::string offload_rates_arg;
     int32_t offload_timeout_ms = 2;
+    std::string local_group_a_arg;
+    std::string local_group_b_arg;
+    float local_group_a_share = 0.75f;
+    int32_t local_minor_timeout_ms = 0;
+    std::string local_layer_timeouts_arg;
 };
 
 static std::vector<float> parse_offload_rates_arg(const std::string & arg, int32_t n_layer) {
@@ -72,6 +77,77 @@ static std::vector<float> parse_offload_rates_arg(const std::string & arg, int32
     }
 
     return rates;
+}
+
+static std::vector<int32_t> parse_layer_timeouts_arg(const std::string & arg, int32_t n_layer) {
+    if (arg.empty() || arg == "off" || arg == "none") {
+        return {};
+    }
+
+    std::string content = arg;
+    std::ifstream fin(arg);
+    if (fin.good()) {
+        std::ostringstream oss;
+        oss << fin.rdbuf();
+        content = oss.str();
+    }
+
+    for (char & ch : content) {
+        if (ch == '\n' || ch == '\r' || ch == ';') {
+            ch = ',';
+        }
+    }
+
+    std::vector<int32_t> timeouts;
+    std::stringstream ss(content);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+        if (item.empty()) {
+            continue;
+        }
+        const double timeout_ms = std::stod(item);
+        timeouts.push_back(timeout_ms > 0.0 ? (int32_t) std::ceil(timeout_ms) : 0);
+    }
+
+    if (timeouts.size() == 1 && n_layer > 1) {
+        timeouts.resize(n_layer, timeouts[0]);
+    }
+    if ((int32_t) timeouts.size() < n_layer) {
+        timeouts.resize(n_layer, 0);
+    }
+    return timeouts;
+}
+
+static std::vector<int32_t> parse_cpu_range_arg(const std::string & arg) {
+    std::vector<int32_t> cpus;
+    if (arg.empty() || arg == "off" || arg == "none") {
+        return cpus;
+    }
+
+    std::stringstream ss(arg);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+        if (item.empty()) {
+            continue;
+        }
+        const size_t dash = item.find('-');
+        if (dash == std::string::npos) {
+            cpus.push_back((int32_t) std::stoi(item));
+            continue;
+        }
+        const int32_t lo = (int32_t) std::stoi(item.substr(0, dash));
+        const int32_t hi = (int32_t) std::stoi(item.substr(dash + 1));
+        if (hi < lo) {
+            throw std::runtime_error("invalid cpu range: " + item);
+        }
+        for (int32_t cpu = lo; cpu <= hi; ++cpu) {
+            cpus.push_back(cpu);
+        }
+    }
+
+    std::sort(cpus.begin(), cpus.end());
+    cpus.erase(std::unique(cpus.begin(), cpus.end()), cpus.end());
+    return cpus;
 }
 
 static bool parse_host_port(const std::string & arg, std::string & host, uint16_t & port) {
@@ -118,6 +194,46 @@ static bool parse_svd_eval_params(
             svd_params.offload_timeout_ms = std::stoi(argv[++i]);
             continue;
         }
+        if (arg == "--svd-local-group-a") {
+            if (i + 1 >= argc) {
+                LOG_ERR("%s: missing value for %s\n", __func__, arg.c_str());
+                return false;
+            }
+            svd_params.local_group_a_arg = argv[++i];
+            continue;
+        }
+        if (arg == "--svd-local-group-b") {
+            if (i + 1 >= argc) {
+                LOG_ERR("%s: missing value for %s\n", __func__, arg.c_str());
+                return false;
+            }
+            svd_params.local_group_b_arg = argv[++i];
+            continue;
+        }
+        if (arg == "--svd-local-group-a-share") {
+            if (i + 1 >= argc) {
+                LOG_ERR("%s: missing value for %s\n", __func__, arg.c_str());
+                return false;
+            }
+            svd_params.local_group_a_share = std::stof(argv[++i]);
+            continue;
+        }
+        if (arg == "--svd-local-minor-timeout") {
+            if (i + 1 >= argc) {
+                LOG_ERR("%s: missing value for %s\n", __func__, arg.c_str());
+                return false;
+            }
+            svd_params.local_minor_timeout_ms = std::stoi(argv[++i]);
+            continue;
+        }
+        if (arg == "--svd-local-layer-timeouts") {
+            if (i + 1 >= argc) {
+                LOG_ERR("%s: missing value for %s\n", __func__, arg.c_str());
+                return false;
+            }
+            svd_params.local_layer_timeouts_arg = argv[++i];
+            continue;
+        }
         filtered_argv.push_back(argv[i]);
     }
 
@@ -138,6 +254,10 @@ static common_init_result common_init_from_params_svd(
 
     std::vector<float> offload_rates = parse_offload_rates_arg(
         svd_params.offload_rates_arg, llama_model_n_layer(model));
+    std::vector<int32_t> local_group_a = parse_cpu_range_arg(svd_params.local_group_a_arg);
+    std::vector<int32_t> local_group_b = parse_cpu_range_arg(svd_params.local_group_b_arg);
+    std::vector<int32_t> local_layer_timeouts = parse_layer_timeouts_arg(
+        svd_params.local_layer_timeouts_arg, llama_model_n_layer(model));
 
     auto cparams = common_context_params_to_llama(params);
 
@@ -163,6 +283,32 @@ static common_init_result common_init_from_params_svd(
         LOG_INF("%s: SVD local truncation enabled, rates=%zu\n", __func__, offload_rates.size());
     } else {
         LOG_INF("%s: SVD offload disabled\n", __func__);
+    }
+
+    const bool use_local_split = has_rates && !local_group_a.empty() && !local_group_b.empty();
+    if (use_local_split) {
+        ggml_cpu_set_svd_local_split(
+            local_group_a.data(), (int32_t) local_group_a.size(),
+            local_group_b.data(), (int32_t) local_group_b.size(),
+            svd_params.local_group_a_share,
+            svd_params.local_minor_timeout_ms);
+        if (!local_layer_timeouts.empty()) {
+            ggml_cpu_set_svd_local_layer_timeouts(
+                local_layer_timeouts.data(),
+                (int32_t) local_layer_timeouts.size());
+        } else {
+            ggml_cpu_clear_svd_local_layer_timeouts();
+        }
+        LOG_INF("%s: SVD local split enabled: group_a=%s group_b=%s share=%.3f minor_timeout_ms=%d layer_timeouts=%zu\n",
+                __func__,
+                svd_params.local_group_a_arg.c_str(),
+                svd_params.local_group_b_arg.c_str(),
+                (double) svd_params.local_group_a_share,
+                svd_params.local_minor_timeout_ms,
+                local_layer_timeouts.size());
+    } else {
+        ggml_cpu_clear_svd_local_split();
+        ggml_cpu_clear_svd_local_layer_timeouts();
     }
 
     llama_context * ctx = llama_init_from_model(model, cparams);

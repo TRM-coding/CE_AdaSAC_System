@@ -1,0 +1,35 @@
+[
+  {
+    "cpu_load": 80,
+    "policy": "timeout_budget_0",
+    "runs": 2,
+    "decode_tok_s_mean": 0.15727999999999998,
+    "decode_tok_s_stdev": 0.012462049911631714,
+    "generation_decode_ms_mean": 6378.115,
+    "speedup_vs_no_timeout": 1.0,
+    "generated_text_match_rate": 1.0,
+    "top1_match_rate": 1.0
+  },
+  {
+    "cpu_load": 80,
+    "policy": "timeout_budget_2",
+    "runs": 2,
+    "decode_tok_s_mean": 0.153362,
+    "decode_tok_s_stdev": 0.0008909545442950381,
+    "generation_decode_ms_mean": 6520.625,
+    "speedup_vs_no_timeout": 0.9750890132248221,
+    "generated_text_match_rate": 1.0,
+    "top1_match_rate": 1.0
+  },
+  {
+    "cpu_load": 80,
+    "policy": "timeout_budget_8",
+    "runs": 2,
+    "decode_tok_s_mean": 0.152323,
+    "decode_tok_s_stdev": 0.0018964603871423134,
+    "generation_decode_ms_mean": 6565.5,
+    "speedup_vs_no_timeout": 0.9684829603255342,
+    "generated_text_match_rate": 1.0,
+    "top1_match_rate": 1.0
+  }
+]

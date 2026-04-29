@@ -15,3 +15,7 @@ src/llama.cpp/exp1/
 test/toolchains/
 test/*.tar.gz
 *.gguf
+
+/home/tianruiming/CE_ADA_LLAMA/1571178804paper(1).pdf
+/home/tianruiming/CE_ADA_LLAMA/algorithm.pdf
+src/llama.cpp/3dparty/oneDNN

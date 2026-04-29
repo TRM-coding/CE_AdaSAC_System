@@ -1,0 +1,884 @@
+{
+  "source": "generated from local decode measurement; phone side is CPU-emulated timing, no adb",
+  "n_layers": 28,
+  "per_layer_full_ms": 1.53385,
+  "load_scale": 3.4,
+  "local_deadline_ms": 46.383624000000005,
+  "request_deadline_ms": 75.15865,
+  "tx_ms_by_split_m": [
+    5.43,
+    5.34,
+    5.25,
+    5.16,
+    5.07,
+    4.98,
+    4.89,
+    4.8,
+    4.71,
+    4.62,
+    4.53,
+    4.44,
+    4.35,
+    4.26,
+    4.17,
+    4.08,
+    3.99,
+    3.9,
+    3.81,
+    3.72,
+    3.63,
+    3.54,
+    3.45,
+    3.36,
+    3.27,
+    3.18,
+    3.09,
+    3.0,
+    3.0
+  ],
+  "end_ms_by_split_m": [
+    25.6766,
+    24.7257,
+    23.7747,
+    22.8237,
+    21.8727,
+    20.9217,
+    19.9707,
+    19.0197,
+    18.0688,
+    17.1178,
+    16.1668,
+    15.2158,
+    14.2648,
+    13.3138,
+    12.3628,
+    11.4118,
+    10.4609,
+    9.5099,
+    8.5589,
+    7.6079,
+    6.6569,
+    5.7059,
+    4.7549,
+    3.8039,
+    2.853,
+    1.902,
+    0.951,
+    0.0,
+    0.0
+  ],
+  "layers": [
+    {
+      "layer": 0,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 4.5893,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.1074,
+          "loss": 0.0625,
+          "weight": 0.22
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 3.6255,
+          "loss": 0.25,
+          "weight": 0.44
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.1437,
+          "loss": 0.5625,
+          "weight": 0.66
+        }
+      ]
+    },
+    {
+      "layer": 1,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.0065,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.4808,
+          "loss": 0.063437,
+          "weight": 0.24
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 3.9551,
+          "loss": 0.25375,
+          "weight": 0.48
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.4294,
+          "loss": 0.570937,
+          "weight": 0.72
+        }
+      ]
+    },
+    {
+      "layer": 2,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.4237,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.8542,
+          "loss": 0.064375,
+          "weight": 0.26
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 4.2847,
+          "loss": 0.2575,
+          "weight": 0.52
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.7152,
+          "loss": 0.579375,
+          "weight": 0.78
+        }
+      ]
+    },
+    {
+      "layer": 3,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.8409,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 5.2276,
+          "loss": 0.065312,
+          "weight": 0.28
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 4.6143,
+          "loss": 0.26125,
+          "weight": 0.56
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 4.001,
+          "loss": 0.587812,
+          "weight": 0.84
+        }
+      ]
+    },
+    {
+      "layer": 4,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 4.5893,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.1074,
+          "loss": 0.06625,
+          "weight": 0.22
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 3.6255,
+          "loss": 0.265,
+          "weight": 0.44
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.1437,
+          "loss": 0.59625,
+          "weight": 0.66
+        }
+      ]
+    },
+    {
+      "layer": 5,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.0065,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.4808,
+          "loss": 0.067187,
+          "weight": 0.24
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 3.9551,
+          "loss": 0.26875,
+          "weight": 0.48
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.4294,
+          "loss": 0.604687,
+          "weight": 0.72
+        }
+      ]
+    },
+    {
+      "layer": 6,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.4237,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.8542,
+          "loss": 0.068125,
+          "weight": 0.26
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 4.2847,
+          "loss": 0.2725,
+          "weight": 0.52
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.7152,
+          "loss": 0.613125,
+          "weight": 0.78
+        }
+      ]
+    },
+    {
+      "layer": 7,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.8409,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 5.2276,
+          "loss": 0.069062,
+          "weight": 0.28
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 4.6143,
+          "loss": 0.27625,
+          "weight": 0.56
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 4.001,
+          "loss": 0.621563,
+          "weight": 0.84
+        }
+      ]
+    },
+    {
+      "layer": 8,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 4.5893,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.1074,
+          "loss": 0.07,
+          "weight": 0.22
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 3.6255,
+          "loss": 0.28,
+          "weight": 0.44
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.1437,
+          "loss": 0.63,
+          "weight": 0.66
+        }
+      ]
+    },
+    {
+      "layer": 9,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.0065,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.4808,
+          "loss": 0.070938,
+          "weight": 0.24
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 3.9551,
+          "loss": 0.28375,
+          "weight": 0.48
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.4294,
+          "loss": 0.638437,
+          "weight": 0.72
+        }
+      ]
+    },
+    {
+      "layer": 10,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.4237,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.8542,
+          "loss": 0.071875,
+          "weight": 0.26
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 4.2847,
+          "loss": 0.2875,
+          "weight": 0.52
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.7152,
+          "loss": 0.646875,
+          "weight": 0.78
+        }
+      ]
+    },
+    {
+      "layer": 11,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.8409,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 5.2276,
+          "loss": 0.072813,
+          "weight": 0.28
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 4.6143,
+          "loss": 0.29125,
+          "weight": 0.56
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 4.001,
+          "loss": 0.655312,
+          "weight": 0.84
+        }
+      ]
+    },
+    {
+      "layer": 12,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 4.5893,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.1074,
+          "loss": 0.07375,
+          "weight": 0.22
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 3.6255,
+          "loss": 0.295,
+          "weight": 0.44
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.1437,
+          "loss": 0.66375,
+          "weight": 0.66
+        }
+      ]
+    },
+    {
+      "layer": 13,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.0065,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.4808,
+          "loss": 0.074688,
+          "weight": 0.24
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 3.9551,
+          "loss": 0.29875,
+          "weight": 0.48
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.4294,
+          "loss": 0.672188,
+          "weight": 0.72
+        }
+      ]
+    },
+    {
+      "layer": 14,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.4237,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.8542,
+          "loss": 0.075625,
+          "weight": 0.26
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 4.2847,
+          "loss": 0.3025,
+          "weight": 0.52
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.7152,
+          "loss": 0.680625,
+          "weight": 0.78
+        }
+      ]
+    },
+    {
+      "layer": 15,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.8409,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 5.2276,
+          "loss": 0.076563,
+          "weight": 0.28
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 4.6143,
+          "loss": 0.30625,
+          "weight": 0.56
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 4.001,
+          "loss": 0.689063,
+          "weight": 0.84
+        }
+      ]
+    },
+    {
+      "layer": 16,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 4.5893,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.1074,
+          "loss": 0.0775,
+          "weight": 0.22
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 3.6255,
+          "loss": 0.31,
+          "weight": 0.44
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.1437,
+          "loss": 0.6975,
+          "weight": 0.66
+        }
+      ]
+    },
+    {
+      "layer": 17,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.0065,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.4808,
+          "loss": 0.078437,
+          "weight": 0.24
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 3.9551,
+          "loss": 0.31375,
+          "weight": 0.48
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.4294,
+          "loss": 0.705937,
+          "weight": 0.72
+        }
+      ]
+    },
+    {
+      "layer": 18,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.4237,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.8542,
+          "loss": 0.079375,
+          "weight": 0.26
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 4.2847,
+          "loss": 0.3175,
+          "weight": 0.52
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.7152,
+          "loss": 0.714375,
+          "weight": 0.78
+        }
+      ]
+    },
+    {
+      "layer": 19,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.8409,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 5.2276,
+          "loss": 0.080312,
+          "weight": 0.28
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 4.6143,
+          "loss": 0.32125,
+          "weight": 0.56
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 4.001,
+          "loss": 0.722812,
+          "weight": 0.84
+        }
+      ]
+    },
+    {
+      "layer": 20,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 4.5893,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.1074,
+          "loss": 0.08125,
+          "weight": 0.22
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 3.6255,
+          "loss": 0.325,
+          "weight": 0.44
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.1437,
+          "loss": 0.73125,
+          "weight": 0.66
+        }
+      ]
+    },
+    {
+      "layer": 21,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.0065,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.4808,
+          "loss": 0.082187,
+          "weight": 0.24
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 3.9551,
+          "loss": 0.32875,
+          "weight": 0.48
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.4294,
+          "loss": 0.739687,
+          "weight": 0.72
+        }
+      ]
+    },
+    {
+      "layer": 22,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.4237,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.8542,
+          "loss": 0.083125,
+          "weight": 0.26
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 4.2847,
+          "loss": 0.3325,
+          "weight": 0.52
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.7152,
+          "loss": 0.748125,
+          "weight": 0.78
+        }
+      ]
+    },
+    {
+      "layer": 23,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.8409,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 5.2276,
+          "loss": 0.084062,
+          "weight": 0.28
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 4.6143,
+          "loss": 0.33625,
+          "weight": 0.56
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 4.001,
+          "loss": 0.756563,
+          "weight": 0.84
+        }
+      ]
+    },
+    {
+      "layer": 24,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 4.5893,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.1074,
+          "loss": 0.085,
+          "weight": 0.22
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 3.6255,
+          "loss": 0.34,
+          "weight": 0.44
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.1437,
+          "loss": 0.765,
+          "weight": 0.66
+        }
+      ]
+    },
+    {
+      "layer": 25,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.0065,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.4808,
+          "loss": 0.085938,
+          "weight": 0.24
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 3.9551,
+          "loss": 0.34375,
+          "weight": 0.48
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.4294,
+          "loss": 0.773438,
+          "weight": 0.72
+        }
+      ]
+    },
+    {
+      "layer": 26,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.4237,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 4.8542,
+          "loss": 0.086875,
+          "weight": 0.26
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 4.2847,
+          "loss": 0.3475,
+          "weight": 0.52
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 3.7152,
+          "loss": 0.781875,
+          "weight": 0.78
+        }
+      ]
+    },
+    {
+      "layer": 27,
+      "candidates": [
+        {
+          "rate": 0.0,
+          "main_ms": 5.8409,
+          "loss": 0.0,
+          "weight": 0.0
+        },
+        {
+          "rate": 0.25,
+          "main_ms": 5.2276,
+          "loss": 0.087813,
+          "weight": 0.28
+        },
+        {
+          "rate": 0.5,
+          "main_ms": 4.6143,
+          "loss": 0.35125,
+          "weight": 0.56
+        },
+        {
+          "rate": 0.75,
+          "main_ms": 4.001,
+          "loss": 0.790312,
+          "weight": 0.84
+        }
+      ]
+    }
+  ]
+}

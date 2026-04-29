@@ -362,6 +362,8 @@ struct llm_graph_params {
     const float *               svd_offload_rates;
     uint32_t                    svd_offload_rate_count;
     bool                        svd_offload_enabled;
+    int32_t                     layer_split_start;
+    int32_t                     layer_split_end;
 
     int32_t n_outputs;
 
@@ -418,6 +420,8 @@ struct llm_graph_context {
     const float *               svd_offload_rates;
     const uint32_t              svd_offload_rate_count;
     const bool                  svd_offload_enabled;
+    const int32_t               layer_split_start;
+    const int32_t               layer_split_end;
 
     const llm_graph_cb & cb_func;
 

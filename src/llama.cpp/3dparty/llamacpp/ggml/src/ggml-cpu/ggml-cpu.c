@@ -87,6 +87,7 @@
 #define SWAP(x, y, T) do { T SWAP = x; (x) = y; (y) = SWAP; } while (0)
 
 #define GGML_SVD_LOCAL_SPLIT_MAX_CPUS GGML_MAX_N_THREADS
+#define GGML_SVD_LOCAL_TIMEOUT_MAX_LAYERS 4096
 
 #if defined(__ARM_ARCH)
 struct ggml_arm_arch_features_type {
@@ -116,6 +117,18 @@ static struct {
     0.5f,
     0,
 };
+
+static struct {
+    bool enabled;
+    int32_t n_layer_timeout;
+    int32_t layer_timeout_ms[GGML_SVD_LOCAL_TIMEOUT_MAX_LAYERS];
+} g_svd_local_layer_timeouts = {
+    false,
+    0,
+    { 0 },
+};
+
+static bool g_svd_force_drop_tail = false;
 
 struct ggml_svd_local_timeout_state {
     _Atomic int group_done_count[2];
@@ -1331,10 +1344,41 @@ void ggml_cpu_set_svd_local_split(
     g_svd_local_split.enabled = true;
 }
 
+void ggml_cpu_set_svd_local_layer_timeouts(
+        const int32_t * layer_timeout_ms,
+               int32_t   n_layer_timeout) {
+    memset(&g_svd_local_layer_timeouts, 0, sizeof(g_svd_local_layer_timeouts));
+
+    if (layer_timeout_ms == NULL || n_layer_timeout <= 0) {
+        return;
+    }
+
+    if (n_layer_timeout > GGML_SVD_LOCAL_TIMEOUT_MAX_LAYERS) {
+        n_layer_timeout = GGML_SVD_LOCAL_TIMEOUT_MAX_LAYERS;
+    }
+
+    for (int32_t i = 0; i < n_layer_timeout; ++i) {
+        g_svd_local_layer_timeouts.layer_timeout_ms[i] =
+            layer_timeout_ms[i] > 0 ? layer_timeout_ms[i] : 0;
+    }
+    g_svd_local_layer_timeouts.n_layer_timeout = n_layer_timeout;
+    g_svd_local_layer_timeouts.enabled = true;
+}
+
+void ggml_cpu_clear_svd_local_layer_timeouts(void) {
+    memset(&g_svd_local_layer_timeouts, 0, sizeof(g_svd_local_layer_timeouts));
+}
+
+void ggml_cpu_set_svd_force_drop_tail(bool enabled) {
+    g_svd_force_drop_tail = enabled;
+}
+
 void ggml_cpu_clear_svd_local_split(void) {
     memset(&g_svd_local_split, 0, sizeof(g_svd_local_split));
     g_svd_local_split.group_a_share = 0.5f;
     g_svd_local_split.minor_timeout_ms = 0;
+    g_svd_force_drop_tail = false;
+    ggml_cpu_clear_svd_local_layer_timeouts();
 }
 
 static bool ggml_svd_local_split_enabled(void) {
@@ -1345,8 +1389,17 @@ static bool ggml_svd_local_split_enabled(void) {
         g_svd_local_split.group_a_share < 1.0f;
 }
 
-static bool ggml_svd_local_split_timeout_enabled(void) {
-    return ggml_svd_local_split_enabled() && g_svd_local_split.minor_timeout_ms > 0;
+static int32_t ggml_svd_local_split_get_timeout_ms(const struct ggml_tensor * dst) {
+    if (!ggml_svd_local_split_enabled()) {
+        return 0;
+    }
+    if (g_svd_local_layer_timeouts.enabled &&
+        dst != NULL &&
+        dst->svd_layer_id >= 0 &&
+        dst->svd_layer_id < g_svd_local_layer_timeouts.n_layer_timeout) {
+        return g_svd_local_layer_timeouts.layer_timeout_ms[dst->svd_layer_id];
+    }
+    return g_svd_local_split.minor_timeout_ms > 0 ? g_svd_local_split.minor_timeout_ms : 0;
 }
 
 static void ggml_svd_local_timeout_barrier(
@@ -1547,6 +1600,17 @@ static int64_t ggml_mul_mat_svd_get_k_keep(
         ? dst->svd_k_trunk
         : 0;
     return v->ne[1] - k_trunc;
+}
+
+static bool ggml_mul_mat_svd_use_local_tail_split(
+    const struct ggml_tensor * dst,
+    const struct ggml_tensor * v) {
+    return ggml_svd_local_split_enabled() &&
+        !g_svd_force_drop_tail &&
+        dst->svd_offload_rate > 0.0f &&
+        dst->svd_offload_rate < 1.0f &&
+        v->ne[1] > 1 &&
+        !ggml_svd_offload_client_enabled();
 }
 
 static void ggml_compute_forward_mul_mat_svd(
@@ -1777,6 +1841,21 @@ static struct {
     uint64_t other[GGML_SVD_ZERO_REASON_COUNT];
 } g_svd_zero_profile = { 0 };
 
+static struct {
+    uint64_t up_keep;
+    uint64_t gate_keep;
+    uint64_t down_keep;
+    uint64_t other_keep;
+    uint64_t up_drop;
+    uint64_t gate_drop;
+    uint64_t down_drop;
+    uint64_t other_drop;
+    uint64_t up_wait_us;
+    uint64_t gate_wait_us;
+    uint64_t down_wait_us;
+    uint64_t other_wait_us;
+} g_svd_local_timeout_profile = { 0 };
+
 static uint64_t ggml_svd_local_profile_now_us(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -1818,6 +1897,38 @@ static void ggml_svd_local_profile_accumulate(int32_t op_id, uint64_t total_us, 
     __atomic_fetch_add(total, total_us, __ATOMIC_RELAXED);
     __atomic_fetch_add(v, v_us, __ATOMIC_RELAXED);
     __atomic_fetch_add(u, u_us, __ATOMIC_RELAXED);
+}
+
+static void ggml_svd_local_timeout_profile_accumulate(int32_t op_id, bool dropped, uint64_t wait_us) {
+    uint64_t * keep = NULL;
+    uint64_t * drop = NULL;
+    uint64_t * wait = NULL;
+
+    switch (op_id) {
+        case GGML_SVD_OP_UP:
+            keep = &g_svd_local_timeout_profile.up_keep;
+            drop = &g_svd_local_timeout_profile.up_drop;
+            wait = &g_svd_local_timeout_profile.up_wait_us;
+            break;
+        case GGML_SVD_OP_GATE:
+            keep = &g_svd_local_timeout_profile.gate_keep;
+            drop = &g_svd_local_timeout_profile.gate_drop;
+            wait = &g_svd_local_timeout_profile.gate_wait_us;
+            break;
+        case GGML_SVD_OP_DOWN:
+            keep = &g_svd_local_timeout_profile.down_keep;
+            drop = &g_svd_local_timeout_profile.down_drop;
+            wait = &g_svd_local_timeout_profile.down_wait_us;
+            break;
+        default:
+            keep = &g_svd_local_timeout_profile.other_keep;
+            drop = &g_svd_local_timeout_profile.other_drop;
+            wait = &g_svd_local_timeout_profile.other_wait_us;
+            break;
+    }
+
+    __atomic_fetch_add(dropped ? drop : keep, 1, __ATOMIC_RELAXED);
+    __atomic_fetch_add(wait, wait_us, __ATOMIC_RELAXED);
 }
 
 static bool ggml_profile_is_ffn_node(const struct ggml_tensor * tensor) {
@@ -1876,6 +1987,18 @@ void ggml_svd_local_profile_print_and_reset(void) {
         zero_down[i] = __atomic_exchange_n(&g_svd_zero_profile.down[i], 0, __ATOMIC_RELAXED);
         zero_other[i] = __atomic_exchange_n(&g_svd_zero_profile.other[i], 0, __ATOMIC_RELAXED);
     }
+    const uint64_t timeout_up_keep = __atomic_exchange_n(&g_svd_local_timeout_profile.up_keep, 0, __ATOMIC_RELAXED);
+    const uint64_t timeout_gate_keep = __atomic_exchange_n(&g_svd_local_timeout_profile.gate_keep, 0, __ATOMIC_RELAXED);
+    const uint64_t timeout_down_keep = __atomic_exchange_n(&g_svd_local_timeout_profile.down_keep, 0, __ATOMIC_RELAXED);
+    const uint64_t timeout_other_keep = __atomic_exchange_n(&g_svd_local_timeout_profile.other_keep, 0, __ATOMIC_RELAXED);
+    const uint64_t timeout_up_drop = __atomic_exchange_n(&g_svd_local_timeout_profile.up_drop, 0, __ATOMIC_RELAXED);
+    const uint64_t timeout_gate_drop = __atomic_exchange_n(&g_svd_local_timeout_profile.gate_drop, 0, __ATOMIC_RELAXED);
+    const uint64_t timeout_down_drop = __atomic_exchange_n(&g_svd_local_timeout_profile.down_drop, 0, __ATOMIC_RELAXED);
+    const uint64_t timeout_other_drop = __atomic_exchange_n(&g_svd_local_timeout_profile.other_drop, 0, __ATOMIC_RELAXED);
+    const uint64_t timeout_up_wait_us = __atomic_exchange_n(&g_svd_local_timeout_profile.up_wait_us, 0, __ATOMIC_RELAXED);
+    const uint64_t timeout_gate_wait_us = __atomic_exchange_n(&g_svd_local_timeout_profile.gate_wait_us, 0, __ATOMIC_RELAXED);
+    const uint64_t timeout_down_wait_us = __atomic_exchange_n(&g_svd_local_timeout_profile.down_wait_us, 0, __ATOMIC_RELAXED);
+    const uint64_t timeout_other_wait_us = __atomic_exchange_n(&g_svd_local_timeout_profile.other_wait_us, 0, __ATOMIC_RELAXED);
 
     fprintf(stderr,
             "[svd-local-op-profile] up_ops=%llu gate_ops=%llu down_ops=%llu "
@@ -1922,6 +2045,24 @@ void ggml_svd_local_profile_print_and_reset(void) {
             (unsigned long long) zero_other[GGML_SVD_ZERO_REASON_FINISH],
             (unsigned long long) zero_other[GGML_SVD_ZERO_REASON_CACHE],
             (unsigned long long) zero_other[GGML_SVD_ZERO_REASON_NO_REQUEST]);
+    fprintf(stderr,
+            "[svd-local-timeout-profile] "
+            "up_keep=%llu up_drop=%llu up_wait=%.3f ms "
+            "gate_keep=%llu gate_drop=%llu gate_wait=%.3f ms "
+            "down_keep=%llu down_drop=%llu down_wait=%.3f ms "
+            "other_keep=%llu other_drop=%llu other_wait=%.3f ms\n",
+            (unsigned long long) timeout_up_keep,
+            (unsigned long long) timeout_up_drop,
+            timeout_up_wait_us / 1000.0,
+            (unsigned long long) timeout_gate_keep,
+            (unsigned long long) timeout_gate_drop,
+            timeout_gate_wait_us / 1000.0,
+            (unsigned long long) timeout_down_keep,
+            (unsigned long long) timeout_down_drop,
+            timeout_down_wait_us / 1000.0,
+            (unsigned long long) timeout_other_keep,
+            (unsigned long long) timeout_other_drop,
+            timeout_other_wait_us / 1000.0);
 }
 
 static bool ggml_compute_forward_mul_mat_svd_vec(
@@ -2089,9 +2230,10 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
         local_total_begin_us = ggml_svd_local_profile_now_us();
     }
 
+    const bool local_tail_split = !can_offload && ggml_mul_mat_svd_use_local_tail_split(dst, v);
     const int64_t k_local = can_offload
         ? ((drop_remote_immediately || *request_started) ? k_keep : total_rank)
-        : k_keep;
+        : (local_tail_split ? total_rank : k_keep);
     int32_t split_group_id = -1;
     int32_t split_group_index = 0;
     int32_t split_group_size = 0;
@@ -2106,6 +2248,11 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
             &split_group_id,
             &split_group_index,
             &split_group_size);
+    if (local_split_active && local_tail_split) {
+        // In local split mode the SVD rate denotes the minor/tail rank slice.
+        // Compute both head and tail locally; only timeout may discard tail.
+        k_group_a = k_keep;
+    }
     const int64_t rank_begin = local_split_active
         ? (split_group_id == 0 ? 0 : k_group_a)
         : 0;
@@ -2120,12 +2267,15 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
         ? rank_begin + (split_group_index + 1) * rank_span / split_group_size
         : (ith + 1) * k_local / nth;
     const int64_t k_group_b = k_local - k_group_a;
-    const int32_t major_group_id = k_group_a >= k_group_b ? 0 : 1;
-    const int32_t minor_group_id = 1 - major_group_id;
+    const int32_t major_group_id = local_tail_split ? 0 : (k_group_a >= k_group_b ? 0 : 1);
+    const int32_t minor_group_id = local_tail_split ? 1 : (1 - major_group_id);
     const int32_t major_group_size = major_group_id == 0 ? g_svd_local_split.n_group_a : g_svd_local_split.n_group_b;
     const int32_t minor_group_size = minor_group_id == 0 ? g_svd_local_split.n_group_a : g_svd_local_split.n_group_b;
+    const int32_t local_timeout_ms = local_split_active
+        ? ggml_svd_local_split_get_timeout_ms(dst)
+        : 0;
     const bool local_timeout_active = local_split_active &&
-        ggml_svd_local_split_timeout_enabled() &&
+        local_timeout_ms > 0 &&
         k_group_a > 0 &&
         k_group_b > 0 &&
         k_group_a != k_group_b;
@@ -2169,6 +2319,7 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
     }
 
     bool dropped_minor = false;
+    uint64_t local_timeout_wait_us = 0;
     if (local_timeout_active) {
         const int32_t group_done = atomic_fetch_add_explicit(
             &timeout_state->group_done_count[split_group_id], 1, memory_order_acq_rel) + 1;
@@ -2179,8 +2330,9 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
                 ggml_thread_cpu_relax();
             }
 
+            const uint64_t wait_begin_us = ggml_svd_local_profile_now_us();
             const int64_t deadline_us =
-                ggml_time_us() + (int64_t) g_svd_local_split.minor_timeout_ms * 1000;
+                ggml_time_us() + (int64_t) local_timeout_ms * 1000;
             while (atomic_load_explicit(
                     &timeout_state->group_done_count[minor_group_id], memory_order_acquire) < minor_group_size) {
                 if (ggml_time_us() >= deadline_us) {
@@ -2189,6 +2341,7 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
                 }
                 ggml_thread_cpu_relax();
             }
+            local_timeout_wait_us = ggml_svd_local_profile_now_us() - wait_begin_us;
 
             if (atomic_load_explicit(&timeout_state->decision, memory_order_acquire) == 0) {
                 atomic_store_explicit(&timeout_state->decision, 1, memory_order_release);
@@ -2205,6 +2358,12 @@ static bool ggml_compute_forward_mul_mat_svd_vec(
         }
 
         dropped_minor = atomic_load_explicit(&timeout_state->decision, memory_order_acquire) == 2;
+        if (is_major_group && split_group_index == 0 && dst->svd_op_id >= 0) {
+            ggml_svd_local_timeout_profile_accumulate(
+                dst->svd_op_id,
+                dropped_minor,
+                local_timeout_wait_us);
+        }
         if (dropped_minor && is_minor_group) {
             memset(tmp + tmp_start, 0, sizeof(float) * (tmp_end - tmp_start));
             atomic_fetch_add_explicit(&timeout_state->minor_acked_count, 1, memory_order_acq_rel);
@@ -4072,8 +4231,11 @@ struct ggml_cplan ggml_graph_plan(
                             ? node->svd_k_trunk
                             : 0;
                         const int64_t k_keep = v->ne[1] - k_trunc;
+                        const int64_t k_work = ggml_mul_mat_svd_use_local_tail_split(node, v)
+                            ? v->ne[1]
+                            : k_keep;
 
-                        const size_t tmp_elems = k_keep * b->ne[1] * b->ne[2] * b->ne[3];
+                        const size_t tmp_elems = k_work * b->ne[1] * b->ne[2] * b->ne[3];
                         cur = GGML_PAD(ggml_type_size(GGML_TYPE_F32) * tmp_elems, sizeof(int64_t));
 
                         const enum ggml_type vec_dot_type_v = type_traits_cpu[v->type].vec_dot_type;
@@ -4083,7 +4245,7 @@ struct ggml_cplan ggml_graph_plan(
 
                         const enum ggml_type vec_dot_type_u = type_traits_cpu[u->type].vec_dot_type;
                         if (vec_dot_type_u != GGML_TYPE_F32) {
-                            const size_t tmp_rhs_elems = v->ne[1] * b->ne[1] * b->ne[2] * b->ne[3];
+                            const size_t tmp_rhs_elems = k_work * b->ne[1] * b->ne[2] * b->ne[3];
                             cur += GGML_PAD(ggml_row_size(vec_dot_type_u, tmp_rhs_elems), sizeof(int64_t));
                         }
 

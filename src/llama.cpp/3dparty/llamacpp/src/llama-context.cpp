@@ -42,6 +42,8 @@ llama_context::llama_context(
     cparams.no_perf          = params.no_perf;
     cparams.pooling_type     = params.pooling_type;
     cparams.warmup           = false;
+    cparams.layer_split_start = params.layer_split_start;
+    cparams.layer_split_end   = params.layer_split_end;
 
     cparams.n_ctx            = params.n_ctx           == 0    ? hparams.n_ctx_train           : params.n_ctx;
     cparams.rope_freq_base   = params.rope_freq_base  == 0.0f ? hparams.rope_freq_base_train  : params.rope_freq_base;
@@ -1644,6 +1646,8 @@ llm_graph_result_ptr llama_context::graph_build(
                 /*.svd_offload_rates      =*/ svd_offload_rates.empty() ? nullptr : svd_offload_rates.data(),
                 /*.svd_offload_rate_count =*/ (uint32_t) svd_offload_rates.size(),
                 /*.svd_offload_enabled    =*/ svd_offload_enabled,
+                /*.layer_split_start       =*/ cparams.layer_split_start,
+                /*.layer_split_end         =*/ cparams.layer_split_end,
                 /*.n_outputs   =*/ n_outputs,
                 /*.cb          =*/ graph_get_cb(),
             }, gf, gtype);
@@ -2269,6 +2273,8 @@ llama_context_params llama_context_default_params() {
         /*.svd_offload_port            =*/ 0,
         /*.svd_offload_timeout_ms      =*/ 0,
         /*.svd_offload_enabled         =*/ false,
+        /*.layer_split_start           =*/ 0,
+        /*.layer_split_end             =*/ -1,
     };
 
     return result;

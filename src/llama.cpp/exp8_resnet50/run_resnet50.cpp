@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -18,8 +19,16 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 #include <vector>
+
+#ifdef RESNET50_USE_ONEDNN
+#include <omp.h>
+#endif
+#ifdef RESNET50_USE_ONEDNN
+#include "oneapi/dnnl/dnnl.hpp"
+#endif
 
 namespace {
 
@@ -55,6 +64,9 @@ struct args {
     std::string image_path;
     int threads = 8;
     int top_k = 5;
+    int warmup = 1;
+    int repeat = 1;
+    bool benchmark = false;
 };
 
 int64_t require_key(const gguf_context * meta, const char * key) {
@@ -324,6 +336,12 @@ struct feature_map {
     int height = 0;
     int channels = 0;
     std::vector<float> data;
+#ifdef RESNET50_USE_ONEDNN
+    std::vector<uint8_t> onednn_buffer;
+    dnnl::memory onednn_memory;
+    bool data_valid = true;
+    bool onednn_valid = false;
+#endif
 
     float & at(int c, int y, int x) {
         return data[static_cast<size_t>(x + width * (y + height * c))];
@@ -370,13 +388,411 @@ float bias_value(const ggml_tensor * bias, int channel) {
     return tensor_scalar(bias, channel);
 }
 
-feature_map conv2d(
+#ifdef RESNET50_USE_ONEDNN
+using tag = dnnl::memory::format_tag;
+using dt = dnnl::memory::data_type;
+
+std::string blob_key(const dnnl::memory::desc & md) {
+    auto tmp = md;
+    const std::vector<uint8_t> blob = tmp.get_blob();
+    return std::string(reinterpret_cast<const char *>(blob.data()), blob.size());
+}
+
+struct onednn_unary_key {
+    std::string src_blob;
+    int op = 0;
+    int kernel = 0;
+    int stride = 0;
+    int padding = 0;
+
+    bool operator==(const onednn_unary_key & other) const {
+        return src_blob == other.src_blob &&
+               op == other.op &&
+               kernel == other.kernel &&
+               stride == other.stride &&
+               padding == other.padding;
+    }
+};
+
+struct onednn_unary_key_hash {
+    size_t operator()(const onednn_unary_key & key) const {
+        size_t h = std::hash<std::string>{}(key.src_blob);
+        h ^= std::hash<int>{}(key.op) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(key.kernel) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(key.stride) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(key.padding) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        return h;
+    }
+};
+
+struct onednn_conv_key {
+    const ggml_tensor * weight = nullptr;
+    const ggml_tensor * bias = nullptr;
+    std::string src_blob;
+    int stride = 0;
+    int padding = 0;
+
+    bool operator==(const onednn_conv_key & other) const {
+        return weight == other.weight &&
+               bias == other.bias &&
+               src_blob == other.src_blob &&
+               stride == other.stride &&
+               padding == other.padding;
+    }
+};
+
+struct onednn_conv_key_hash {
+    size_t operator()(const onednn_conv_key & key) const {
+        size_t h = std::hash<const void *>{}(key.weight);
+        h ^= std::hash<const void *>{}(key.bias) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<std::string>{}(key.src_blob) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(key.stride) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(key.padding) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        return h;
+    }
+};
+
+struct onednn_conv_plan {
+    int out_w = 0;
+    int out_h = 0;
+    int out_c = 0;
+    dnnl::convolution_forward::primitive_desc pd;
+    dnnl::convolution_forward conv;
+    dnnl::memory weights_memory;
+    dnnl::memory bias_memory;
+
+    onednn_conv_plan(
+            int out_w,
+            int out_h,
+            int out_c,
+            const dnnl::convolution_forward::primitive_desc & pd,
+            const dnnl::convolution_forward & conv,
+            const dnnl::memory & weights_memory,
+            const dnnl::memory & bias_memory)
+        : out_w(out_w),
+          out_h(out_h),
+          out_c(out_c),
+          pd(pd),
+          conv(conv),
+          weights_memory(weights_memory),
+          bias_memory(bias_memory) {}
+};
+
+dnnl::engine & onednn_engine() {
+    static dnnl::engine eng(dnnl::engine::kind::cpu, 0);
+    return eng;
+}
+
+dnnl::stream & onednn_stream() {
+    static dnnl::stream s(onednn_engine());
+    return s;
+}
+
+dnnl::memory::desc nchw_desc(const feature_map & fm) {
+    return dnnl::memory::desc({1, fm.channels, fm.height, fm.width}, dt::f32, tag::nchw);
+}
+
+void bind_onednn_memory(feature_map & fm, const dnnl::memory::desc & md) {
+    fm.onednn_buffer.resize(md.get_size());
+    fm.onednn_memory = dnnl::memory(md, onednn_engine(), fm.onednn_buffer.data());
+    fm.onednn_valid = true;
+}
+
+void ensure_plain(feature_map & fm) {
+    if (fm.data_valid) {
+        return;
+    }
+    const dnnl::memory::desc user_md = nchw_desc(fm);
+    fm.data.resize(static_cast<size_t>(fm.width * fm.height * fm.channels));
+    dnnl::memory user_mem(user_md, onednn_engine(), fm.data.data());
+    if (fm.onednn_memory.get_desc() == user_md) {
+        std::memcpy(fm.data.data(), fm.onednn_buffer.data(), sizeof(float) * fm.data.size());
+    } else {
+        dnnl::reorder(fm.onednn_memory, user_mem).execute(onednn_stream(), fm.onednn_memory, user_mem);
+        onednn_stream().wait();
+    }
+    fm.data_valid = true;
+}
+
+void ensure_onednn(feature_map & fm, const dnnl::memory::desc * target_md = nullptr) {
+    if (!fm.onednn_valid) {
+        const dnnl::memory::desc user_md = nchw_desc(fm);
+        bind_onednn_memory(fm, user_md);
+        std::memcpy(fm.onednn_buffer.data(), fm.data.data(), sizeof(float) * fm.data.size());
+        fm.onednn_valid = true;
+    }
+
+    if (target_md != nullptr && fm.onednn_memory.get_desc() != *target_md) {
+        std::vector<uint8_t> new_buffer(target_md->get_size());
+        dnnl::memory new_mem(*target_md, onednn_engine(), new_buffer.data());
+        dnnl::reorder(fm.onednn_memory, new_mem).execute(onednn_stream(), fm.onednn_memory, new_mem);
+        onednn_stream().wait();
+        fm.onednn_buffer = std::move(new_buffer);
+        fm.onednn_memory = new_mem;
+    }
+
+    fm.onednn_valid = true;
+    fm.data_valid = false;
+}
+
+const onednn_conv_plan & get_onednn_conv_plan(
+        const ggml_tensor * weight,
+        const ggml_tensor * bias,
+        const dnnl::memory::desc & src_md,
+        int input_w,
+        int input_h,
+        int input_c,
+        int stride,
+        int padding) {
+    static std::unordered_map<onednn_conv_key, onednn_conv_plan, onednn_conv_key_hash> cache;
+
+    onednn_conv_key key{weight, bias, blob_key(src_md), stride, padding};
+    auto it = cache.find(key);
+    if (it != cache.end()) {
+        return it->second;
+    }
+
+    dnnl::engine & eng = onednn_engine();
+
+    const int kw = static_cast<int>(weight->ne[0]);
+    const int kh = static_cast<int>(weight->ne[1]);
+    const int out_channels = static_cast<int>(weight->ne[3]);
+    const int out_w = (input_w + 2 * padding - kw) / stride + 1;
+    const int out_h = (input_h + 2 * padding - kh) / stride + 1;
+    const dnnl::memory::dims weight_dims = {out_channels, input_c, kh, kw};
+    const dnnl::memory::dims bias_dims = {out_channels};
+    const dnnl::memory::dims strides = {stride, stride};
+    const dnnl::memory::dims pads = {padding, padding};
+
+    const auto user_weight_md = dnnl::memory::desc(weight_dims, dt::f32, tag::oihw);
+    const auto bias_md = dnnl::memory::desc(bias_dims, dt::f32, tag::x);
+    const auto dst_md = dnnl::memory::desc({1, out_channels, out_h, out_w}, dt::f32, tag::any);
+
+    const auto conv_pd = dnnl::convolution_forward::primitive_desc(
+            eng,
+            dnnl::prop_kind::forward_inference,
+            dnnl::algorithm::convolution_direct,
+            src_md,
+            dnnl::memory::desc(weight_dims, dt::f32, tag::any),
+            bias_md,
+            dst_md,
+            strides,
+            pads,
+            pads);
+
+    dnnl::memory user_weight_memory(user_weight_md, eng, weight->data);
+    dnnl::memory weight_memory(conv_pd.weights_desc(), eng);
+    if (conv_pd.weights_desc() != user_weight_md) {
+        dnnl::reorder(user_weight_memory, weight_memory).execute(onednn_stream(), user_weight_memory, weight_memory);
+        onednn_stream().wait();
+    } else {
+        weight_memory = user_weight_memory;
+    }
+
+    dnnl::memory bias_memory(bias_md, eng, bias ? bias->data : nullptr);
+    dnnl::convolution_forward conv(conv_pd);
+    auto inserted = cache.emplace(
+            key,
+            onednn_conv_plan(out_w, out_h, out_channels, conv_pd, conv, weight_memory, bias_memory));
+    return inserted.first->second;
+}
+
+feature_map conv2d_onednn(
+        const ggml_tensor * weight,
+        const ggml_tensor * bias,
+        feature_map & input,
+        int stride,
+        int padding) {
+    const int in_channels = static_cast<int>(weight->ne[2]);
+    if (in_channels != input.channels) {
+        throw std::runtime_error("conv input channel mismatch");
+    }
+
+    ensure_onednn(input);
+    const dnnl::memory::desc src_desc = input.onednn_memory.get_desc();
+    const onednn_conv_plan & plan = get_onednn_conv_plan(
+            weight, bias, src_desc, input.width, input.height, input.channels, stride, padding);
+    dnnl::stream & stream = onednn_stream();
+    const dnnl::memory::desc plan_src_desc = plan.pd.src_desc();
+    ensure_onednn(input, &plan_src_desc);
+
+    feature_map out;
+    out.width = plan.out_w;
+    out.height = plan.out_h;
+    out.channels = plan.out_c;
+    bind_onednn_memory(out, plan.pd.dst_desc());
+    plan.conv.execute(
+            stream,
+            {
+                    {DNNL_ARG_SRC, input.onednn_memory},
+                    {DNNL_ARG_WEIGHTS, plan.weights_memory},
+                    {DNNL_ARG_BIAS, plan.bias_memory},
+                    {DNNL_ARG_DST, out.onednn_memory},
+            });
+    stream.wait();
+    out.data_valid = false;
+    return out;
+}
+
+struct onednn_eltwise_plan {
+    dnnl::eltwise_forward::primitive_desc pd;
+    dnnl::eltwise_forward prim;
+
+    onednn_eltwise_plan(const dnnl::eltwise_forward::primitive_desc & pd, const dnnl::eltwise_forward & prim)
+        : pd(pd), prim(prim) {}
+};
+
+const onednn_eltwise_plan & get_onednn_relu_plan(const dnnl::memory::desc & src_md) {
+    static std::unordered_map<onednn_unary_key, onednn_eltwise_plan, onednn_unary_key_hash> cache;
+    onednn_unary_key key{blob_key(src_md), 1, 0, 0, 0};
+    auto it = cache.find(key);
+    if (it != cache.end()) {
+        return it->second;
+    }
+    const auto pd = dnnl::eltwise_forward::primitive_desc(
+            onednn_engine(), dnnl::prop_kind::forward_inference, dnnl::algorithm::eltwise_relu, src_md, src_md, 0.0f, 0.0f);
+    auto inserted = cache.emplace(key, onednn_eltwise_plan(pd, dnnl::eltwise_forward(pd)));
+    return inserted.first->second;
+}
+
+struct onednn_pool_plan {
+    int out_w = 0;
+    int out_h = 0;
+    dnnl::pooling_forward::primitive_desc pd;
+    dnnl::pooling_forward prim;
+
+    onednn_pool_plan(int out_w, int out_h, const dnnl::pooling_forward::primitive_desc & pd, const dnnl::pooling_forward & prim)
+        : out_w(out_w), out_h(out_h), pd(pd), prim(prim) {}
+};
+
+const onednn_pool_plan & get_onednn_max_pool_plan(
+        const dnnl::memory::desc & src_md,
+        int width,
+        int height,
+        int channels,
+        int kernel,
+        int stride,
+        int padding) {
+    static std::unordered_map<onednn_unary_key, onednn_pool_plan, onednn_unary_key_hash> cache;
+    onednn_unary_key key{blob_key(src_md), 2, kernel, stride, padding};
+    auto it = cache.find(key);
+    if (it != cache.end()) {
+        return it->second;
+    }
+    const int out_w = (width + 2 * padding - kernel) / stride + 1;
+    const int out_h = (height + 2 * padding - kernel) / stride + 1;
+    const auto dst_md = dnnl::memory::desc({1, channels, out_h, out_w}, dt::f32, tag::any);
+    const auto pd = dnnl::pooling_forward::primitive_desc(
+            onednn_engine(),
+            dnnl::prop_kind::forward_inference,
+            dnnl::algorithm::pooling_max,
+            src_md,
+            dst_md,
+            {stride, stride},
+            {kernel, kernel},
+            {0, 0},
+            {padding, padding},
+            {padding, padding});
+    auto inserted = cache.emplace(key, onednn_pool_plan(out_w, out_h, pd, dnnl::pooling_forward(pd)));
+    return inserted.first->second;
+}
+
+struct onednn_sum_plan {
+    dnnl::sum::primitive_desc pd;
+    dnnl::sum prim;
+
+    onednn_sum_plan(const dnnl::sum::primitive_desc & pd, const dnnl::sum & prim)
+        : pd(pd), prim(prim) {}
+};
+
+const onednn_sum_plan & get_onednn_sum_plan(const dnnl::memory::desc & desc) {
+    static std::unordered_map<std::string, onednn_sum_plan> cache;
+    const std::string key = blob_key(desc);
+    auto it = cache.find(key);
+    if (it != cache.end()) {
+        return it->second;
+    }
+    std::vector<float> scales = {1.0f, 1.0f};
+    std::vector<dnnl::memory::desc> srcs = {desc, desc};
+    const auto pd = dnnl::sum::primitive_desc(onednn_engine(), scales, srcs);
+    auto inserted = cache.emplace(key, onednn_sum_plan(pd, dnnl::sum(pd)));
+    return inserted.first->second;
+}
+
+void relu_onednn_inplace(feature_map & fm) {
+    ensure_onednn(fm);
+    const onednn_eltwise_plan & plan = get_onednn_relu_plan(fm.onednn_memory.get_desc());
+    feature_map out;
+    out.width = fm.width;
+    out.height = fm.height;
+    out.channels = fm.channels;
+    bind_onednn_memory(out, fm.onednn_memory.get_desc());
+    plan.prim.execute(
+            onednn_stream(),
+            {
+                    {DNNL_ARG_SRC, fm.onednn_memory},
+                    {DNNL_ARG_DST, out.onednn_memory},
+            });
+    onednn_stream().wait();
+    out.data_valid = false;
+    fm = std::move(out);
+}
+
+feature_map max_pool_2d_onednn(feature_map & input, int kernel, int stride, int padding) {
+    ensure_onednn(input);
+    const onednn_pool_plan & plan = get_onednn_max_pool_plan(
+            input.onednn_memory.get_desc(), input.width, input.height, input.channels, kernel, stride, padding);
+    feature_map out;
+    out.width = plan.out_w;
+    out.height = plan.out_h;
+    out.channels = input.channels;
+    bind_onednn_memory(out, plan.pd.dst_desc());
+    plan.prim.execute(
+            onednn_stream(),
+            {
+                    {DNNL_ARG_SRC, input.onednn_memory},
+                    {DNNL_ARG_DST, out.onednn_memory},
+            });
+    onednn_stream().wait();
+    out.data_valid = false;
+    return out;
+}
+
+void add_onednn_inplace(feature_map & dst, feature_map & src) {
+    ensure_onednn(dst);
+    const dnnl::memory::desc dst_desc = dst.onednn_memory.get_desc();
+    ensure_onednn(src, &dst_desc);
+    const onednn_sum_plan & plan = get_onednn_sum_plan(dst.onednn_memory.get_desc());
+    feature_map out;
+    out.width = dst.width;
+    out.height = dst.height;
+    out.channels = dst.channels;
+    bind_onednn_memory(out, dst.onednn_memory.get_desc());
+    plan.prim.execute(
+            onednn_stream(),
+            {
+                    {DNNL_ARG_MULTIPLE_SRC + 0, dst.onednn_memory},
+                    {DNNL_ARG_MULTIPLE_SRC + 1, src.onednn_memory},
+                    {DNNL_ARG_DST, out.onednn_memory},
+            });
+    onednn_stream().wait();
+    out.data_valid = false;
+    dst = std::move(out);
+}
+#endif
+
+feature_map conv2d_ggml_op(
         const ggml_tensor * weight,
         const ggml_tensor * bias,
         const feature_map & input,
         int stride,
         int padding,
         int n_threads) {
+#ifdef RESNET50_USE_ONEDNN
+    (void)n_threads;
+    return conv2d_onednn(weight, bias, const_cast<feature_map &>(input), stride, padding);
+#endif
+
     const int kw = static_cast<int>(weight->ne[0]);
     const int kh = static_cast<int>(weight->ne[1]);
     const int in_channels = static_cast<int>(weight->ne[2]);
@@ -385,44 +801,59 @@ feature_map conv2d(
         throw std::runtime_error("conv input channel mismatch");
     }
 
+    const int out_w = (input.width + 2 * padding - kw) / stride + 1;
+    const int out_h = (input.height + 2 * padding - kh) / stride + 1;
+    const size_t bytes =
+            8 * 1024 * 1024 +
+            sizeof(float) * (
+                    input.data.size() +
+                    static_cast<size_t>(out_w * out_h * out_channels) +
+                    static_cast<size_t>(out_w * out_h * kw * kh * in_channels));
+
+    ggml_init_params params = {
+        /*.mem_size   =*/ bytes,
+        /*.mem_buffer =*/ nullptr,
+        /*.no_alloc   =*/ false,
+    };
+
+    ggml_ctx_ptr ctx(ggml_init(params), ggml_free);
+    if (!ctx) {
+        throw std::runtime_error("ggml_init failed for conv_2d");
+    }
+
+    ggml_tensor * input_tensor = ggml_new_tensor_4d(ctx.get(), GGML_TYPE_F32, input.width, input.height, input.channels, 1);
+    if (input_tensor == nullptr) {
+        throw std::runtime_error("failed to allocate ggml input for conv_2d");
+    }
+    std::memcpy(input_tensor->data, input.data.data(), sizeof(float) * input.data.size());
+
+    ggml_tensor * output = ggml_conv_2d(ctx.get(), const_cast<ggml_tensor *>(weight), input_tensor, stride, stride, padding, padding, 1, 1);
+    ggml_cgraph * graph = ggml_new_graph(ctx.get());
+    if (graph == nullptr) {
+        throw std::runtime_error("ggml_new_graph failed for conv_2d");
+    }
+
+    ggml_build_forward_expand(graph, output);
+    const ggml_status status = ggml_graph_compute_with_ctx(ctx.get(), graph, n_threads);
+    if (status != GGML_STATUS_SUCCESS) {
+        throw std::runtime_error("ggml_graph_compute_with_ctx failed for conv_2d");
+    }
+
     feature_map out;
-    out.width = (input.width + 2 * padding - kw) / stride + 1;
-    out.height = (input.height + 2 * padding - kh) / stride + 1;
+    out.width = out_w;
+    out.height = out_h;
     out.channels = out_channels;
     out.data.assign(static_cast<size_t>(out.width * out.height * out.channels), 0.0f);
 
-    const int in_plane = input.width * input.height;
-    const int out_plane = out.width * out.height;
-
+    const float * output_ptr = static_cast<const float *>(output->data);
+    const int64_t out_plane = static_cast<int64_t>(out.width) * out.height;
     parallel_for_chunks(out_channels, n_threads, [&](int oc_begin, int oc_end) {
         for (int oc = oc_begin; oc < oc_end; ++oc) {
             const float b = bias ? bias_value(bias, oc) : 0.0f;
-            for (int oy = 0; oy < out.height; ++oy) {
-                const int iy_base = oy * stride - padding;
-                for (int ox = 0; ox < out.width; ++ox) {
-                    const int ix_base = ox * stride - padding;
-                    float sum = b;
-                    for (int ic = 0; ic < in_channels; ++ic) {
-                        const int64_t w_base = static_cast<int64_t>(kw) * kh * (ic + static_cast<int64_t>(in_channels) * oc);
-                        const size_t in_base = static_cast<size_t>(ic * in_plane);
-                        for (int ky = 0; ky < kh; ++ky) {
-                            const int iy = iy_base + ky;
-                            if (iy < 0 || iy >= input.height) {
-                                continue;
-                            }
-                            const int64_t w_row = w_base + static_cast<int64_t>(kw) * ky;
-                            const size_t in_row = in_base + static_cast<size_t>(iy * input.width);
-                            for (int kx = 0; kx < kw; ++kx) {
-                                const int ix = ix_base + kx;
-                                if (ix < 0 || ix >= input.width) {
-                                    continue;
-                                }
-                                sum += input.data[in_row + ix] * tensor_scalar(weight, w_row + kx);
-                            }
-                        }
-                    }
-                    out.data[static_cast<size_t>(ox + out.width * oy + out_plane * oc)] = sum;
-                }
+            const size_t dst_base = static_cast<size_t>(out_plane * oc);
+            for (int64_t pos = 0; pos < out_plane; ++pos) {
+                out.data[dst_base + static_cast<size_t>(pos)] =
+                        output_ptr[static_cast<size_t>(pos + out_plane * oc)] + b;
             }
         }
     });
@@ -430,13 +861,30 @@ feature_map conv2d(
     return out;
 }
 
+feature_map conv2d(
+        const ggml_tensor * weight,
+        const ggml_tensor * bias,
+        const feature_map & input,
+        int stride,
+        int padding,
+        int n_threads) {
+    return conv2d_ggml_op(weight, bias, input, stride, padding, n_threads);
+}
+
 void relu_inplace(feature_map & fm) {
+#ifdef RESNET50_USE_ONEDNN
+    relu_onednn_inplace(fm);
+    return;
+#endif
     for (float & v : fm.data) {
         v = std::max(0.0f, v);
     }
 }
 
 feature_map max_pool_2d(const feature_map & input, int kernel, int stride, int padding) {
+#ifdef RESNET50_USE_ONEDNN
+    return max_pool_2d_onednn(const_cast<feature_map &>(input), kernel, stride, padding);
+#endif
     feature_map out;
     out.width = (input.width + 2 * padding - kernel) / stride + 1;
     out.height = (input.height + 2 * padding - kernel) / stride + 1;
@@ -474,6 +922,10 @@ void add_inplace(feature_map & dst, const feature_map & src) {
     if (dst.width != src.width || dst.height != src.height || dst.channels != src.channels) {
         throw std::runtime_error("residual shape mismatch");
     }
+#ifdef RESNET50_USE_ONEDNN
+    add_onednn_inplace(dst, const_cast<feature_map &>(src));
+    return;
+#endif
     for (size_t i = 0; i < dst.data.size(); ++i) {
         dst.data[i] += src.data[i];
     }
@@ -553,6 +1005,9 @@ std::vector<float> run_inference(const resnet50_model & model, const std::vector
         }
     }
 
+#ifdef RESNET50_USE_ONEDNN
+    ensure_plain(cur);
+#endif
     std::vector<float> pooled(static_cast<size_t>(cur.channels), 0.0f);
     const int spatial = cur.width * cur.height;
     for (int c = 0; c < cur.channels; ++c) {
@@ -607,6 +1062,25 @@ std::vector<std::pair<int, float>> top_k(const std::vector<float> & logits, int 
     return out;
 }
 
+void print_forward_stats(const std::vector<double> & times_ms) {
+    if (times_ms.empty()) {
+        return;
+    }
+
+    std::vector<double> sorted = times_ms;
+    std::sort(sorted.begin(), sorted.end());
+    const double sum = std::accumulate(times_ms.begin(), times_ms.end(), 0.0);
+    const double mean = sum / static_cast<double>(times_ms.size());
+    const double median = sorted[sorted.size() / 2];
+
+    std::cout << "forward_ms_mean=" << mean
+              << "\tforward_ms_median=" << median
+              << "\tforward_ms_min=" << sorted.front()
+              << "\tforward_ms_max=" << sorted.back()
+              << "\trepeats=" << times_ms.size()
+              << "\n";
+}
+
 args parse_args(int argc, char ** argv) {
     args out;
     for (int i = 1; i < argc; ++i) {
@@ -619,8 +1093,14 @@ args parse_args(int argc, char ** argv) {
             out.threads = std::stoi(argv[++i]);
         } else if (arg == "--top-k" && i + 1 < argc) {
             out.top_k = std::stoi(argv[++i]);
+        } else if (arg == "--warmup" && i + 1 < argc) {
+            out.warmup = std::stoi(argv[++i]);
+        } else if (arg == "--repeat" && i + 1 < argc) {
+            out.repeat = std::stoi(argv[++i]);
+        } else if (arg == "--benchmark") {
+            out.benchmark = true;
         } else if (arg == "--help" || arg == "-h") {
-            std::cout << "usage: run_resnet50 --model <model.gguf> --image <image> [--threads N] [--top-k K]\n";
+            std::cout << "usage: run_resnet50 --model <model.gguf> --image <image> [--threads N] [--top-k K] [--benchmark --warmup N --repeat N]\n";
             std::exit(0);
         } else {
             throw std::runtime_error("unknown or incomplete argument: " + arg);
@@ -630,6 +1110,9 @@ args parse_args(int argc, char ** argv) {
     if (out.model_path.empty() || out.image_path.empty()) {
         throw std::runtime_error("both --model and --image are required");
     }
+    if (out.warmup < 0 || out.repeat <= 0) {
+        throw std::runtime_error("--warmup must be >= 0 and --repeat must be > 0");
+    }
     return out;
 }
 
@@ -638,10 +1121,33 @@ args parse_args(int argc, char ** argv) {
 int main(int argc, char ** argv) {
     try {
         const args cli = parse_args(argc, argv);
+#ifdef RESNET50_USE_ONEDNN
+        omp_set_dynamic(0);
+        omp_set_num_threads(cli.threads);
+#endif
         const resnet50_model model = load_model(cli.model_path);
         const image_u8 image = load_image_rgb(cli.image_path);
         const std::vector<float> input = preprocess_image(image, model.preproc);
-        const std::vector<float> logits = run_inference(model, input, cli.threads);
+
+        std::vector<float> logits;
+        if (cli.benchmark) {
+            for (int i = 0; i < cli.warmup; ++i) {
+                logits = run_inference(model, input, cli.threads);
+            }
+
+            std::vector<double> times_ms;
+            times_ms.reserve(cli.repeat);
+            for (int i = 0; i < cli.repeat; ++i) {
+                const auto t0 = std::chrono::steady_clock::now();
+                logits = run_inference(model, input, cli.threads);
+                const auto t1 = std::chrono::steady_clock::now();
+                times_ms.push_back(std::chrono::duration<double, std::milli>(t1 - t0).count());
+            }
+            print_forward_stats(times_ms);
+        } else {
+            logits = run_inference(model, input, cli.threads);
+        }
+
         const auto best = top_k(logits, cli.top_k);
 
         for (size_t i = 0; i < best.size(); ++i) {

@@ -64,6 +64,11 @@ extern "C" {
                                                    int32_t   n_group_b,
                                                      float   group_a_share,
                                                    int32_t   minor_timeout_ms);
+    GGML_BACKEND_API void                          ggml_cpu_set_svd_local_layer_timeouts(
+                                            const int32_t * layer_timeout_ms,
+                                                   int32_t   n_layer_timeout);
+    GGML_BACKEND_API void                          ggml_cpu_clear_svd_local_layer_timeouts(void);
+    GGML_BACKEND_API void                          ggml_cpu_set_svd_force_drop_tail(bool enabled);
     GGML_BACKEND_API void                          ggml_cpu_clear_svd_local_split(void);
 
     // ggml_graph_plan() has to be called before ggml_graph_compute()

@@ -1,0 +1,7 @@
+policy,timeout_budget_ms,active_layer_timeout_ms,ppl,ppl_stderr,delta_ppl_vs_baseline,ppl_eval_tok_s,decode_tok_s,decode_speedup_vs_baseline,generation_decode_ms,generated_text,top1_id
+baseline_no_svd,,,15.1424,4.47405,0.0,21.39,33.2745,1.0,30.0531,",",11
+svd_local_split_6p2,0,0,15.1424,4.47405,0.0,14.53,23.6677,0.7112864205322393,42.2517,in,304
+svd_local_split_6p2,20,2,15.2877,4.54059,0.14529999999999887,13.01,23.9636,0.720179116139987,41.7299,in,304
+svd_local_split_6p2,40,3,15.3254,4.5278,0.18299999999999983,10.97,23.6675,0.7112804099235149,42.252,in,304
+svd_local_split_6p2,60,5,15.1424,4.47405,0.0,14.95,24.1683,0.7263309741694088,41.3766,in,304
+svd_local_split_6p2,80,6,15.1424,4.47405,0.0,13.27,23.7638,0.7141745180243129,42.0808,in,304

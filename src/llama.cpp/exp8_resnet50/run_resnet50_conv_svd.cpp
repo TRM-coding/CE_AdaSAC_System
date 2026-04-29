@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -17,11 +18,17 @@
 #include <limits>
 #include <memory>
 #include <numeric>
+#include <omp.h>
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 #include <vector>
+
+#ifdef RESNET50_USE_ONEDNN
+#include "oneapi/dnnl/dnnl.hpp"
+#endif
 
 namespace {
 
@@ -53,8 +60,12 @@ struct resnet50_model {
 struct args {
     std::string model_path;
     std::string image_path;
+    std::string mode = "fold";
     int threads = 8;
     int top_k = 5;
+    int warmup = 1;
+    int repeat = 1;
+    bool benchmark = false;
 };
 
 struct feature_map {
@@ -62,6 +73,12 @@ struct feature_map {
     int height = 0;
     int channels = 0;
     std::vector<float> data;
+#ifdef RESNET50_USE_ONEDNN
+    std::vector<uint8_t> onednn_buffer;
+    dnnl::memory onednn_memory;
+    bool data_valid = true;
+    bool onednn_valid = false;
+#endif
 
     float & at(int c, int y, int x) {
         return data[static_cast<size_t>(x + width * (y + height * c))];
@@ -80,6 +97,153 @@ struct svd_factors {
     std::vector<float> u;
     bool from_precomputed_svd = false;
 };
+
+struct rank_cols_result {
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    std::vector<float> cols;
+};
+
+#ifdef RESNET50_USE_ONEDNN
+using tag = dnnl::memory::format_tag;
+using dt = dnnl::memory::data_type;
+
+std::string blob_key(const dnnl::memory::desc & md) {
+    auto tmp = md;
+    const std::vector<uint8_t> blob = tmp.get_blob();
+    return std::string(reinterpret_cast<const char *>(blob.data()), blob.size());
+}
+
+struct onednn_unary_key {
+    std::string src_blob;
+    int op = 0;
+    int kernel = 0;
+    int stride = 0;
+    int padding = 0;
+
+    bool operator==(const onednn_unary_key & other) const {
+        return src_blob == other.src_blob &&
+               op == other.op &&
+               kernel == other.kernel &&
+               stride == other.stride &&
+               padding == other.padding;
+    }
+};
+
+struct onednn_unary_key_hash {
+    size_t operator()(const onednn_unary_key & key) const {
+        size_t h = std::hash<std::string>{}(key.src_blob);
+        h ^= std::hash<int>{}(key.op) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(key.kernel) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(key.stride) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(key.padding) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        return h;
+    }
+};
+
+struct onednn_conv_key {
+    const float * weight_ptr = nullptr;
+    const float * bias_ptr = nullptr;
+    std::string src_blob;
+    int input_w = 0;
+    int input_h = 0;
+    int out_c = 0;
+    int in_c = 0;
+    int kh = 0;
+    int kw = 0;
+    int stride = 0;
+    int padding = 0;
+
+    bool operator==(const onednn_conv_key & other) const {
+        return weight_ptr == other.weight_ptr &&
+               bias_ptr == other.bias_ptr &&
+               src_blob == other.src_blob &&
+               input_w == other.input_w &&
+               input_h == other.input_h &&
+               out_c == other.out_c &&
+               in_c == other.in_c &&
+               kh == other.kh &&
+               kw == other.kw &&
+               stride == other.stride &&
+               padding == other.padding;
+    }
+};
+
+struct onednn_conv_key_hash {
+    size_t operator()(const onednn_conv_key & key) const {
+        size_t h = std::hash<const void *>{}(key.weight_ptr);
+        h ^= std::hash<const void *>{}(key.bias_ptr) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<std::string>{}(key.src_blob) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(key.input_w) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(key.input_h) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(key.out_c) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(key.in_c) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(key.kh) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(key.kw) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(key.stride) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(key.padding) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        return h;
+    }
+};
+
+struct onednn_conv_plan {
+    int out_w = 0;
+    int out_h = 0;
+    int out_c = 0;
+    dnnl::convolution_forward::primitive_desc pd;
+    dnnl::convolution_forward conv;
+    dnnl::memory weights_memory;
+    dnnl::memory bias_memory;
+
+    onednn_conv_plan(
+            int out_w,
+            int out_h,
+            int out_c,
+            const dnnl::convolution_forward::primitive_desc & pd,
+            const dnnl::convolution_forward & conv,
+            const dnnl::memory & weights_memory,
+            const dnnl::memory & bias_memory)
+        : out_w(out_w),
+          out_h(out_h),
+          out_c(out_c),
+          pd(pd),
+          conv(conv),
+          weights_memory(weights_memory),
+          bias_memory(bias_memory) {}
+};
+
+struct onednn_eltwise_plan {
+    dnnl::eltwise_forward::primitive_desc pd;
+    dnnl::eltwise_forward prim;
+
+    onednn_eltwise_plan(const dnnl::eltwise_forward::primitive_desc & pd, const dnnl::eltwise_forward & prim)
+        : pd(pd), prim(prim) {}
+};
+
+struct onednn_pool_plan {
+    int out_w = 0;
+    int out_h = 0;
+    dnnl::pooling_forward::primitive_desc pd;
+    dnnl::pooling_forward prim;
+
+    onednn_pool_plan(int out_w, int out_h, const dnnl::pooling_forward::primitive_desc & pd, const dnnl::pooling_forward & prim)
+        : out_w(out_w), out_h(out_h), pd(pd), prim(prim) {}
+};
+
+struct onednn_sum_plan {
+    dnnl::sum::primitive_desc pd;
+    dnnl::sum prim;
+
+    onednn_sum_plan(const dnnl::sum::primitive_desc & pd, const dnnl::sum & prim)
+        : pd(pd), prim(prim) {}
+};
+#endif
+
+svd_factors load_conv_svd_factors(
+        ggml_context * weights_ctx,
+        const std::string & weight_name,
+        const ggml_tensor * weight);
 
 int64_t require_key(const gguf_context * meta, const char * key) {
     const int64_t idx = gguf_find_key(meta, key);
@@ -379,6 +543,366 @@ float bias_value(const ggml_tensor * bias, int channel) {
     return tensor_scalar(bias, channel);
 }
 
+#ifdef RESNET50_USE_ONEDNN
+dnnl::engine & onednn_engine() {
+    static dnnl::engine eng(dnnl::engine::kind::cpu, 0);
+    return eng;
+}
+
+dnnl::stream & onednn_stream() {
+    static dnnl::stream s(onednn_engine());
+    return s;
+}
+
+dnnl::memory::desc nchw_desc(const feature_map & fm) {
+    return dnnl::memory::desc({1, fm.channels, fm.height, fm.width}, dt::f32, tag::nchw);
+}
+
+void bind_onednn_memory(feature_map & fm, const dnnl::memory::desc & md) {
+    fm.onednn_buffer.resize(md.get_size());
+    fm.onednn_memory = dnnl::memory(md, onednn_engine(), fm.onednn_buffer.data());
+    fm.onednn_valid = true;
+}
+
+void ensure_plain(feature_map & fm) {
+    if (fm.data_valid) {
+        return;
+    }
+    const dnnl::memory::desc user_md = nchw_desc(fm);
+    fm.data.resize(static_cast<size_t>(fm.width * fm.height * fm.channels));
+    dnnl::memory user_mem(user_md, onednn_engine(), fm.data.data());
+    if (fm.onednn_memory.get_desc() == user_md) {
+        std::memcpy(fm.data.data(), fm.onednn_buffer.data(), sizeof(float) * fm.data.size());
+    } else {
+        dnnl::reorder(fm.onednn_memory, user_mem).execute(onednn_stream(), fm.onednn_memory, user_mem);
+        onednn_stream().wait();
+    }
+    fm.data_valid = true;
+}
+
+void ensure_onednn(feature_map & fm, const dnnl::memory::desc * target_md = nullptr) {
+    if (!fm.onednn_valid) {
+        const dnnl::memory::desc user_md = nchw_desc(fm);
+        bind_onednn_memory(fm, user_md);
+        std::memcpy(fm.onednn_buffer.data(), fm.data.data(), sizeof(float) * fm.data.size());
+        fm.onednn_valid = true;
+    }
+
+    if (target_md != nullptr && fm.onednn_memory.get_desc() != *target_md) {
+        std::vector<uint8_t> new_buffer(target_md->get_size());
+        dnnl::memory new_mem(*target_md, onednn_engine(), new_buffer.data());
+        dnnl::reorder(fm.onednn_memory, new_mem).execute(onednn_stream(), fm.onednn_memory, new_mem);
+        onednn_stream().wait();
+        fm.onednn_buffer = std::move(new_buffer);
+        fm.onednn_memory = new_mem;
+    }
+
+    fm.onednn_valid = true;
+    fm.data_valid = false;
+}
+
+const onednn_eltwise_plan & get_onednn_relu_plan(const dnnl::memory::desc & src_md) {
+    static std::unordered_map<onednn_unary_key, onednn_eltwise_plan, onednn_unary_key_hash> cache;
+    onednn_unary_key key{blob_key(src_md), 1, 0, 0, 0};
+    auto it = cache.find(key);
+    if (it != cache.end()) {
+        return it->second;
+    }
+    const auto pd = dnnl::eltwise_forward::primitive_desc(
+            onednn_engine(), dnnl::prop_kind::forward_inference, dnnl::algorithm::eltwise_relu, src_md, src_md, 0.0f);
+    auto inserted = cache.emplace(key, onednn_eltwise_plan(pd, dnnl::eltwise_forward(pd)));
+    return inserted.first->second;
+}
+
+void relu_onednn_inplace(feature_map & fm) {
+    ensure_onednn(fm);
+    const onednn_eltwise_plan & plan = get_onednn_relu_plan(fm.onednn_memory.get_desc());
+    feature_map out;
+    out.width = fm.width;
+    out.height = fm.height;
+    out.channels = fm.channels;
+    bind_onednn_memory(out, fm.onednn_memory.get_desc());
+    plan.prim.execute(onednn_stream(), {{DNNL_ARG_SRC, fm.onednn_memory}, {DNNL_ARG_DST, out.onednn_memory}});
+    onednn_stream().wait();
+    out.data_valid = false;
+    fm = std::move(out);
+}
+
+const onednn_pool_plan & get_onednn_max_pool_plan(
+        const dnnl::memory::desc & src_md,
+        int width,
+        int height,
+        int channels,
+        int kernel,
+        int stride,
+        int padding) {
+    static std::unordered_map<onednn_unary_key, onednn_pool_plan, onednn_unary_key_hash> cache;
+    onednn_unary_key key{blob_key(src_md), 2, kernel, stride, padding};
+    auto it = cache.find(key);
+    if (it != cache.end()) {
+        return it->second;
+    }
+    const int out_w = (width + 2 * padding - kernel) / stride + 1;
+    const int out_h = (height + 2 * padding - kernel) / stride + 1;
+    const auto dst_md = dnnl::memory::desc({1, channels, out_h, out_w}, dt::f32, tag::any);
+    const auto pd = dnnl::pooling_forward::primitive_desc(
+            onednn_engine(),
+            dnnl::prop_kind::forward_inference,
+            dnnl::algorithm::pooling_max,
+            src_md,
+            dst_md,
+            {stride, stride},
+            {kernel, kernel},
+            {0, 0},
+            {padding, padding},
+            {padding, padding});
+    auto inserted = cache.emplace(key, onednn_pool_plan(out_w, out_h, pd, dnnl::pooling_forward(pd)));
+    return inserted.first->second;
+}
+
+feature_map max_pool_2d_onednn(feature_map & input, int kernel, int stride, int padding) {
+    ensure_onednn(input);
+    const onednn_pool_plan & plan = get_onednn_max_pool_plan(
+            input.onednn_memory.get_desc(), input.width, input.height, input.channels, kernel, stride, padding);
+    feature_map out;
+    out.width = plan.out_w;
+    out.height = plan.out_h;
+    out.channels = input.channels;
+    bind_onednn_memory(out, plan.pd.dst_desc());
+    const dnnl::memory::desc src_desc = plan.pd.src_desc();
+    ensure_onednn(input, &src_desc);
+    plan.prim.execute(onednn_stream(), {{DNNL_ARG_SRC, input.onednn_memory}, {DNNL_ARG_DST, out.onednn_memory}});
+    onednn_stream().wait();
+    out.data_valid = false;
+    return out;
+}
+
+const onednn_sum_plan & get_onednn_sum_plan(const dnnl::memory::desc & desc) {
+    static std::unordered_map<std::string, onednn_sum_plan> cache;
+    const std::string key = blob_key(desc);
+    auto it = cache.find(key);
+    if (it != cache.end()) {
+        return it->second;
+    }
+    std::vector<float> scales = {1.0f, 1.0f};
+    std::vector<dnnl::memory::desc> srcs = {desc, desc};
+    const auto pd = dnnl::sum::primitive_desc(onednn_engine(), scales, srcs);
+    auto inserted = cache.emplace(key, onednn_sum_plan(pd, dnnl::sum(pd)));
+    return inserted.first->second;
+}
+
+void add_onednn_inplace(feature_map & dst, feature_map & src) {
+    ensure_onednn(dst);
+    const dnnl::memory::desc dst_desc = dst.onednn_memory.get_desc();
+    ensure_onednn(src, &dst_desc);
+    const onednn_sum_plan & plan = get_onednn_sum_plan(dst_desc);
+    feature_map out;
+    out.width = dst.width;
+    out.height = dst.height;
+    out.channels = dst.channels;
+    bind_onednn_memory(out, dst_desc);
+    plan.prim.execute(
+            onednn_stream(),
+            {{DNNL_ARG_MULTIPLE_SRC + 0, dst.onednn_memory},
+             {DNNL_ARG_MULTIPLE_SRC + 1, src.onednn_memory},
+             {DNNL_ARG_DST, out.onednn_memory}});
+    onednn_stream().wait();
+    out.data_valid = false;
+    dst = std::move(out);
+}
+
+struct onednn_weight_bundle {
+    std::vector<float> weight_data;
+    std::vector<float> bias_data;
+};
+
+onednn_weight_bundle make_onednn_conv_bundle_from_svd(
+        const svd_factors & factors,
+        int kh,
+        int kw,
+        int in_channels,
+        int out_channels,
+        bool use_u,
+        const ggml_tensor * bias) {
+    onednn_weight_bundle out;
+    if (use_u) {
+        out.weight_data.resize(static_cast<size_t>(out_channels * factors.rank));
+        for (int oc = 0; oc < out_channels; ++oc) {
+            for (int ic = 0; ic < factors.rank; ++ic) {
+                out.weight_data[static_cast<size_t>(ic + factors.rank * oc)] = factors.u[static_cast<size_t>(ic + factors.rank * oc)];
+            }
+        }
+        out.bias_data.resize(static_cast<size_t>(out_channels), 0.0f);
+        for (int oc = 0; oc < out_channels; ++oc) {
+            out.bias_data[static_cast<size_t>(oc)] = bias ? bias_value(bias, oc) : 0.0f;
+        }
+        return out;
+    }
+
+    out.weight_data.resize(static_cast<size_t>(out_channels * in_channels * kh * kw));
+    for (int oc = 0; oc < out_channels; ++oc) {
+        for (int ic = 0; ic < in_channels; ++ic) {
+            for (int ky = 0; ky < kh; ++ky) {
+                for (int kx = 0; kx < kw; ++kx) {
+                    const int64_t row = kx + static_cast<int64_t>(kw) * (ky + kh * ic);
+                    out.weight_data[static_cast<size_t>(kx + kw * (ky + kh * (ic + in_channels * oc)))] =
+                            factors.v[static_cast<size_t>(row + factors.input_len * oc)];
+                }
+            }
+        }
+    }
+    out.bias_data.assign(static_cast<size_t>(out_channels), 0.0f);
+    return out;
+}
+
+const onednn_conv_plan & get_onednn_conv_plan_raw(
+        const float * weight_ptr,
+        const float * bias_ptr,
+        const dnnl::memory::desc & src_md,
+        int input_w,
+        int input_h,
+        int out_c,
+        int in_c,
+        int kh,
+        int kw,
+        int stride,
+        int padding) {
+    static std::unordered_map<onednn_conv_key, onednn_conv_plan, onednn_conv_key_hash> cache;
+
+    onednn_conv_key key{weight_ptr, bias_ptr, blob_key(src_md), input_w, input_h, out_c, in_c, kh, kw, stride, padding};
+    auto it = cache.find(key);
+    if (it != cache.end()) {
+        return it->second;
+    }
+
+    const int out_w = (input_w + 2 * padding - kw) / stride + 1;
+    const int out_h = (input_h + 2 * padding - kh) / stride + 1;
+    const dnnl::memory::dims weight_dims = {out_c, in_c, kh, kw};
+    const dnnl::memory::dims bias_dims = {out_c};
+    const dnnl::memory::dims strides = {stride, stride};
+    const dnnl::memory::dims pads = {padding, padding};
+
+    const auto user_weight_md = dnnl::memory::desc(weight_dims, dt::f32, tag::oihw);
+    const auto bias_md = dnnl::memory::desc(bias_dims, dt::f32, tag::x);
+    const auto dst_md = dnnl::memory::desc({1, out_c, out_h, out_w}, dt::f32, tag::any);
+    const auto conv_pd = dnnl::convolution_forward::primitive_desc(
+            onednn_engine(),
+            dnnl::prop_kind::forward_inference,
+            dnnl::algorithm::convolution_direct,
+            src_md,
+            dnnl::memory::desc(weight_dims, dt::f32, tag::any),
+            bias_md,
+            dst_md,
+            strides,
+            pads,
+            pads);
+
+    dnnl::memory user_weight_memory(user_weight_md, onednn_engine(), const_cast<float *>(weight_ptr));
+    dnnl::memory weight_memory(conv_pd.weights_desc(), onednn_engine());
+    if (conv_pd.weights_desc() != user_weight_md) {
+        dnnl::reorder(user_weight_memory, weight_memory).execute(onednn_stream(), user_weight_memory, weight_memory);
+        onednn_stream().wait();
+    } else {
+        weight_memory = user_weight_memory;
+    }
+
+    dnnl::memory bias_memory(bias_md, onednn_engine(), const_cast<float *>(bias_ptr));
+    dnnl::convolution_forward conv(conv_pd);
+    auto inserted = cache.emplace(key, onednn_conv_plan(out_w, out_h, out_c, conv_pd, conv, weight_memory, bias_memory));
+    return inserted.first->second;
+}
+
+feature_map conv2d_svd_fold_onednn(
+        ggml_context * weights_ctx,
+        const std::string & base,
+        feature_map & input,
+        int stride,
+        int padding) {
+    const std::string weight_name = base + ".weight";
+    const std::string bias_name = base + ".bias";
+    const ggml_tensor * weight = require_tensor(weights_ctx, weight_name);
+    const ggml_tensor * bias = require_tensor(weights_ctx, bias_name);
+    const int kw = static_cast<int>(weight->ne[0]);
+    const int kh = static_cast<int>(weight->ne[1]);
+    const int in_channels = static_cast<int>(weight->ne[2]);
+    const int out_channels = static_cast<int>(weight->ne[3]);
+    const svd_factors factors = load_conv_svd_factors(weights_ctx, weight_name, weight);
+
+    static std::unordered_map<std::string, onednn_weight_bundle> weight_cache;
+    const std::string key_v = weight_name + "#v";
+    const std::string key_u = weight_name + "#u";
+    if (weight_cache.find(key_v) == weight_cache.end()) {
+        weight_cache.emplace(key_v, make_onednn_conv_bundle_from_svd(factors, kh, kw, in_channels, static_cast<int>(factors.rank), false, nullptr));
+    }
+    if (weight_cache.find(key_u) == weight_cache.end()) {
+        weight_cache.emplace(key_u, make_onednn_conv_bundle_from_svd(factors, 1, 1, static_cast<int>(factors.rank), out_channels, true, bias));
+    }
+    const onednn_weight_bundle & v_bundle = weight_cache.at(key_v);
+    const onednn_weight_bundle & u_bundle = weight_cache.at(key_u);
+
+    ensure_onednn(input);
+    const dnnl::memory::desc input_desc = input.onednn_memory.get_desc();
+    const onednn_conv_plan & v_plan = get_onednn_conv_plan_raw(
+            v_bundle.weight_data.data(),
+            v_bundle.bias_data.data(),
+            input_desc,
+            input.width,
+            input.height,
+            static_cast<int>(factors.rank),
+            in_channels,
+            kh,
+            kw,
+            stride,
+            padding);
+    const dnnl::memory::desc v_src_desc = v_plan.pd.src_desc();
+    ensure_onednn(input, &v_src_desc);
+
+    feature_map rank_map;
+    rank_map.width = v_plan.out_w;
+    rank_map.height = v_plan.out_h;
+    rank_map.channels = static_cast<int>(factors.rank);
+    bind_onednn_memory(rank_map, v_plan.pd.dst_desc());
+    v_plan.conv.execute(
+            onednn_stream(),
+            {{DNNL_ARG_SRC, input.onednn_memory},
+             {DNNL_ARG_WEIGHTS, v_plan.weights_memory},
+             {DNNL_ARG_BIAS, v_plan.bias_memory},
+             {DNNL_ARG_DST, rank_map.onednn_memory}});
+    onednn_stream().wait();
+    rank_map.data_valid = false;
+
+    const onednn_conv_plan & u_plan = get_onednn_conv_plan_raw(
+            u_bundle.weight_data.data(),
+            u_bundle.bias_data.data(),
+            rank_map.onednn_memory.get_desc(),
+            rank_map.width,
+            rank_map.height,
+            out_channels,
+            rank_map.channels,
+            1,
+            1,
+            1,
+            0);
+    const dnnl::memory::desc u_src_desc = u_plan.pd.src_desc();
+    ensure_onednn(rank_map, &u_src_desc);
+
+    feature_map out;
+    out.width = u_plan.out_w;
+    out.height = u_plan.out_h;
+    out.channels = out_channels;
+    bind_onednn_memory(out, u_plan.pd.dst_desc());
+    u_plan.conv.execute(
+            onednn_stream(),
+            {{DNNL_ARG_SRC, rank_map.onednn_memory},
+             {DNNL_ARG_WEIGHTS, u_plan.weights_memory},
+             {DNNL_ARG_BIAS, u_plan.bias_memory},
+             {DNNL_ARG_DST, out.onednn_memory}});
+    onednn_stream().wait();
+    out.data_valid = false;
+    return out;
+}
+#endif
+
 std::string make_svd_tensor_name(const std::string & weight_name, const char * suffix) {
     return weight_name + suffix;
 }
@@ -567,6 +1091,96 @@ std::vector<float> eval_mul_mat_svd(
     return std::vector<float>(output_ptr, output_ptr + output_count);
 }
 
+std::vector<float> eval_mul_mat_f32(
+        const std::vector<float> & weight,
+        int64_t input_len,
+        int64_t output_len,
+        const std::vector<float> & input_cols,
+        int64_t n_cols,
+        int n_threads) {
+    if (static_cast<int64_t>(weight.size()) != input_len * output_len) {
+        throw std::runtime_error("mul_mat weight size mismatch");
+    }
+    if (static_cast<int64_t>(input_cols.size()) != input_len * n_cols) {
+        throw std::runtime_error("mul_mat input size mismatch");
+    }
+
+    const size_t bytes =
+            8 * 1024 * 1024 +
+            sizeof(float) * (
+                    weight.size() +
+                    input_cols.size() +
+                    static_cast<size_t>(output_len * n_cols));
+
+    ggml_init_params params = {
+        /*.mem_size   =*/ bytes,
+        /*.mem_buffer =*/ nullptr,
+        /*.no_alloc   =*/ false,
+    };
+
+    ggml_ctx_ptr ctx(ggml_init(params), ggml_free);
+    if (!ctx) {
+        throw std::runtime_error("ggml_init failed for conv mul_mat");
+    }
+
+    ggml_tensor * w = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, input_len, output_len);
+    ggml_tensor * input = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, input_len, n_cols);
+    if (w == nullptr || input == nullptr) {
+        throw std::runtime_error("failed to allocate ggml tensors for conv mul_mat");
+    }
+
+    std::memcpy(w->data, weight.data(), sizeof(float) * weight.size());
+    std::memcpy(input->data, input_cols.data(), sizeof(float) * input_cols.size());
+
+    ggml_tensor * output = ggml_mul_mat(ctx.get(), w, input);
+    ggml_cgraph * graph = ggml_new_graph(ctx.get());
+    if (graph == nullptr) {
+        throw std::runtime_error("ggml_new_graph failed for conv mul_mat");
+    }
+
+    ggml_build_forward_expand(graph, output);
+    const ggml_status status = ggml_graph_compute_with_ctx(ctx.get(), graph, n_threads);
+    if (status != GGML_STATUS_SUCCESS) {
+        throw std::runtime_error("ggml_graph_compute_with_ctx failed for conv mul_mat");
+    }
+
+    const size_t output_count = static_cast<size_t>(output_len * n_cols);
+    const float * output_ptr = static_cast<const float *>(output->data);
+    return std::vector<float>(output_ptr, output_ptr + output_count);
+}
+
+feature_map output_cols_to_feature_map(
+        const std::vector<float> & output_cols,
+        int width,
+        int height,
+        int channels,
+        const ggml_tensor * bias,
+        int n_threads) {
+    const int64_t plane = static_cast<int64_t>(width) * height;
+    if (static_cast<int64_t>(output_cols.size()) != static_cast<int64_t>(channels) * plane) {
+        throw std::runtime_error("output column size mismatch");
+    }
+
+    feature_map out;
+    out.width = width;
+    out.height = height;
+    out.channels = channels;
+    out.data.assign(static_cast<size_t>(plane * channels), 0.0f);
+
+    parallel_for_chunks(channels, n_threads, [&](int c_begin, int c_end) {
+        for (int c = c_begin; c < c_end; ++c) {
+            const float b = bias ? bias_value(bias, c) : 0.0f;
+            const size_t dst_base = static_cast<size_t>(plane * c);
+            for (int64_t pos = 0; pos < plane; ++pos) {
+                out.data[dst_base + static_cast<size_t>(pos)] =
+                        output_cols[static_cast<size_t>(c + static_cast<int64_t>(channels) * pos)] + b;
+            }
+        }
+    });
+
+    return out;
+}
+
 feature_map conv2d_matrixized_svd(
         ggml_context * weights_ctx,
         const std::string & base,
@@ -618,13 +1232,105 @@ feature_map conv2d_matrixized_svd(
     return out;
 }
 
+rank_cols_result folded_v_conv_im2col_ggml_cols(
+        const feature_map & input,
+        const svd_factors & factors,
+        int kw,
+        int kh,
+        int stride,
+        int padding,
+        int n_threads) {
+    rank_cols_result out;
+    out.width = (input.width + 2 * padding - kw) / stride + 1;
+    out.height = (input.height + 2 * padding - kh) / stride + 1;
+    out.channels = static_cast<int>(factors.rank);
+
+    const int64_t n_cols = static_cast<int64_t>(out.width) * out.height;
+    const std::vector<float> input_cols = unfold_input_im2col(input, kw, kh, stride, padding, out.width, out.height);
+    out.cols = eval_mul_mat_f32(
+            factors.v,
+            factors.input_len,
+            factors.rank,
+            input_cols,
+            n_cols,
+            n_threads);
+
+    return out;
+}
+
+feature_map conv2d_fold_svd(
+        ggml_context * weights_ctx,
+        const std::string & base,
+        const feature_map & input,
+        int stride,
+        int padding,
+        int n_threads) {
+#ifdef RESNET50_USE_ONEDNN
+    (void)n_threads;
+    return conv2d_svd_fold_onednn(weights_ctx, base, const_cast<feature_map &>(input), stride, padding);
+#endif
+    const std::string weight_name = base + ".weight";
+    const std::string bias_name = base + ".bias";
+    const ggml_tensor * weight = require_tensor(weights_ctx, weight_name);
+    const ggml_tensor * bias = require_tensor(weights_ctx, bias_name);
+
+    const int kw = static_cast<int>(weight->ne[0]);
+    const int kh = static_cast<int>(weight->ne[1]);
+    const int in_channels = static_cast<int>(weight->ne[2]);
+    const int out_channels = static_cast<int>(weight->ne[3]);
+    if (in_channels != input.channels) {
+        throw std::runtime_error("conv input channel mismatch");
+    }
+
+    const svd_factors factors = load_conv_svd_factors(weights_ctx, weight_name, weight);
+    if (factors.input_len != static_cast<int64_t>(kw) * kh * in_channels || factors.output_len != out_channels) {
+        throw std::runtime_error("conv SVD factor shape mismatch");
+    }
+
+    rank_cols_result rank_result = folded_v_conv_im2col_ggml_cols(input, factors, kw, kh, stride, padding, n_threads);
+
+    const std::vector<float> output_cols = eval_mul_mat_f32(
+            factors.u,
+            factors.rank,
+            factors.output_len,
+            rank_result.cols,
+            static_cast<int64_t>(rank_result.width) * rank_result.height,
+            n_threads);
+
+    return output_cols_to_feature_map(output_cols, rank_result.width, rank_result.height, out_channels, bias, n_threads);
+}
+
+feature_map conv2d_svd(
+        ggml_context * weights_ctx,
+        const std::string & base,
+        const feature_map & input,
+        int stride,
+        int padding,
+        int n_threads,
+        const std::string & mode) {
+    if (mode == "im2col") {
+        return conv2d_matrixized_svd(weights_ctx, base, input, stride, padding, n_threads);
+    }
+    if (mode == "fold") {
+        return conv2d_fold_svd(weights_ctx, base, input, stride, padding, n_threads);
+    }
+    throw std::runtime_error("unknown conv SVD mode: " + mode);
+}
+
 void relu_inplace(feature_map & fm) {
+#ifdef RESNET50_USE_ONEDNN
+    relu_onednn_inplace(fm);
+    return;
+#endif
     for (float & v : fm.data) {
         v = std::max(0.0f, v);
     }
 }
 
 feature_map max_pool_2d(const feature_map & input, int kernel, int stride, int padding) {
+#ifdef RESNET50_USE_ONEDNN
+    return max_pool_2d_onednn(const_cast<feature_map &>(input), kernel, stride, padding);
+#endif
     feature_map out;
     out.width = (input.width + 2 * padding - kernel) / stride + 1;
     out.height = (input.height + 2 * padding - kernel) / stride + 1;
@@ -662,6 +1368,10 @@ void add_inplace(feature_map & dst, const feature_map & src) {
     if (dst.width != src.width || dst.height != src.height || dst.channels != src.channels) {
         throw std::runtime_error("residual shape mismatch");
     }
+#ifdef RESNET50_USE_ONEDNN
+    add_onednn_inplace(dst, const_cast<feature_map &>(src));
+    return;
+#endif
     for (size_t i = 0; i < dst.data.size(); ++i) {
         dst.data[i] += src.data[i];
     }
@@ -672,52 +1382,61 @@ feature_map bottleneck_block(
         const feature_map & input,
         int stage_idx,
         int block_idx,
-        int n_threads) {
+        int n_threads,
+        const std::string & mode) {
     const std::string base = "resnet.stage." + std::to_string(stage_idx) + ".block." + std::to_string(block_idx);
 
     feature_map identity = input;
     if (optional_tensor(model.weights.get(), base + ".downsample.weight") != nullptr) {
-        identity = conv2d_matrixized_svd(
+        identity = conv2d_svd(
                 model.weights.get(),
                 base + ".downsample",
                 identity,
                 block_idx == 0 && stage_idx > 0 ? 2 : 1,
                 0,
-                n_threads);
+                n_threads,
+                mode);
     }
 
-    feature_map out = conv2d_matrixized_svd(
+    feature_map out = conv2d_svd(
             model.weights.get(),
             base + ".conv1",
             input,
             1,
             0,
-            n_threads);
+            n_threads,
+            mode);
     relu_inplace(out);
 
-    out = conv2d_matrixized_svd(
+    out = conv2d_svd(
             model.weights.get(),
             base + ".conv2",
             out,
             block_idx == 0 && stage_idx > 0 ? 2 : 1,
             1,
-            n_threads);
+            n_threads,
+            mode);
     relu_inplace(out);
 
-    out = conv2d_matrixized_svd(
+    out = conv2d_svd(
             model.weights.get(),
             base + ".conv3",
             out,
             1,
             0,
-            n_threads);
+            n_threads,
+            mode);
 
     add_inplace(out, identity);
     relu_inplace(out);
     return out;
 }
 
-std::vector<float> run_inference(const resnet50_model & model, const std::vector<float> & input, int n_threads) {
+std::vector<float> run_inference(
+        const resnet50_model & model,
+        const std::vector<float> & input,
+        int n_threads,
+        const std::string & mode) {
     const int image_size = static_cast<int>(model.preproc.image_size);
     feature_map cur;
     cur.width = image_size;
@@ -725,22 +1444,26 @@ std::vector<float> run_inference(const resnet50_model & model, const std::vector
     cur.channels = 3;
     cur.data = input;
 
-    cur = conv2d_matrixized_svd(
+    cur = conv2d_svd(
             model.weights.get(),
             "resnet.stem.conv",
             cur,
             2,
             3,
-            n_threads);
+            n_threads,
+            mode);
     relu_inplace(cur);
     cur = max_pool_2d(cur, 3, 2, 1);
 
     for (int stage_idx = 0; stage_idx < 4; ++stage_idx) {
         for (uint32_t block_idx = 0; block_idx < model.stage_block_count[stage_idx]; ++block_idx) {
-            cur = bottleneck_block(model, cur, stage_idx, static_cast<int>(block_idx), n_threads);
+            cur = bottleneck_block(model, cur, stage_idx, static_cast<int>(block_idx), n_threads, mode);
         }
     }
 
+#ifdef RESNET50_USE_ONEDNN
+    ensure_plain(cur);
+#endif
     std::vector<float> pooled(static_cast<size_t>(cur.channels), 0.0f);
     const int spatial = cur.width * cur.height;
     for (int c = 0; c < cur.channels; ++c) {
@@ -795,6 +1518,22 @@ std::vector<std::pair<int, float>> top_k(const std::vector<float> & logits, int 
     return out;
 }
 
+void print_forward_stats(const std::vector<double> & times_ms) {
+    if (times_ms.empty()) {
+        return;
+    }
+    std::vector<double> sorted = times_ms;
+    std::sort(sorted.begin(), sorted.end());
+    const double mean = std::accumulate(times_ms.begin(), times_ms.end(), 0.0) / static_cast<double>(times_ms.size());
+    const double median = sorted[sorted.size() / 2];
+    std::cout << "forward_ms_mean=" << mean
+              << "\tforward_ms_median=" << median
+              << "\tforward_ms_min=" << sorted.front()
+              << "\tforward_ms_max=" << sorted.back()
+              << "\trepeats=" << times_ms.size()
+              << "\n";
+}
+
 args parse_args(int argc, char ** argv) {
     args out;
     for (int i = 1; i < argc; ++i) {
@@ -803,12 +1542,20 @@ args parse_args(int argc, char ** argv) {
             out.model_path = argv[++i];
         } else if (arg == "--image" && i + 1 < argc) {
             out.image_path = argv[++i];
+        } else if (arg == "--mode" && i + 1 < argc) {
+            out.mode = argv[++i];
         } else if (arg == "--threads" && i + 1 < argc) {
             out.threads = std::stoi(argv[++i]);
         } else if (arg == "--top-k" && i + 1 < argc) {
             out.top_k = std::stoi(argv[++i]);
+        } else if (arg == "--warmup" && i + 1 < argc) {
+            out.warmup = std::stoi(argv[++i]);
+        } else if (arg == "--repeat" && i + 1 < argc) {
+            out.repeat = std::stoi(argv[++i]);
+        } else if (arg == "--benchmark") {
+            out.benchmark = true;
         } else if (arg == "--help" || arg == "-h") {
-            std::cout << "usage: run_resnet50_conv_svd --model <model.gguf> --image <image> [--threads N] [--top-k K]\n";
+            std::cout << "usage: run_resnet50_conv_svd --model <model.gguf> --image <image> [--mode fold|im2col] [--threads N] [--top-k K] [--benchmark --warmup N --repeat N]\n";
             std::exit(0);
         } else {
             throw std::runtime_error("unknown or incomplete argument: " + arg);
@@ -817,6 +1564,12 @@ args parse_args(int argc, char ** argv) {
 
     if (out.model_path.empty() || out.image_path.empty()) {
         throw std::runtime_error("both --model and --image are required");
+    }
+    if (out.mode != "fold" && out.mode != "im2col") {
+        throw std::runtime_error("--mode must be either fold or im2col");
+    }
+    if (out.warmup < 0 || out.repeat <= 0) {
+        throw std::runtime_error("--warmup must be >= 0 and --repeat must be > 0");
     }
     return out;
 }
@@ -828,10 +1581,30 @@ int main(int argc, char ** argv) {
         ggml_cpu_init();
 
         const args cli = parse_args(argc, argv);
+#ifdef RESNET50_USE_ONEDNN
+        omp_set_dynamic(0);
+        omp_set_num_threads(cli.threads);
+#endif
         const resnet50_model model = load_model(cli.model_path);
         const image_u8 image = load_image_rgb(cli.image_path);
         const std::vector<float> input = preprocess_image(image, model.preproc);
-        const std::vector<float> logits = run_inference(model, input, cli.threads);
+        std::vector<float> logits;
+        if (cli.benchmark) {
+            for (int i = 0; i < cli.warmup; ++i) {
+                logits = run_inference(model, input, cli.threads, cli.mode);
+            }
+            std::vector<double> times_ms;
+            times_ms.reserve(cli.repeat);
+            for (int i = 0; i < cli.repeat; ++i) {
+                const auto t0 = std::chrono::steady_clock::now();
+                logits = run_inference(model, input, cli.threads, cli.mode);
+                const auto t1 = std::chrono::steady_clock::now();
+                times_ms.push_back(std::chrono::duration<double, std::milli>(t1 - t0).count());
+            }
+            print_forward_stats(times_ms);
+        } else {
+            logits = run_inference(model, input, cli.threads, cli.mode);
+        }
         const auto best = top_k(logits, cli.top_k);
 
         for (size_t i = 0; i < best.size(); ++i) {

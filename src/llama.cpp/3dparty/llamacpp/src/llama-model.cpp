@@ -6425,7 +6425,13 @@ struct llm_build_qwen2_svd : public llm_graph_context {
 
         auto * inp_attn = build_attn_inp_kv_unified();
 
-        for (int il = 0; il < n_layer; ++il) {
+        const int layer_begin = std::max<int>(0, layer_split_start);
+        const int layer_end = layer_split_end < 0
+            ? (int) n_layer
+            : std::min<int>((int) n_layer, layer_split_end);
+        GGML_ASSERT(layer_begin <= layer_end);
+
+        for (int il = layer_begin; il < layer_end; ++il) {
             ggml_tensor * inpSA = inpL;
 
             // norm
@@ -6474,7 +6480,7 @@ struct llm_build_qwen2_svd : public llm_graph_context {
                         Qcur, Kcur, Vcur, nullptr, nullptr, 1.0f/sqrtf(float(n_embd_head)), il);
             }
 
-            if (il == n_layer - 1) {
+            if (il == layer_end - 1 && layer_end == n_layer) {
                 // skip computing output for unused tokens
                 ggml_tensor * inp_out_ids = build_inp_out_ids();
                 cur   = ggml_get_rows(ctx0,   cur, inp_out_ids);
@@ -6514,6 +6520,13 @@ struct llm_build_qwen2_svd : public llm_graph_context {
         }
 
         cur = inpL;
+
+        if (layer_end < n_layer) {
+            cb(cur, "layer_split_hidden", layer_end - 1);
+            res->t_embd = cur;
+            ggml_build_forward_expand(gf, cur);
+            return;
+        }
 
         cur = build_norm(cur,
                 model.output_norm, NULL,

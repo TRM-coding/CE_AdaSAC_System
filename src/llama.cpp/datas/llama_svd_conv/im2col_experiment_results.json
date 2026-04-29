@@ -1,0 +1,32 @@
+{
+  "meta": {
+    "description": "llama.cpp built-in im2col convolution path benchmark results",
+    "model": "/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/gguf_models/resnet50-f32.gguf",
+    "image": "/tmp/coco_cat.jpg",
+    "cpu_binding": "60-79",
+    "threads": 8,
+    "warmup": 5,
+    "repeat": 20
+  },
+  "model_inference": {
+    "runtime": "run_resnet50_ggml",
+    "forward_ms_mean": 117.316,
+    "forward_ms_median": 115.75,
+    "forward_ms_min": 112.179,
+    "forward_ms_max": 151.637
+  },
+  "operator_benchmarks": [
+    {
+      "case": "7x7 stem",
+      "ggml_ms": 10.0863
+    },
+    {
+      "case": "3x3 block",
+      "ggml_ms": 3.77347
+    },
+    {
+      "case": "1x1 bottleneck",
+      "ggml_ms": 1.33198
+    }
+  ]
+}

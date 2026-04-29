@@ -31,6 +31,9 @@ struct llama_cparams {
     bool no_perf;
     bool warmup;
 
+    int32_t layer_split_start;
+    int32_t layer_split_end;
+
     enum llama_pooling_type pooling_type;
 
     ggml_backend_sched_eval_callback cb_eval;

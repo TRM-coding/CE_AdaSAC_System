@@ -372,6 +372,12 @@ extern "C" {
         uint16_t      svd_offload_port;        // remote device TCP port
         int32_t       svd_offload_timeout_ms;  // socket timeout in milliseconds
         bool          svd_offload_enabled;     // enable cooperative SVD offload
+
+        // layer-range cooperative inference [EXPERIMENTAL, qwen2_svd only]
+        // Build layers in [layer_split_start, layer_split_end). Negative end means model end.
+        // If layer_split_start > 0, llama_batch.embd must provide the boundary hidden state.
+        int32_t       layer_split_start;
+        int32_t       layer_split_end;
     };
 
     // model quantization parameters

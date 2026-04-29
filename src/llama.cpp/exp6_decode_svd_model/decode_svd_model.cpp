@@ -17,6 +17,7 @@ extern "C" void ggml_svd_offload_close_client(void);
 #include <vector>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <thread>
 #include <fstream>
 #include <sstream>
@@ -87,6 +88,45 @@ std::vector<float> parse_offload_rates_arg(const std::string & arg, int32_t n_la
         rate = std::max(0.0f, std::min(1.0f, rate));
     }
     return rates;
+}
+
+std::vector<int32_t> parse_layer_timeouts_arg(const std::string & arg, int32_t n_layer) {
+    if (arg.empty() || arg == "off" || arg == "none") {
+        return {};
+    }
+
+    std::string content = arg;
+    std::ifstream fin(arg);
+    if (fin.good()) {
+        std::ostringstream oss;
+        oss << fin.rdbuf();
+        content = oss.str();
+    }
+
+    for (char & ch : content) {
+        if (ch == '\n' || ch == '\r' || ch == ';') {
+            ch = ',';
+        }
+    }
+
+    std::vector<int32_t> timeouts;
+    std::stringstream ss(content);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+        if (item.empty()) {
+            continue;
+        }
+        const double timeout_ms = std::stod(item);
+        timeouts.push_back(timeout_ms > 0.0 ? (int32_t) std::ceil(timeout_ms) : 0);
+    }
+
+    if (timeouts.size() == 1 && n_layer > 1) {
+        timeouts.resize(n_layer, timeouts[0]);
+    }
+    if ((int32_t) timeouts.size() < n_layer) {
+        timeouts.resize(n_layer, 0);
+    }
+    return timeouts;
 }
 
 bool parse_host_port(const std::string & arg, std::string & host, uint16_t & port) {
@@ -168,9 +208,16 @@ int main(int argc, char ** argv)
     const float split_group_a_share = argc > 9 ? std::stof(argv[9]) : 0.75f;
     const int32_t split_minor_timeout_ms = argc > 10 ? std::stoi(argv[10]) : 0;
     const int32_t svd_offload_timeout_ms = argc > 11 ? std::stoi(argv[11]) : 2;
+    const std::string split_layer_timeouts_arg = argc > 12 ? argv[12] : "";
+    const std::string svd_tail_mode = argc > 13 ? argv[13] : "";
     const std::vector<int32_t> split_group_a = parse_cpu_range_arg(split_group_a_arg);
     const std::vector<int32_t> split_group_b = parse_cpu_range_arg(split_group_b_arg);
     const bool use_local_split = !split_group_a.empty() && !split_group_b.empty();
+    const bool force_drop_tail =
+        svd_tail_mode == "drop_tail" ||
+        svd_tail_mode == "drop" ||
+        svd_tail_mode == "discard_tail" ||
+        svd_tail_mode == "discard";
 
     if (use_local_split) {
         const int32_t split_threads = (int32_t) (split_group_a.size() + split_group_b.size());
@@ -213,6 +260,7 @@ int main(int argc, char ** argv)
     ctx_params.n_threads_batch = n_threads;
 
     std::vector<float> offload_rates = parse_offload_rates_arg(offload_rates_arg, model->hparams.n_layer);
+    std::vector<int32_t> split_layer_timeouts = parse_layer_timeouts_arg(split_layer_timeouts_arg, model->hparams.n_layer);
     std::string offload_host;
     uint16_t offload_port = 0;
     const bool has_rates = !offload_rates.empty();
@@ -238,7 +286,16 @@ int main(int argc, char ** argv)
                   << "} groupB={" << cpus_to_string(split_group_b)
                   << "} groupA_share=" << split_group_a_share
                   << " minor_timeout_ms=" << split_minor_timeout_ms << std::endl;
+        if (force_drop_tail) {
+            std::cout << "SVD local split tail mode: drop_tail" << std::endl;
+        }
+        if (!split_layer_timeouts.empty()) {
+            std::cout << "SVD local per-layer timeouts enabled, count: "
+                      << split_layer_timeouts.size() << std::endl;
+        }
+        ggml_cpu_set_svd_force_drop_tail(force_drop_tail);
     } else {
+        ggml_cpu_set_svd_force_drop_tail(false);
         ggml_cpu_clear_svd_local_split();
     }
 
@@ -276,6 +333,13 @@ int main(int argc, char ** argv)
                 split_group_b.data(), (int32_t) split_group_b.size(),
                 split_group_a_share,
                 split_minor_timeout_ms);
+            if (!split_layer_timeouts.empty()) {
+                ggml_cpu_set_svd_local_layer_timeouts(
+                    split_layer_timeouts.data(),
+                    (int32_t) split_layer_timeouts.size());
+            } else {
+                ggml_cpu_clear_svd_local_layer_timeouts();
+            }
         }
         threadpool = ggml_threadpool_new(&tpp);
         if (!threadpool) {

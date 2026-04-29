@@ -1,0 +1,50 @@
+[
+  {
+    "cpu_load": 80,
+    "policy": "scheduled_timeout",
+    "timeout_budget_ms": 2,
+    "returncode": 124,
+    "timed_out": true,
+    "ppl": null,
+    "ppl_stderr": null,
+    "eval_tok_s": null,
+    "eval_ms_per_token": null,
+    "elapsed_s": 60.06151461601257
+  },
+  {
+    "cpu_load": 80,
+    "policy": "scheduled_timeout",
+    "timeout_budget_ms": 4,
+    "returncode": 124,
+    "timed_out": true,
+    "ppl": null,
+    "ppl_stderr": null,
+    "eval_tok_s": null,
+    "eval_ms_per_token": null,
+    "elapsed_s": 60.0610454082489
+  },
+  {
+    "cpu_load": 80,
+    "policy": "scheduled_timeout",
+    "timeout_budget_ms": 8,
+    "returncode": 124,
+    "timed_out": true,
+    "ppl": null,
+    "ppl_stderr": null,
+    "eval_tok_s": null,
+    "eval_ms_per_token": null,
+    "elapsed_s": 60.06065559387207
+  },
+  {
+    "cpu_load": 80,
+    "policy": "scheduled_timeout",
+    "timeout_budget_ms": 16,
+    "returncode": 124,
+    "timed_out": true,
+    "ppl": null,
+    "ppl_stderr": null,
+    "eval_tok_s": null,
+    "eval_ms_per_token": null,
+    "elapsed_s": 60.06059241294861
+  }
+]

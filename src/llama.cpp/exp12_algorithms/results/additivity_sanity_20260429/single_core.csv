@@ -1,0 +1,7 @@
+kind,cpu,load_pct,repeat,status,generation_decode_ms,elapsed_s,log
+single,60,0,0,ok,160.105,1.1094937324523926,src/llama.cpp/exp12_algorithms/results/additivity_sanity_20260429/single_cpu60_load0_rep0.log
+single,61,0,0,ok,155.501,1.0220952033996582,src/llama.cpp/exp12_algorithms/results/additivity_sanity_20260429/single_cpu61_load0_rep0.log
+single,60,50,0,ok,154.211,1.01523756980896,src/llama.cpp/exp12_algorithms/results/additivity_sanity_20260429/single_cpu60_load50_rep0.log
+single,61,50,0,ok,163.529,1.0171122550964355,src/llama.cpp/exp12_algorithms/results/additivity_sanity_20260429/single_cpu61_load50_rep0.log
+single,60,100,0,ok,160.785,1.0340135097503662,src/llama.cpp/exp12_algorithms/results/additivity_sanity_20260429/single_cpu60_load100_rep0.log
+single,61,100,0,ok,156.572,1.0203776359558105,src/llama.cpp/exp12_algorithms/results/additivity_sanity_20260429/single_cpu61_load100_rep0.log

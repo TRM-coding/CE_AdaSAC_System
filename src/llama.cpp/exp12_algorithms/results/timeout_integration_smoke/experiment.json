@@ -1,0 +1,226 @@
+{
+  "date": "2026-04-28 19:38:30",
+  "run_cpus": [
+    60,
+    61,
+    62,
+    63,
+    64,
+    65,
+    66,
+    67
+  ],
+  "phone_cpus_emulated": [
+    68,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75
+  ],
+  "load_cpus": [
+    60,
+    61,
+    62,
+    63
+  ],
+  "cgroup": null,
+  "baseline": {
+    "n_layer": 28,
+    "generation_decode_ms": 32.0,
+    "decode_tok_s": 31.25,
+    "succeed": true
+  },
+  "loaded": {},
+  "schedule": {
+    "mode": "edge_end",
+    "feasible": true,
+    "split_m": 10,
+    "local": {
+      "feasible": true,
+      "deadline_ms": 39.4243,
+      "total_main_ms": 37.6414,
+      "total_loss": 1.670312,
+      "decisions": [
+        {
+          "layer": 0,
+          "rate": 0.0,
+          "main_ms": 3.4194,
+          "loss": 0.0,
+          "weight": 0.0,
+          "timeout_ms": 0.0
+        },
+        {
+          "layer": 1,
+          "rate": 0.5,
+          "main_ms": 2.9469,
+          "loss": 0.25375,
+          "weight": 0.48,
+          "timeout_ms": 1.352112676056338
+        },
+        {
+          "layer": 2,
+          "rate": 0.0,
+          "main_ms": 4.0411,
+          "loss": 0.0,
+          "weight": 0.0,
+          "timeout_ms": 0.0
+        },
+        {
+          "layer": 3,
+          "rate": 0.75,
+          "main_ms": 2.9811,
+          "loss": 0.587812,
+          "weight": 0.84,
+          "timeout_ms": 2.3661971830985915
+        },
+        {
+          "layer": 4,
+          "rate": 0.0,
+          "main_ms": 3.4194,
+          "loss": 0.0,
+          "weight": 0.0,
+          "timeout_ms": 0.0
+        },
+        {
+          "layer": 5,
+          "rate": 0.5,
+          "main_ms": 2.9469,
+          "loss": 0.26875,
+          "weight": 0.48,
+          "timeout_ms": 1.352112676056338
+        },
+        {
+          "layer": 6,
+          "rate": 0.0,
+          "main_ms": 4.0411,
+          "loss": 0.0,
+          "weight": 0.0,
+          "timeout_ms": 0.0
+        },
+        {
+          "layer": 7,
+          "rate": 0.5,
+          "main_ms": 3.4381,
+          "loss": 0.27625,
+          "weight": 0.56,
+          "timeout_ms": 1.5774647887323945
+        },
+        {
+          "layer": 8,
+          "rate": 0.0,
+          "main_ms": 3.4194,
+          "loss": 0.0,
+          "weight": 0.0,
+          "timeout_ms": 0.0
+        },
+        {
+          "layer": 9,
+          "rate": 0.5,
+          "main_ms": 2.9469,
+          "loss": 0.28375,
+          "weight": 0.48,
+          "timeout_ms": 1.352112676056338
+        },
+        {
+          "layer": 10,
+          "rate": 0.0,
+          "main_ms": 4.0411,
+          "loss": 0.0,
+          "weight": 0.0,
+          "timeout_ms": 0.0
+        }
+      ],
+      "reason": ""
+    },
+    "tx_ms": 4.53,
+    "end_ms": 12.0457,
+    "total_ms": 54.2171,
+    "offloaded_layers": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27
+    ],
+    "reason": "",
+    "rates": [
+      0.0,
+      0.5,
+      0.0,
+      0.75,
+      0.0,
+      0.5,
+      0.0,
+      0.5,
+      0.0,
+      0.5,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "timeouts_ms": [
+      0.0,
+      1.352112676056338,
+      0.0,
+      2.3661971830985915,
+      0.0,
+      1.352112676056338,
+      0.0,
+      1.5774647887323945,
+      0.0,
+      1.352112676056338,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "scheduled_decode": {},
+  "profile": "src/llama.cpp/exp12_algorithms/results/timeout_integration_smoke/profile.json",
+  "rates": "src/llama.cpp/exp12_algorithms/results/timeout_integration_smoke/rates.txt",
+  "timeouts": "src/llama.cpp/exp12_algorithms/results/timeout_integration_smoke/timeouts.txt"
+}

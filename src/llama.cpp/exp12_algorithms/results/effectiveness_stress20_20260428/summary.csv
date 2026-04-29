@@ -1,0 +1,7 @@
+load_workers,policy,runs,decode_tok_s_mean,decode_tok_s_stdev,generation_decode_ms_mean,speedup_vs_same_load_baseline
+0,alternate_0.75,1,32.1293,0.0,31.1242,1.174509696404745
+0,baseline,1,27.3555,0.0,36.5558,1.0
+0,uniform_0.5,1,34.2193,0.0,29.2233,1.2509111513224032
+4,alternate_0.75,1,33.4303,0.0,29.913,1.0492644543277454
+4,baseline,1,31.8607,0.0,31.3866,1.0
+4,uniform_0.5,1,5.22983,0.0,191.211,0.1641467387722178

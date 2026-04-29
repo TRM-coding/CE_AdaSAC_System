@@ -1,0 +1,20 @@
+{
+  "tasks": "qwen,resnet50",
+  "out_dir": "src/llama.cpp/datas/acc_evaluate/results/minibatch_vs_real_svd_20260429",
+  "device": "cuda:0",
+  "svd_device": "cpu",
+  "seed": 20260429,
+  "num_policies": 5,
+  "keep_min": 0.45,
+  "keep_max": 0.9,
+  "qwen_model": "/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/models/qwen2_5_1_5b",
+  "qwen_synthetic": "/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp11_make_input_data/data/qwen2_5_1_5b_synthetic_minibatch.pt",
+  "qwen_real_text": "/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp10_svd_local_truncation_fix/ppl_corpus_qwen_out_64k.txt",
+  "qwen_module_patterns": "mlp.gate_proj,mlp.up_proj,mlp.down_proj",
+  "max_qwen_modules_per_policy": 6,
+  "resnet_model": "/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/models/resnet50_hf_model",
+  "resnet_synthetic": "/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/exp11_make_input_data/data/resnet50_synthetic_minibatch.pt",
+  "imagenet_val": "/SSD/val",
+  "imagenet_devkit": "/SSD/ImageNet/ILSVRC2012_devkit_t12.tar.gz",
+  "max_resnet_modules_per_policy": 10
+}
