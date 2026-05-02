@@ -1,0 +1,2 @@
+load_pct,mode,p,major_cpus,minor_cpus,clipped_layers,max_rate,estimated_total_ms,rates_file,timeouts_file
+0,local,8,"61,65,64,60,66,62,63,67",,0,0.0,32.035794,src/llama.cpp/exp12_algorithms/results/model_schedule_effectiveness_cgroup_20260429_memfix_probe/load_0.rates.txt,src/llama.cpp/exp12_algorithms/results/model_schedule_effectiveness_cgroup_20260429_memfix_probe/load_0.timeouts.txt

@@ -63,10 +63,12 @@ if(IS_ANDROID)
     add_executable(svd_mobile_server exp6_decode_svd_model/svd_mobile_server.cpp)
     add_executable(layer_coop_client exp6_decode_svd_model/layer_coop_client.cpp)
     add_executable(layer_mobile_server exp6_decode_svd_model/layer_mobile_server.cpp)
+    add_executable(layer_tail_local_bench exp6_decode_svd_model/layer_tail_local_bench.cpp)
     target_link_libraries(decode_svd_test PRIVATE llama)
     target_link_libraries(svd_mobile_server PRIVATE llama)
     target_link_libraries(layer_coop_client PRIVATE llama)
     target_link_libraries(layer_mobile_server PRIVATE llama)
+    target_link_libraries(layer_tail_local_bench PRIVATE llama)
 endif()
 
 # 桌面版才编译 ops_test
@@ -77,6 +79,7 @@ if(NOT IS_ANDROID)
     add_executable(svd_mobile_server exp6_decode_svd_model/svd_mobile_server.cpp)
     add_executable(layer_coop_client exp6_decode_svd_model/layer_coop_client.cpp)
     add_executable(layer_mobile_server exp6_decode_svd_model/layer_mobile_server.cpp)
+    add_executable(layer_tail_local_bench exp6_decode_svd_model/layer_tail_local_bench.cpp)
     add_executable(perplexity_svd_test
         exp10_svd_local_truncation_fix/perplexity_svd.cpp
         ${CMAKE_SOURCE_DIR}/3dparty/llamacpp/common/arg.cpp
@@ -102,6 +105,7 @@ if(NOT IS_ANDROID)
     target_link_libraries(svd_mobile_server PRIVATE llama)
     target_link_libraries(layer_coop_client PRIVATE llama)
     target_link_libraries(layer_mobile_server PRIVATE llama)
+    target_link_libraries(layer_tail_local_bench PRIVATE llama)
     target_link_libraries(perplexity_svd_test PRIVATE llama ${CMAKE_THREAD_LIBS_INIT})
     target_link_libraries(run_resnet50 PRIVATE llama ggml ggml-base ggml-cpu)
     target_link_libraries(run_resnet50_ggml PRIVATE llama ggml ggml-base ggml-cpu)

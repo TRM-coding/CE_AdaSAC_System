@@ -1,0 +1,12 @@
+scenario,profile,full_local_ms,local_deadline_ms,request_deadline_ms,utilization
+load_0,src/llama.cpp/exp12_algorithms/results/model_profiles_20260429_r1/profile_load_0.json,32.0358,32.356158,33.317232,"60:0,61:0,62:0,63:0,64:0,65:0,66:0,67:0"
+load_10,src/llama.cpp/exp12_algorithms/results/model_profiles_20260429_r1/profile_load_10.json,35.3874,32.356158,33.317232,"60:10,61:10,62:10,63:10,64:10,65:10,66:10,67:10"
+load_20,src/llama.cpp/exp12_algorithms/results/model_profiles_20260429_r1/profile_load_20.json,40.4118,32.356158,33.317232,"60:20,61:20,62:20,63:20,64:20,65:20,66:20,67:20"
+load_30,src/llama.cpp/exp12_algorithms/results/model_profiles_20260429_r1/profile_load_30.json,69.6333,32.356158,33.317232,"60:30,61:30,62:30,63:30,64:30,65:30,66:30,67:30"
+load_40,src/llama.cpp/exp12_algorithms/results/model_profiles_20260429_r1/profile_load_40.json,51.700301,32.356158,33.317232,"60:40,61:40,62:40,63:40,64:40,65:40,66:40,67:40"
+load_50,src/llama.cpp/exp12_algorithms/results/model_profiles_20260429_r1/profile_load_50.json,31.8804,32.356158,33.317232,"60:50,61:50,62:50,63:50,64:50,65:50,66:50,67:50"
+load_60,src/llama.cpp/exp12_algorithms/results/model_profiles_20260429_r1/profile_load_60.json,35.1541,32.356158,33.317232,"60:60,61:60,62:60,63:60,64:60,65:60,66:60,67:60"
+load_70,src/llama.cpp/exp12_algorithms/results/model_profiles_20260429_r1/profile_load_70.json,31.783,32.356158,33.317232,"60:70,61:70,62:70,63:70,64:70,65:70,66:70,67:70"
+load_80,src/llama.cpp/exp12_algorithms/results/model_profiles_20260429_r1/profile_load_80.json,32.4744,32.356158,33.317232,"60:80,61:80,62:80,63:80,64:80,65:80,66:80,67:80"
+load_90,src/llama.cpp/exp12_algorithms/results/model_profiles_20260429_r1/profile_load_90.json,32.3058,32.356158,33.317232,"60:90,61:90,62:90,63:90,64:90,65:90,66:90,67:90"
+load_100,src/llama.cpp/exp12_algorithms/results/model_profiles_20260429_r1/profile_load_100.json,37.0624,32.356158,33.317232,"60:100,61:100,62:100,63:100,64:100,65:100,66:100,67:100"

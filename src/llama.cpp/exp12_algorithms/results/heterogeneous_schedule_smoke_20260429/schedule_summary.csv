@@ -1,0 +1,2 @@
+scenario,n_cores,cpus,loads,mode,feasible,p,major_cpus,minor_cpus,clipped_layers,max_rate,estimated_total_ms,estimated_full_local_ms,estimated_speedup,rates_file,timeouts_file
+smoke_4c_mixed,4,"60,61,62,63","0,30,60,90",local,True,4,"60,61,62,63",,0,0.0,56.534576,56.534577,1.0000000176882904,src/llama.cpp/exp12_algorithms/results/heterogeneous_schedule_smoke_20260429/smoke_4c_mixed.rates.txt,src/llama.cpp/exp12_algorithms/results/heterogeneous_schedule_smoke_20260429/smoke_4c_mixed.timeouts.txt

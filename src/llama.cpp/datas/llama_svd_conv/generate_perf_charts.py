@@ -51,23 +51,23 @@ def base_style(ax):
 
 def make_operator_chart():
     categories = ["7x7 Stem", "3x3 Block", "1x1 Bottleneck"]
-    ggml = np.array([9.33965, 3.58559, 1.23634])
-    pytorch = np.array([1.135265, 0.545794, 0.335971])
-    onednn = np.array([0.407632, 0.530049, 0.190782])
+    ggml = np.array([9.43745, 3.61984, 1.23041])
+    pytorch = np.array([1.415657, 0.704772, 0.449512])
+    onednn = np.array([0.683422, 0.629792, 0.294949])
 
     x = np.arange(len(categories))
     width = 0.24
     offsets = np.array([-width, 0.0, width])
 
-    fig, ax = plt.subplots(figsize=(12.5, 7.2), dpi=180)
+    fig, ax = plt.subplots(figsize=(12.5, 8.2), dpi=180)
     fig.patch.set_facecolor("#FBFBF8")
     ax.set_facecolor("#FBFBF8")
 
     ax.bar(x + offsets[0], ggml, width=width, color=COLORS["ggml"], label="llama.cpp 自带 im2col Conv")
     ax.bar(x + offsets[1], pytorch, width=width, color=COLORS["pytorch"], label="PyTorch 官方 Conv 算子")
-    ax.bar(x + offsets[2], onednn, width=width, color=COLORS["onednn"], label="结合 oneDNN 的自实现 Conv")
+    ax.bar(x + offsets[2], onednn, width=width, color=COLORS["onednn"], label="oneDNN Conv 完整调用")
 
-    ax.set_title("算子性能对比图", pad=16, weight="bold", fontproperties=FONT_PROP)
+    ax.set_title("卷积算子调用耗时对比图", pad=16, weight="bold", fontproperties=FONT_PROP)
     ax.set_ylabel("单个卷积算子耗时 / ms", fontproperties=FONT_PROP)
     ax.set_xlabel("典型卷积尺寸", fontproperties=FONT_PROP)
     ax.set_xticks(x)
@@ -75,9 +75,21 @@ def make_operator_chart():
     ax.set_ylim(0, max(ggml.max(), pytorch.max(), onednn.max()) * 1.28)
     base_style(ax)
     annotate_grouped(ax, x, [ggml, pytorch, onednn], offsets)
-    ax.legend(frameon=False, loc="upper right", fontsize=15, prop=FONT_PROP)
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.985),
+        ncol=3,
+        fontsize=13,
+        prop=FONT_PROP,
+        columnspacing=1.2,
+        handlelength=1.8,
+    )
 
-    fig.tight_layout()
+    fig.subplots_adjust(left=0.09, right=0.98, bottom=0.12, top=0.78)
     fig.savefig(OUT_DIR / "operator_performance_comparison.png", bbox_inches="tight")
     plt.close(fig)
 
@@ -160,9 +172,20 @@ def make_fold_unfold_chart():
 
     handles1, labels1 = ax.get_legend_handles_labels()
     handles2, labels2 = ax2.get_legend_handles_labels()
-    ax.legend(handles1 + handles2, labels1 + labels2, frameon=False, loc="upper left", fontsize=14, prop=FONT_PROP)
+    fig.legend(
+        handles1 + handles2,
+        labels1 + labels2,
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.985),
+        ncol=3,
+        fontsize=13,
+        prop=FONT_PROP,
+        columnspacing=1.2,
+        handlelength=1.8,
+    )
 
-    fig.tight_layout()
+    fig.subplots_adjust(left=0.09, right=0.90, bottom=0.12, top=0.78)
     fig.savefig(OUT_DIR / "fold_unfold_svd_speedup_by_kernel.png", bbox_inches="tight")
     plt.close(fig)
 

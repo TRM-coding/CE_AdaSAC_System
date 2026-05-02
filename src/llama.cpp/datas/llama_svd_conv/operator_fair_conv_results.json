@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "description": "Fairer convolution operator-call benchmark including framework/operator setup overheads",
+    "cpu_binding": "40-59",
+    "threads": 8,
+    "warmup": 5,
+    "repeat": 20,
+    "measured_at": "2026-04-29",
+    "ggml_scope": "ggml_conv_2d graph build and graph compute inside the timed loop; tensors/context are allocated outside the timed loop",
+    "pytorch_scope": "nn.Conv2d(x) call time after module creation and warmup",
+    "onednn_scope": "memory descriptors, primitive descriptor creation, weight reorder, dst allocation, primitive creation, execute, and stream wait inside the timed loop"
+  },
+  "operator_benchmarks": [
+    {
+      "case": "7x7 stem",
+      "ggml_ms": 9.43745,
+      "pytorch_ms": 1.415657,
+      "onednn_full_call_ms": 0.683422,
+      "onednn_execute_only_ms": 0.375785
+    },
+    {
+      "case": "3x3 block",
+      "ggml_ms": 3.61984,
+      "pytorch_ms": 0.704772,
+      "onednn_full_call_ms": 0.629792,
+      "onednn_execute_only_ms": 0.575663
+    },
+    {
+      "case": "1x1 bottleneck",
+      "ggml_ms": 1.23041,
+      "pytorch_ms": 0.449512,
+      "onednn_full_call_ms": 0.294949,
+      "onednn_execute_only_ms": 0.205187
+    }
+  ]
+}

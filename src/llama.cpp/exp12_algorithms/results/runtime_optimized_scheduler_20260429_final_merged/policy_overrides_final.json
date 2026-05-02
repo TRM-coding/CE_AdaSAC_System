@@ -1,0 +1,14 @@
+{
+  "4c_ramp_light": "trunc_even_0.8",
+  "4c_mixed": "trunc_even_0.8",
+  "4c_front_hot": "edge_end",
+  "4c_high": "trunc_even_0.8",
+  "6c_ramp_light": "trunc_even_0.85",
+  "6c_mixed": "edge_end",
+  "6c_front_hot": "edge_end",
+  "6c_high": "trunc_even_0.8",
+  "8c_ramp_light": "edge_end",
+  "8c_mixed": "edge_end",
+  "8c_front_hot": "edge_end",
+  "8c_high": "trunc_even_0.85"
+}

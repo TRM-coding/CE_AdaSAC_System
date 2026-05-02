@@ -1,0 +1,13 @@
+load_pct,policy,runs,tok_s_mean,decode_ms_mean,speedup_vs_baseline_no_svd
+0,baseline_no_svd,0,,,
+0,model_schedule,0,,,
+20,baseline_no_svd,0,,,
+20,model_schedule,1,21.9883,45.4788,
+40,baseline_no_svd,0,,,
+40,model_schedule,0,,,
+50,baseline_no_svd,1,25.3928,39.3813,1.0
+50,model_schedule,1,25.3928,39.3813,1.0
+80,baseline_no_svd,0,,,
+80,model_schedule,0,,,
+100,baseline_no_svd,1,19.2018,52.0784,1.0
+100,model_schedule,1,20.5862,48.5763,1.0720974075347105

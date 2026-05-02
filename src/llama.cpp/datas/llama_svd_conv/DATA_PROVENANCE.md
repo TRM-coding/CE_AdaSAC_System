@@ -131,10 +131,11 @@ taskset -c 60-79 ./build-release-current/run_resnet50 \
 taskset -c 60-79 ./build-release-current/bench_conv_ops
 ```
 
-这个程序会输出三类卷积尺寸下的两组数据：
+这个程序会输出三类卷积尺寸下的三组 llama.cpp / oneDNN 数据：
 
 - `ggml_ms`
-- `onednn_ms`
+- `onednn_ms`：oneDNN execute-only，权重 reorder 和 primitive 创建不计入计时
+- `onednn_full_call_ms`：oneDNN 完整调用口径，memory desc、primitive desc、权重 reorder、dst 分配、primitive 创建、execute 和 stream wait 都计入计时
 
 当前选取的卷积尺寸是：
 
@@ -144,10 +145,10 @@ taskset -c 60-79 ./build-release-current/bench_conv_ops
 
 ### 2. PyTorch 官方 conv 算子
 
-当前使用的是单独的 PyTorch `Conv2d` benchmark，命令如下：
+当前使用的是单独的 PyTorch `Conv2d` benchmark，命令如下。为了让旧图更接近“大家都包含算子/框架调用开销”的公平口径，`operator_performance_comparison.png` 现在使用 `onednn_full_call_ms`，不再使用 execute-only 的 `onednn_ms`。
 
 ```bash
-taskset -c 60-79 /home/tianruiming/miniconda3/envs/pytorch/bin/python - <<'PY'
+taskset -c 40-59 /home/tianruiming/miniconda3/envs/pytorch/bin/python - <<'PY'
 import time, statistics, torch
 from torch import nn
 
@@ -168,11 +169,15 @@ def bench(name, ic, oc, ih, iw, kh, kw, stride, padding, warmup=5, repeat=20):
             times.append((t1 - t0) * 1000)
     print(f"{name}\tpytorch_ms={statistics.median(times):.6f}")
 
-bench('7x7 stem', 3, 64, 224, 224, 7, 7, 2, 3)
-bench('3x3 block', 128, 128, 28, 28, 3, 3, 1, 1)
-bench('1x1 bottleneck', 256, 1024, 14, 14, 1, 1, 1, 0)
+bench("7x7 stem", 3, 64, 224, 224, 7, 7, 2, 3)
+bench("3x3 block", 128, 128, 28, 28, 3, 3, 1, 1)
+bench("1x1 bottleneck", 256, 1024, 14, 14, 1, 1, 1, 0)
 PY
 ```
+
+重测后的公平口径数据另存于：
+
+- `/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/datas/llama_svd_conv/operator_fair_conv_results.json`
 
 ## 如果要重新画图，怎么做
 

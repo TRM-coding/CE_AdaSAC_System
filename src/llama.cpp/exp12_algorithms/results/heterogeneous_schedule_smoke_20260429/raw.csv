@@ -1,0 +1,49 @@
+scenario,repeat,n_cores,cpus,loads,policy,status,schedule_mode,clipped_layers,decode_tok_s,generation_decode_ms,prefill_decode_ms,elapsed_s,succeed,top1_id,top1_piece,output_tail
+smoke_4c_mixed,0,4,"60,61,62,63","0,30,60,90",baseline_no_svd,ok,,0,21.6511,46.187,1499.72,2.1094441413879395,True,11,",","llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=4 batch=4
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+Top-5 next-token candidates:
+  id=11 logit=20.2053 piece="",""
+  id=304 logit=18.9277 piece="" in""
+  id=3837 logit=18.7558 piece=""，""
+  id=1052 logit=18.5616 piece="" there""
+  id=358 logit=17.8374 piece="" I""
+Autoregressive generation:
+Generated text: ,
+Decode-only throughput: 21.6511 tokens/s (1 tokens in 0.046187 s of llama_decode)
+End-to-end throughput: 21.5063 tokens/s (1 tokens in 0.046498 s)
+[decode-stage-profile] model_load=356.086 ms context_create=43.9313 ms tokenize=0.431758 ms prefill_decode=1499.72 ms generation_decode=46.187 ms generation_total=46.498 ms program_total=1956.9 ms
+[svd-local-op-profile] up_ops=56 gate_ops=56 down_ops=56 up_total=98.047 ms gate_total=101.203 ms down_total=91.180 ms up_v=27.400 ms gate_v=26.573 ms down_v=42.494 ms up_u=70.641 ms gate_u=74.622 ms down_u=48.679 ms
+[svd-local-stage-profile] attention_total=201.267 ms ffn_total=405.516 ms ffn_svd_total=290.430 ms ffn_svd_v=96.467 ms ffn_svd_u=193.942 ms
+[svd-offload-zero-profile] up_finish=0 up_cache=0 up_no_request=27 gate_finish=0 gate_cache=0 gate_no_request=27 down_finish=0 down_cache=0 down_no_request=27 other_finish=0 other_cache=0 other_no_request=0
+[svd-local-timeout-profile] up_keep=0 up_drop=0 up_wait=0.000 ms gate_keep=0 gate_drop=0 gate_wait=0.000 ms down_keep=0 down_drop=0 down_wait=0.000 ms other_keep=0 other_drop=0 other_wait=0.000 ms
+[svd-offload-client] up_gate_req=0 down_req=0 other_mat_req=0 ffn_req=0 gate_cache_hits=0 gate_cache_checks=0 miss_invalid=0 miss_layer=0 miss_rank=0 miss_hash=0 miss_output=0 miss_data=0 send_up_gate=0.000 ms send_down=0.000 ms send_other=0.000 ms send_ffn=0.000 ms wait_up_gate=0.000 ms wait_down=0.000 ms wait_other=0.000 ms wait_ffn=0.000 ms
+[svd-offload-client-stage-profile] rpc_send_total=0.000 ms rpc_wait_total=0.000 ms
+[svd-offload-client-debug] finish_fail_up_gate=0 finish_fail_down=0 finish_fail_other=0 finish_fail_ffn=0 cache_take_fail_up=0 cache_take_fail_gate=0 recv_up_sum_abs=0.000000e+00 recv_up_max_abs=0.000000e+00 recv_up_zero=0 recv_gate_sum_abs=0.000000e+00 recv_gate_max_abs=0.000000e+00 recv_gate_zero=0 recv_down_sum_abs=0.000000e+00 recv_down_max_abs=0.000000e+00 recv_down_zero=0 recv_other_sum_abs=0.000000e+00 recv_other_max_abs=0.000000e+00 recv_other_zero=0 recv_ffn_sum_abs=0.000000e+00 recv_ffn_max_abs=0.000000e+00 recv_ffn_zero=0
+SUCCEED (one forward pass done)"
+smoke_4c_mixed,0,4,"60,61,62,63","0,30,60,90",model_schedule,same_as_baseline_no_svd,local,0,21.6511,46.187,1499.72,2.1094441413879395,True,11,",","llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=4 batch=4
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+Top-5 next-token candidates:
+  id=11 logit=20.2053 piece="",""
+  id=304 logit=18.9277 piece="" in""
+  id=3837 logit=18.7558 piece=""，""
+  id=1052 logit=18.5616 piece="" there""
+  id=358 logit=17.8374 piece="" I""
+Autoregressive generation:
+Generated text: ,
+Decode-only throughput: 21.6511 tokens/s (1 tokens in 0.046187 s of llama_decode)
+End-to-end throughput: 21.5063 tokens/s (1 tokens in 0.046498 s)
+[decode-stage-profile] model_load=356.086 ms context_create=43.9313 ms tokenize=0.431758 ms prefill_decode=1499.72 ms generation_decode=46.187 ms generation_total=46.498 ms program_total=1956.9 ms
+[svd-local-op-profile] up_ops=56 gate_ops=56 down_ops=56 up_total=98.047 ms gate_total=101.203 ms down_total=91.180 ms up_v=27.400 ms gate_v=26.573 ms down_v=42.494 ms up_u=70.641 ms gate_u=74.622 ms down_u=48.679 ms
+[svd-local-stage-profile] attention_total=201.267 ms ffn_total=405.516 ms ffn_svd_total=290.430 ms ffn_svd_v=96.467 ms ffn_svd_u=193.942 ms
+[svd-offload-zero-profile] up_finish=0 up_cache=0 up_no_request=27 gate_finish=0 gate_cache=0 gate_no_request=27 down_finish=0 down_cache=0 down_no_request=27 other_finish=0 other_cache=0 other_no_request=0
+[svd-local-timeout-profile] up_keep=0 up_drop=0 up_wait=0.000 ms gate_keep=0 gate_drop=0 gate_wait=0.000 ms down_keep=0 down_drop=0 down_wait=0.000 ms other_keep=0 other_drop=0 other_wait=0.000 ms
+[svd-offload-client] up_gate_req=0 down_req=0 other_mat_req=0 ffn_req=0 gate_cache_hits=0 gate_cache_checks=0 miss_invalid=0 miss_layer=0 miss_rank=0 miss_hash=0 miss_output=0 miss_data=0 send_up_gate=0.000 ms send_down=0.000 ms send_other=0.000 ms send_ffn=0.000 ms wait_up_gate=0.000 ms wait_down=0.000 ms wait_other=0.000 ms wait_ffn=0.000 ms
+[svd-offload-client-stage-profile] rpc_send_total=0.000 ms rpc_wait_total=0.000 ms
+[svd-offload-client-debug] finish_fail_up_gate=0 finish_fail_down=0 finish_fail_other=0 finish_fail_ffn=0 cache_take_fail_up=0 cache_take_fail_gate=0 recv_up_sum_abs=0.000000e+00 recv_up_max_abs=0.000000e+00 recv_up_zero=0 recv_gate_sum_abs=0.000000e+00 recv_gate_max_abs=0.000000e+00 recv_gate_zero=0 recv_down_sum_abs=0.000000e+00 recv_down_max_abs=0.000000e+00 recv_down_zero=0 recv_other_sum_abs=0.000000e+00 recv_other_max_abs=0.000000e+00 recv_other_zero=0 recv_ffn_sum_abs=0.000000e+00 recv_ffn_max_abs=0.000000e+00 recv_ffn_zero=0
+SUCCEED (one forward pass done)"

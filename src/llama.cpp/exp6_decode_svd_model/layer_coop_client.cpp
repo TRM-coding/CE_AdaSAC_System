@@ -2,6 +2,7 @@
 #include "llama-model.h"
 #include "ggml-cpu.h"
 #include "layer_coop_net.h"
+#include "layer_threadpool.h"
 
 #include <algorithm>
 #include <chrono>
@@ -9,6 +10,7 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -24,8 +26,17 @@ static llama_token greedy_sample(const float * logits, int32_t n_vocab) {
     return (llama_token) best;
 }
 
-static std::vector<float> send_hidden(int fd, const std::vector<int32_t> & pos, const float * hidden,
-        int32_t n_embd, int32_t n_vocab, bool reset_kv, double & server_ms) {
+struct LayerCoopClientProfile {
+    int64_t requests = 0;
+    size_t send_bytes = 0;
+    size_t recv_bytes = 0;
+    double send_ms = 0.0;
+    double recv_header_ms = 0.0;
+    double roundtrip_ms = 0.0;
+};
+
+static llama_token send_hidden(int fd, const std::vector<int32_t> & pos, const float * hidden,
+        int32_t n_embd, int32_t n_vocab, bool reset_kv, double & server_ms, LayerCoopClientProfile & profile) {
     LayerCoopRequest req {
         LAYER_COOP_MAGIC,
         LAYER_COOP_VERSION,
@@ -35,25 +46,76 @@ static std::vector<float> send_hidden(int fd, const std::vector<int32_t> & pos, 
         reset_kv ? 1 : 0,
     };
     const size_t hidden_count = (size_t) req.n_tokens * n_embd;
+    const size_t send_bytes = sizeof(req) + pos.size() * sizeof(int32_t) + hidden_count * sizeof(float);
+    const size_t recv_bytes = sizeof(LayerCoopResponse);
+
+    const auto t_req0 = std::chrono::steady_clock::now();
     if (!layer_coop_send_all(fd, &req, sizeof(req)) ||
             !layer_coop_send_all(fd, pos.data(), pos.size() * sizeof(int32_t)) ||
             !layer_coop_send_all(fd, hidden, hidden_count * sizeof(float))) {
         throw std::runtime_error("failed to send layer-coop request");
     }
+    const auto t_send_done = std::chrono::steady_clock::now();
     LayerCoopResponse resp {};
     if (!layer_coop_recv_all(fd, &resp, sizeof(resp)) ||
             resp.magic != LAYER_COOP_MAGIC ||
             resp.version != LAYER_COOP_VERSION ||
             resp.status != 0 ||
-            resp.n_logits != n_vocab) {
+            resp.n_logits != 0 ||
+            resp.selected_token < 0 ||
+            resp.selected_token >= n_vocab) {
         throw std::runtime_error("bad layer-coop response");
     }
-    std::vector<float> logits(n_vocab);
-    if (!layer_coop_recv_all(fd, logits.data(), logits.size() * sizeof(float))) {
-        throw std::runtime_error("failed to receive logits");
-    }
+    const auto t_header_done = std::chrono::steady_clock::now();
+
     server_ms += resp.server_decode_ms;
-    return logits;
+    profile.requests++;
+    profile.send_bytes += send_bytes;
+    profile.recv_bytes += recv_bytes;
+    profile.send_ms += std::chrono::duration<double, std::milli>(t_send_done - t_req0).count();
+    profile.recv_header_ms += std::chrono::duration<double, std::milli>(t_header_done - t_send_done).count();
+    profile.roundtrip_ms += std::chrono::duration<double, std::milli>(t_header_done - t_req0).count();
+    return (llama_token) resp.selected_token;
+}
+
+static int accept_tail_connection(uint16_t port) {
+    if (!layer_coop_net_init()) {
+        throw std::runtime_error("network init failed");
+    }
+    const int listen_fd = (int) socket(AF_INET, SOCK_STREAM, 0);
+    if (listen_fd < 0) {
+        throw std::runtime_error("socket failed");
+    }
+    int one = 1;
+    setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, (const char *) &one, sizeof(one));
+
+    sockaddr_in addr {};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(port);
+    if (bind(listen_fd, (sockaddr *) &addr, sizeof(addr)) != 0 || listen(listen_fd, 1) != 0) {
+        layer_coop_close(listen_fd);
+        throw std::runtime_error("bind/listen failed");
+    }
+
+    std::cout << "waiting for layer tail server on 0.0.0.0:" << port << std::endl;
+    sockaddr_in peer {};
+#ifdef _WIN32
+    int peer_len = sizeof(peer);
+    const int fd = (int) accept((SOCKET) listen_fd, (sockaddr *) &peer, &peer_len);
+#else
+    socklen_t peer_len = sizeof(peer);
+    const int fd = accept(listen_fd, (sockaddr *) &peer, &peer_len);
+#endif
+    layer_coop_close(listen_fd);
+    if (fd < 0) {
+        throw std::runtime_error("accept failed");
+    }
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (const char *) &one, sizeof(one));
+    char peer_ip[64] = {};
+    inet_ntop(AF_INET, &peer.sin_addr, peer_ip, sizeof(peer_ip));
+    std::cout << "accepted layer tail server from " << peer_ip << ":" << ntohs(peer.sin_port) << std::endl;
+    return fd;
 }
 
 int main(int argc, char ** argv) {
@@ -65,11 +127,16 @@ int main(int argc, char ** argv) {
     const std::string model_path = argv[1];
     const int32_t max_new_tokens = std::stoi(argv[2]);
     const int32_t threads = std::stoi(argv[3]);
+    const std::string endpoint = argv[4];
+    const bool listen_endpoint = endpoint.rfind("listen:", 0) == 0;
     std::string host;
     uint16_t port = 0;
-    if (!layer_coop_parse_host_port(argv[4], host, port)) {
+    if (!layer_coop_parse_host_port(endpoint, host, port)) {
         std::cerr << "bad endpoint\n";
         return 1;
+    }
+    if (listen_endpoint) {
+        host = "listen";
     }
     const int32_t split_m = argc > 5 ? std::stoi(argv[5]) : 14;
     const bool verbose = argc > 6 ? std::stoi(argv[6]) != 0 : false;
@@ -90,26 +157,36 @@ int main(int argc, char ** argv) {
     const int32_t n_embd = llama_model_n_embd(model.get());
     const int32_t n_vocab = llama_vocab_n_tokens(vocab);
 
-    llama_context_params cp = llama_context_default_params();
-    cp.n_ctx = 2048;
-    cp.n_batch = 2048;
-    cp.n_threads = threads;
-    cp.n_threads_batch = threads;
-    cp.embeddings = true;
-    cp.layer_split_start = 0;
-    cp.layer_split_end = split_m;
+    llama_context_params full_cp = llama_context_default_params();
+    full_cp.n_ctx = 2048;
+    full_cp.n_batch = 2048;
+    full_cp.n_threads = threads;
+    full_cp.n_threads_batch = threads;
 
-    std::unique_ptr<llama_context, decltype(&llama_free)> ctx(
-        llama_init_from_model(model.get(), cp), llama_free);
-    if (!ctx) {
+    std::unique_ptr<llama_context, decltype(&llama_free)> full_ctx(
+        llama_init_from_model(model.get(), full_cp), llama_free);
+    if (!full_ctx) {
+        std::cerr << "failed to create full prefill context\n";
+        return 1;
+    }
+    LayerThreadpoolPtr full_threadpool = layer_attach_threadpool(full_ctx.get(), threads, "layer-coop-client-full");
+
+    llama_context_params prefix_cp = llama_context_default_params();
+    prefix_cp.n_ctx = 2048;
+    prefix_cp.n_batch = 2048;
+    prefix_cp.n_threads = threads;
+    prefix_cp.n_threads_batch = threads;
+    prefix_cp.embeddings = true;
+    prefix_cp.layer_split_start = 0;
+    prefix_cp.layer_split_end = split_m;
+
+    std::unique_ptr<llama_context, decltype(&llama_free)> prefix_ctx(
+        llama_init_from_model(model.get(), prefix_cp), llama_free);
+    if (!prefix_ctx) {
         std::cerr << "failed to create prefix context\n";
         return 1;
     }
-
-    const int fd = layer_coop_connect(host, port);
-    std::cout << "layer cooperative decode enabled: prefix_layers=[0," << split_m
-              << ") tail_endpoint=" << host << ":" << port
-              << " n_embd=" << n_embd << " n_vocab=" << n_vocab << std::endl;
+    LayerThreadpoolPtr prefix_threadpool = layer_attach_threadpool(prefix_ctx.get(), threads, "layer-coop-client-prefix");
 
     const std::string prompt = "Once upon a time";
     std::vector<llama_token> tokens(prompt.size() + 8);
@@ -121,43 +198,72 @@ int main(int argc, char ** argv) {
     }
     tokens.resize(n_tokens);
 
-    llama_kv_cache_clear(ctx.get());
-    llama_batch batch = llama_batch_init(n_tokens, 0, 1);
-    batch.n_tokens = n_tokens;
-    std::vector<int32_t> pos(n_tokens);
+    double server_ms = 0.0;
+    double pc_prefill_ms = 0.0;
+    double prefix_decode_ms = 0.0;
+    LayerCoopClientProfile coop_profile;
+    const auto t_all0 = std::chrono::steady_clock::now();
+
+    llama_kv_cache_clear(full_ctx.get());
+    llama_batch full_batch = llama_batch_init(n_tokens, 0, 1);
+    full_batch.n_tokens = n_tokens;
     for (int32_t i = 0; i < n_tokens; ++i) {
-        batch.token[i] = tokens[i];
-        batch.pos[i] = i;
-        batch.n_seq_id[i] = 1;
-        batch.seq_id[i][0] = 0;
-        batch.logits[i] = 1;
-        pos[i] = i;
+        full_batch.token[i] = tokens[i];
+        full_batch.pos[i] = i;
+        full_batch.n_seq_id[i] = 1;
+        full_batch.seq_id[i][0] = 0;
+        full_batch.logits[i] = (i == n_tokens - 1);
     }
 
-    double server_ms = 0.0;
-    double prefix_ms = 0.0;
-    const auto t_all0 = std::chrono::steady_clock::now();
     auto t0 = std::chrono::steady_clock::now();
-    int ret = llama_decode(ctx.get(), batch);
+    int ret = llama_decode(full_ctx.get(), full_batch);
     auto t1 = std::chrono::steady_clock::now();
-    llama_batch_free(batch);
+    llama_batch_free(full_batch);
     if (ret != 0) {
-        std::cerr << "prefix prefill failed\n";
+        std::cerr << "full prefill failed\n";
         return 1;
     }
-    prefix_ms += std::chrono::duration<double, std::milli>(t1 - t0).count();
-    const float * hidden = llama_get_embeddings(ctx.get());
-    if (!hidden) {
-        std::cerr << "prefix embeddings missing\n";
+    pc_prefill_ms += std::chrono::duration<double, std::milli>(t1 - t0).count();
+    const float * full_logits = llama_get_logits_ith(full_ctx.get(), -1);
+    if (!full_logits) {
+        std::cerr << "full prefill logits missing\n";
         return 1;
     }
-    std::vector<float> logits = send_hidden(fd, pos, hidden, n_embd, n_vocab, true, server_ms);
+    llama_token next_token = greedy_sample(full_logits, n_vocab);
+    full_ctx.reset();
+    full_threadpool.reset();
+
+    llama_kv_cache_clear(prefix_ctx.get());
+    llama_batch prefix_batch = llama_batch_init(n_tokens, 0, 1);
+    prefix_batch.n_tokens = n_tokens;
+    for (int32_t i = 0; i < n_tokens; ++i) {
+        prefix_batch.token[i] = tokens[i];
+        prefix_batch.pos[i] = i;
+        prefix_batch.n_seq_id[i] = 1;
+        prefix_batch.seq_id[i][0] = 0;
+        prefix_batch.logits[i] = 0;
+    }
+    t0 = std::chrono::steady_clock::now();
+    ret = llama_decode(prefix_ctx.get(), prefix_batch);
+    t1 = std::chrono::steady_clock::now();
+    llama_batch_free(prefix_batch);
+    if (ret != 0) {
+        std::cerr << "PC prefix prefill failed\n";
+        return 1;
+    }
+    pc_prefill_ms += std::chrono::duration<double, std::milli>(t1 - t0).count();
+
+    const int fd = listen_endpoint ? accept_tail_connection(port) : layer_coop_connect(host, port);
+    std::cout << "layer cooperative decode enabled: pc_prefill=full-model prompt-only"
+              << " prefix_layers=[0," << split_m
+              << ") tail_endpoint=" << (listen_endpoint ? std::string("listen") : host) << ":" << port
+              << " n_embd=" << n_embd << " n_vocab=" << n_vocab << std::endl;
 
     std::vector<llama_token> generated;
     generated.reserve(max_new_tokens);
     int32_t total_tokens = n_tokens;
     for (int32_t gen = 0; gen < max_new_tokens; ++gen) {
-        const llama_token next = greedy_sample(logits.data(), n_vocab);
+        const llama_token next = next_token;
         generated.push_back(next);
         if (verbose) {
             char buf[256];
@@ -174,17 +280,21 @@ int main(int argc, char ** argv) {
         gb.seq_id[0][0] = 0;
         gb.logits[0] = 1;
         t0 = std::chrono::steady_clock::now();
-        ret = llama_decode(ctx.get(), gb);
+        ret = llama_decode(prefix_ctx.get(), gb);
         t1 = std::chrono::steady_clock::now();
         llama_batch_free(gb);
         if (ret != 0) {
             std::cerr << "prefix decode failed\n";
             return 1;
         }
-        prefix_ms += std::chrono::duration<double, std::milli>(t1 - t0).count();
-        hidden = llama_get_embeddings_ith(ctx.get(), 0);
+        prefix_decode_ms += std::chrono::duration<double, std::milli>(t1 - t0).count();
+        const float * hidden = llama_get_embeddings_ith(prefix_ctx.get(), 0);
+        if (!hidden) {
+            std::cerr << "prefix decode embeddings missing\n";
+            return 1;
+        }
         int32_t p = total_tokens;
-        logits = send_hidden(fd, std::vector<int32_t>{p}, hidden, n_embd, n_vocab, false, server_ms);
+        next_token = send_hidden(fd, std::vector<int32_t>{p}, hidden, n_embd, n_vocab, gen == 0, server_ms, coop_profile);
         total_tokens++;
     }
     const auto t_all1 = std::chrono::steady_clock::now();
@@ -199,11 +309,20 @@ int main(int argc, char ** argv) {
     const double total_ms = std::chrono::duration<double, std::milli>(t_all1 - t_all0).count();
     std::cout << "Generated text: " << text << std::endl;
     std::cout << "[layer-coop-client] generated=" << generated.size()
-              << " prefix_ms=" << prefix_ms
+              << " pc_prefill_ms=" << pc_prefill_ms
+              << " prefix_decode_ms=" << prefix_decode_ms
               << " server_decode_ms=" << server_ms
               << " total_ms=" << total_ms
               << " throughput=" << (generated.empty() ? 0.0 : generated.size() / (total_ms / 1000.0))
               << " tok/s" << std::endl;
+    std::cout << "[layer-coop-profile] requests=" << coop_profile.requests
+              << " send_bytes=" << coop_profile.send_bytes
+              << " recv_bytes=" << coop_profile.recv_bytes
+              << " send_ms=" << coop_profile.send_ms
+              << " recv_header_ms=" << coop_profile.recv_header_ms
+              << " roundtrip_ms=" << coop_profile.roundtrip_ms
+              << " client_wait_other_ms=" << (coop_profile.roundtrip_ms - coop_profile.send_ms - coop_profile.recv_header_ms)
+              << std::endl;
     std::cout << "SUCCEED (layer cooperative decode done)" << std::endl;
     return 0;
 }

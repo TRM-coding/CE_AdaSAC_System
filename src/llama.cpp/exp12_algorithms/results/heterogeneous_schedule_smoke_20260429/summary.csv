@@ -1,0 +1,2 @@
+scenario,n_cores,cpus,loads,baseline_runs,schedule_runs,baseline_tok_s,schedule_tok_s,speedup_vs_baseline,baseline_decode_ms,schedule_decode_ms,mode,p,major_cpus,minor_cpus,clipped_layers,max_rate,estimated_total_ms,estimated_speedup
+smoke_4c_mixed,4,"60,61,62,63","0,30,60,90",1,1,21.6511,21.6511,1.0,46.187,46.187,local,4,"60,61,62,63",,0,0.0,56.534576,1.0000000176882904

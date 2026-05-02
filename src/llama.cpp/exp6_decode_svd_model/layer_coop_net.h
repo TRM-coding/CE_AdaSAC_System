@@ -29,11 +29,13 @@ struct LayerCoopResponse {
     uint32_t version;
     int32_t  status;
     int32_t  n_logits;
+    int32_t  selected_token;
+    int32_t  reserved;
     double   server_decode_ms;
 };
 
 constexpr uint32_t LAYER_COOP_MAGIC = 0x4c434f4fU; // LCOO
-constexpr uint32_t LAYER_COOP_VERSION = 1;
+constexpr uint32_t LAYER_COOP_VERSION = 2;
 
 #ifdef _WIN32
 inline bool layer_coop_net_init() {
@@ -66,7 +68,7 @@ inline bool layer_coop_send_all(int fd, const void * data, size_t size) {
 #ifdef _WIN32
         const int n = send((SOCKET) fd, p, (int) size, 0);
 #else
-        const ssize_t n = send(fd, p, size, 0);
+        const ssize_t n = write(fd, p, size);
 #endif
         if (n <= 0) return false;
         p += n;
@@ -81,7 +83,7 @@ inline bool layer_coop_recv_all(int fd, void * data, size_t size) {
 #ifdef _WIN32
         const int n = recv((SOCKET) fd, p, (int) size, 0);
 #else
-        const ssize_t n = recv(fd, p, size, MSG_WAITALL);
+        const ssize_t n = read(fd, p, size);
 #endif
         if (n <= 0) return false;
         p += n;

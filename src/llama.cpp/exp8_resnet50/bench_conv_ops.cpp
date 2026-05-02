@@ -285,6 +285,74 @@ double bench_onednn_conv(const bench_case & c, int threads, int warmup, int repe
     return median_ms(times);
 }
 
+double bench_onednn_conv_full_call(const bench_case & c, int threads, int warmup, int repeat) {
+    omp_set_dynamic(0);
+    omp_set_num_threads(threads);
+
+    using namespace dnnl;
+    engine eng(engine::kind::cpu, 0);
+    stream s(eng);
+
+    const int oh = (c.ih + 2 * c.padding - c.kh) / c.stride + 1;
+    const int ow = (c.iw + 2 * c.padding - c.kw) / c.stride + 1;
+    const auto input = make_input_nchw(c);
+    const auto weight = make_weight_oihw(c);
+    const auto bias = make_bias(c);
+
+    std::vector<double> times;
+    times.reserve(repeat);
+    for (int i = 0; i < warmup + repeat; ++i) {
+        const auto t0 = std::chrono::steady_clock::now();
+
+        memory::dims src_dims = {1, c.ic, c.ih, c.iw};
+        memory::dims wei_dims = {c.oc, c.ic, c.kh, c.kw};
+        memory::dims bias_dims = {c.oc};
+        memory::dims dst_dims = {1, c.oc, oh, ow};
+        memory::dims strides = {c.stride, c.stride};
+        memory::dims pads = {c.padding, c.padding};
+
+        auto src_md = memory::desc(src_dims, memory::data_type::f32, memory::format_tag::nchw);
+        auto wei_md = memory::desc(wei_dims, memory::data_type::f32, memory::format_tag::oihw);
+        auto bias_md = memory::desc(bias_dims, memory::data_type::f32, memory::format_tag::x);
+        auto dst_md = memory::desc(dst_dims, memory::data_type::f32, memory::format_tag::any);
+
+        auto pd = convolution_forward::primitive_desc(
+                eng,
+                prop_kind::forward_inference,
+                algorithm::convolution_direct,
+                src_md,
+                memory::desc(wei_dims, memory::data_type::f32, memory::format_tag::any),
+                bias_md,
+                dst_md,
+                strides,
+                pads,
+                pads);
+
+        memory src_mem(src_md, eng, const_cast<float *>(input.data()));
+        memory wei_user_mem(wei_md, eng, const_cast<float *>(weight.data()));
+        memory wei_mem(pd.weights_desc(), eng);
+        if (pd.weights_desc() != wei_md) {
+            reorder(wei_user_mem, wei_mem).execute(s, wei_user_mem, wei_mem);
+            s.wait();
+        } else {
+            wei_mem = wei_user_mem;
+        }
+        memory bias_mem(bias_md, eng, const_cast<float *>(bias.data()));
+        std::vector<uint8_t> dst_buffer(pd.dst_desc().get_size());
+        memory dst_mem(pd.dst_desc(), eng, dst_buffer.data());
+        convolution_forward conv(pd);
+        conv.execute(s, {{DNNL_ARG_SRC, src_mem}, {DNNL_ARG_WEIGHTS, wei_mem}, {DNNL_ARG_BIAS, bias_mem}, {DNNL_ARG_DST, dst_mem}});
+        s.wait();
+
+        const auto t1 = std::chrono::steady_clock::now();
+        if (i >= warmup) {
+            times.push_back(std::chrono::duration<double, std::milli>(t1 - t0).count());
+        }
+    }
+
+    return median_ms(times);
+}
+
 double bench_fold_svd_conv(const bench_case & c, int rank, int threads, int warmup, int repeat) {
     omp_set_dynamic(0);
     omp_set_num_threads(threads);
@@ -427,12 +495,15 @@ int main() {
         const double ggml_ms = bench_ggml_conv(c, threads, warmup, repeat);
 #ifdef RESNET50_USE_ONEDNN
         const double onednn_ms = bench_onednn_conv(c, threads, warmup, repeat);
+        const double onednn_full_call_ms = bench_onednn_conv_full_call(c, threads, warmup, repeat);
 #else
         const double onednn_ms = -1.0;
+        const double onednn_full_call_ms = -1.0;
 #endif
         std::cout << c.name
                   << "\tggml_ms=" << ggml_ms
                   << "\tonednn_ms=" << onednn_ms
+                  << "\tonednn_full_call_ms=" << onednn_full_call_ms
                   << "\n";
     }
     std::cout << std::fixed << std::setprecision(6);

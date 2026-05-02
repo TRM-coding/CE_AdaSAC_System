@@ -1,0 +1,577 @@
+load_pct,repeat,policy,status,schedule_mode,clipped_layers,decode_tok_s,generation_decode_ms,prefill_decode_ms,elapsed_s,succeed,top1_id,top1_piece,output_tail
+0,0,baseline_no_svd,returncode_-6,,0,,,,1.2748610973358154,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x00007cc70b3107d7 in __GI___wait4 (pid=2201135, stat_loc=0x7ffc33ab7f34, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x00007cc70b3107d7 in __GI___wait4 (pid=2201135, stat_loc=0x7ffc33ab7f34, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x00007cc70b94abab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x00007cc70b95cb5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x00007cc70bb90a85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x00007cc70bb918bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x00005e4ceb7f2b01 in main ()
+[Inferior 1 (process 2201122) detached]"
+0,0,model_schedule,same_as_baseline_no_svd,local,0,,,,1.2748610973358154,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x00007cc70b3107d7 in __GI___wait4 (pid=2201135, stat_loc=0x7ffc33ab7f34, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x00007cc70b3107d7 in __GI___wait4 (pid=2201135, stat_loc=0x7ffc33ab7f34, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x00007cc70b94abab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x00007cc70b95cb5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x00007cc70bb90a85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x00007cc70bb918bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x00005e4ceb7f2b01 in main ()
+[Inferior 1 (process 2201122) detached]"
+0,1,baseline_no_svd,returncode_-6,,0,,,,1.262526035308838,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x0000744f7e1107d7 in __GI___wait4 (pid=2201185, stat_loc=0x7ffc1f035324, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x0000744f7e1107d7 in __GI___wait4 (pid=2201185, stat_loc=0x7ffc1f035324, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x0000744f7e7e6bab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x0000744f7e7f8b5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x0000744f7ea2ca85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x0000744f7ea2d8bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x00005afd86b58b01 in main ()
+[Inferior 1 (process 2201160) detached]"
+0,1,model_schedule,same_as_baseline_no_svd,local,0,,,,1.262526035308838,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x0000744f7e1107d7 in __GI___wait4 (pid=2201185, stat_loc=0x7ffc1f035324, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x0000744f7e1107d7 in __GI___wait4 (pid=2201185, stat_loc=0x7ffc1f035324, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x0000744f7e7e6bab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x0000744f7e7f8b5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x0000744f7ea2ca85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x0000744f7ea2d8bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x00005afd86b58b01 in main ()
+[Inferior 1 (process 2201160) detached]"
+20,0,baseline_no_svd,returncode_-6,,0,,,,1.0957186222076416,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x000078e845b107d7 in __GI___wait4 (pid=2201307, stat_loc=0x7ffc05d08a94, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x000078e845b107d7 in __GI___wait4 (pid=2201307, stat_loc=0x7ffc05d08a94, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x000078e846204bab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x000078e846216b5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x000078e84644aa85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x000078e84644b8bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x0000597766c89b01 in main ()
+[Inferior 1 (process 2201293) detached]"
+20,0,model_schedule,ok_returncode_-11,local,14,21.9883,45.4788,76.3243,1.0941870212554932,True,3,$,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+Top-5 next-token candidates:
+  id=3 logit=0 piece=""$""
+  id=4 logit=0 piece=""%""
+  id=1 logit=0 piece=""""""
+  id=0 logit=0 piece=""!""
+  id=2 logit=0 piece=""#""
+Autoregressive generation:
+Generated text: !
+Decode-only throughput: 21.9883 tokens/s (1 tokens in 0.0454788 s of llama_decode)
+End-to-end throughput: 21.8282 tokens/s (1 tokens in 0.0458122 s)
+[decode-stage-profile] model_load=555.752 ms context_create=58.7991 ms tokenize=0.463225 ms prefill_decode=76.3243 ms generation_decode=45.4788 ms generation_total=45.8122 ms program_total=754.569 ms
+[svd-local-op-profile] up_ops=56 gate_ops=56 down_ops=56 up_total=25.855 ms gate_total=25.427 ms down_total=27.096 ms up_v=6.323 ms gate_v=5.944 ms down_v=21.999 ms up_u=19.518 ms gate_u=19.469 ms down_u=5.081 ms
+[svd-local-stage-profile] attention_total=5.886 ms ffn_total=79.917 ms ffn_svd_total=78.378 ms ffn_svd_v=34.266 ms ffn_svd_u=44.068 ms
+[svd-offload-zero-profile] up_finish=0 up_cache=0 up_no_request=27 gate_finish=0 gate_cache=0 gate_no_request=27 down_finish=0 down_cache=0 down_no_request=27 other_finish=0 other_cache=0 other_no_request=0
+[svd-local-timeout-profile] up_keep=7 up_drop=0 up_wait=0.586 ms gate_keep=7 gate_drop=0 gate_wait=0.539 ms down_keep=7 down_drop=0 down_wait=3.170 ms other_keep=0 other_drop=0 other_wait=0.000 ms
+[svd-offload-client] up_gate_req=0 down_req=0 other_mat_req=0 ffn_req=0 gate_cache_hits=0 gate_cache_checks=0 miss_invalid=0 miss_layer=0 miss_rank=0 miss_hash=0 miss_output=0 miss_data=0 send_up_gate=0.000 ms send_down=0.000 ms send_other=0.000 ms send_ffn=0.000 ms wait_up_gate=0.000 ms wait_down=0.000 ms wait_other=0.000 ms wait_ffn=0.000 ms
+[svd-offload-client-stage-profile] rpc_send_total=0.000 ms rpc_wait_total=0.000 ms
+[svd-offload-client-debug] finish_fail_up_gate=0 finish_fail_down=0 finish_fail_other=0 finish_fail_ffn=0 cache_take_fail_up=0 cache_take_fail_gate=0 recv_up_sum_abs=0.000000e+00 recv_up_max_abs=0.000000e+00 recv_up_zero=0 recv_gate_sum_abs=0.000000e+00 recv_gate_max_abs=0.000000e+00 recv_gate_zero=0 recv_down_sum_abs=0.000000e+00 recv_down_max_abs=0.000000e+00 recv_down_zero=0 recv_other_sum_abs=0.000000e+00 recv_other_max_abs=0.000000e+00 recv_other_zero=0 recv_ffn_sum_abs=0.000000e+00 recv_ffn_max_abs=0.000000e+00 recv_ffn_zero=0
+SUCCEED (one forward pass done)"
+20,1,baseline_no_svd,returncode_-6,,0,,,,1.133004903793335,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x00007f2216b107d7 in __GI___wait4 (pid=2201485, stat_loc=0x7ffce426fdd4, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x00007f2216b107d7 in __GI___wait4 (pid=2201485, stat_loc=0x7ffce426fdd4, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x00007f2217199bab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x00007f22171abb5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x00007f22173dfa85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x00007f22173e08bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x00005d0cd30adb01 in main ()
+[Inferior 1 (process 2201467) detached]"
+20,1,model_schedule,returncode_-6,local,14,,,,1.0792412757873535,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x0000755aa11107d7 in __GI___wait4 (pid=2201539, stat_loc=0x7ffd1c159794, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x0000755aa11107d7 in __GI___wait4 (pid=2201539, stat_loc=0x7ffd1c159794, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x0000755aa1732bab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x0000755aa1744b5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x0000755aa1978a85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x0000755aa19798bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x00005cc1cc630b01 in main ()
+[Inferior 1 (process 2201520) detached]"
+40,0,baseline_no_svd,returncode_-6,,0,,,,1.0407495498657227,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x00007822a57107d7 in __GI___wait4 (pid=2201652, stat_loc=0x7ffcbdad4814, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x00007822a57107d7 in __GI___wait4 (pid=2201652, stat_loc=0x7ffcbdad4814, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x00007822a5cf4bab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x00007822a5d06b5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x00007822a5f3aa85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x00007822a5f3b8bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x00005dae4c08bb01 in main ()
+[Inferior 1 (process 2201632) detached]"
+40,0,model_schedule,returncode_-6,local,14,,,,1.01633882522583,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x00007e9e165107d7 in __GI___wait4 (pid=2201710, stat_loc=0x7ffca520eb24, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x00007e9e165107d7 in __GI___wait4 (pid=2201710, stat_loc=0x7ffca520eb24, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x00007e9e16baabab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x00007e9e16bbcb5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x00007e9e16df0a85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x00007e9e16df18bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x0000600d5399cb01 in main ()
+[Inferior 1 (process 2201691) detached]"
+40,1,baseline_no_svd,returncode_-6,,0,,,,0.9686505794525146,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x00007ffb54f107d7 in __GI___wait4 (pid=2201797, stat_loc=0x7ffc249453e4, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x00007ffb54f107d7 in __GI___wait4 (pid=2201797, stat_loc=0x7ffc249453e4, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x00007ffb5558fbab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x00007ffb555a1b5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x00007ffb557d5a85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x00007ffb557d68bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x00005c334deacb01 in main ()
+[Inferior 1 (process 2201781) detached]"
+40,1,model_schedule,returncode_-6,local,14,,,,1.0318982601165771,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x00007581057107d7 in __GI___wait4 (pid=2201852, stat_loc=0x7ffea2218ae4, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x00007581057107d7 in __GI___wait4 (pid=2201852, stat_loc=0x7ffea2218ae4, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x0000758105e47bab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x0000758105e59b5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x000075810608da85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x000075810608e8bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x00005d7a7d38bb01 in main ()
+[Inferior 1 (process 2201826) detached]"
+50,0,baseline_no_svd,returncode_-6,,0,,,,1.0331025123596191,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x0000728d579107d7 in __GI___wait4 (pid=2201959, stat_loc=0x7ffc38021714, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x0000728d579107d7 in __GI___wait4 (pid=2201959, stat_loc=0x7ffc38021714, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x0000728d58061bab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x0000728d58073b5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x0000728d582a7a85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x0000728d582a88bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x000056bd559d1b01 in main ()
+[Inferior 1 (process 2201929) detached]"
+50,0,model_schedule,same_as_baseline_no_svd,local,0,,,,1.0331025123596191,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x0000728d579107d7 in __GI___wait4 (pid=2201959, stat_loc=0x7ffc38021714, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x0000728d579107d7 in __GI___wait4 (pid=2201959, stat_loc=0x7ffc38021714, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x0000728d58061bab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x0000728d58073b5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x0000728d582a7a85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x0000728d582a88bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x000056bd559d1b01 in main ()
+[Inferior 1 (process 2201929) detached]"
+50,1,baseline_no_svd,ok_returncode_-11,,0,25.3928,39.3813,110.642,0.9852173328399658,True,11,",","llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+Top-5 next-token candidates:
+  id=11 logit=20.2053 piece="",""
+  id=304 logit=18.9277 piece="" in""
+  id=3837 logit=18.7558 piece=""，""
+  id=1052 logit=18.5616 piece="" there""
+  id=358 logit=17.8374 piece="" I""
+Autoregressive generation:
+Generated text: ,
+Decode-only throughput: 25.3928 tokens/s (1 tokens in 0.0393813 s of llama_decode)
+End-to-end throughput: 25.1732 tokens/s (1 tokens in 0.0397248 s)
+[decode-stage-profile] model_load=400.099 ms context_create=62.2934 ms tokenize=0.482878 ms prefill_decode=110.642 ms generation_decode=39.3813 ms generation_total=39.7248 ms program_total=630.495 ms
+[svd-local-op-profile] up_ops=56 gate_ops=56 down_ops=56 up_total=34.938 ms gate_total=31.943 ms down_total=22.098 ms up_v=5.242 ms gate_v=4.834 ms down_v=16.384 ms up_u=29.692 ms gate_u=27.106 ms down_u=5.707 ms
+[svd-local-stage-profile] attention_total=5.001 ms ffn_total=90.697 ms ffn_svd_total=88.979 ms ffn_svd_v=26.460 ms ffn_svd_u=62.505 ms
+[svd-offload-zero-profile] up_finish=0 up_cache=0 up_no_request=27 gate_finish=0 gate_cache=0 gate_no_request=27 down_finish=0 down_cache=0 down_no_request=27 other_finish=0 other_cache=0 other_no_request=0
+[svd-local-timeout-profile] up_keep=0 up_drop=0 up_wait=0.000 ms gate_keep=0 gate_drop=0 gate_wait=0.000 ms down_keep=0 down_drop=0 down_wait=0.000 ms other_keep=0 other_drop=0 other_wait=0.000 ms
+[svd-offload-client] up_gate_req=0 down_req=0 other_mat_req=0 ffn_req=0 gate_cache_hits=0 gate_cache_checks=0 miss_invalid=0 miss_layer=0 miss_rank=0 miss_hash=0 miss_output=0 miss_data=0 send_up_gate=0.000 ms send_down=0.000 ms send_other=0.000 ms send_ffn=0.000 ms wait_up_gate=0.000 ms wait_down=0.000 ms wait_other=0.000 ms wait_ffn=0.000 ms
+[svd-offload-client-stage-profile] rpc_send_total=0.000 ms rpc_wait_total=0.000 ms
+[svd-offload-client-debug] finish_fail_up_gate=0 finish_fail_down=0 finish_fail_other=0 finish_fail_ffn=0 cache_take_fail_up=0 cache_take_fail_gate=0 recv_up_sum_abs=0.000000e+00 recv_up_max_abs=0.000000e+00 recv_up_zero=0 recv_gate_sum_abs=0.000000e+00 recv_gate_max_abs=0.000000e+00 recv_gate_zero=0 recv_down_sum_abs=0.000000e+00 recv_down_max_abs=0.000000e+00 recv_down_zero=0 recv_other_sum_abs=0.000000e+00 recv_other_max_abs=0.000000e+00 recv_other_zero=0 recv_ffn_sum_abs=0.000000e+00 recv_ffn_max_abs=0.000000e+00 recv_ffn_zero=0
+SUCCEED (one forward pass done)"
+50,1,model_schedule,same_as_baseline_no_svd,local,0,25.3928,39.3813,110.642,0.9852173328399658,True,11,",","llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+Top-5 next-token candidates:
+  id=11 logit=20.2053 piece="",""
+  id=304 logit=18.9277 piece="" in""
+  id=3837 logit=18.7558 piece=""，""
+  id=1052 logit=18.5616 piece="" there""
+  id=358 logit=17.8374 piece="" I""
+Autoregressive generation:
+Generated text: ,
+Decode-only throughput: 25.3928 tokens/s (1 tokens in 0.0393813 s of llama_decode)
+End-to-end throughput: 25.1732 tokens/s (1 tokens in 0.0397248 s)
+[decode-stage-profile] model_load=400.099 ms context_create=62.2934 ms tokenize=0.482878 ms prefill_decode=110.642 ms generation_decode=39.3813 ms generation_total=39.7248 ms program_total=630.495 ms
+[svd-local-op-profile] up_ops=56 gate_ops=56 down_ops=56 up_total=34.938 ms gate_total=31.943 ms down_total=22.098 ms up_v=5.242 ms gate_v=4.834 ms down_v=16.384 ms up_u=29.692 ms gate_u=27.106 ms down_u=5.707 ms
+[svd-local-stage-profile] attention_total=5.001 ms ffn_total=90.697 ms ffn_svd_total=88.979 ms ffn_svd_v=26.460 ms ffn_svd_u=62.505 ms
+[svd-offload-zero-profile] up_finish=0 up_cache=0 up_no_request=27 gate_finish=0 gate_cache=0 gate_no_request=27 down_finish=0 down_cache=0 down_no_request=27 other_finish=0 other_cache=0 other_no_request=0
+[svd-local-timeout-profile] up_keep=0 up_drop=0 up_wait=0.000 ms gate_keep=0 gate_drop=0 gate_wait=0.000 ms down_keep=0 down_drop=0 down_wait=0.000 ms other_keep=0 other_drop=0 other_wait=0.000 ms
+[svd-offload-client] up_gate_req=0 down_req=0 other_mat_req=0 ffn_req=0 gate_cache_hits=0 gate_cache_checks=0 miss_invalid=0 miss_layer=0 miss_rank=0 miss_hash=0 miss_output=0 miss_data=0 send_up_gate=0.000 ms send_down=0.000 ms send_other=0.000 ms send_ffn=0.000 ms wait_up_gate=0.000 ms wait_down=0.000 ms wait_other=0.000 ms wait_ffn=0.000 ms
+[svd-offload-client-stage-profile] rpc_send_total=0.000 ms rpc_wait_total=0.000 ms
+[svd-offload-client-debug] finish_fail_up_gate=0 finish_fail_down=0 finish_fail_other=0 finish_fail_ffn=0 cache_take_fail_up=0 cache_take_fail_gate=0 recv_up_sum_abs=0.000000e+00 recv_up_max_abs=0.000000e+00 recv_up_zero=0 recv_gate_sum_abs=0.000000e+00 recv_gate_max_abs=0.000000e+00 recv_gate_zero=0 recv_down_sum_abs=0.000000e+00 recv_down_max_abs=0.000000e+00 recv_down_zero=0 recv_other_sum_abs=0.000000e+00 recv_other_max_abs=0.000000e+00 recv_other_zero=0 recv_ffn_sum_abs=0.000000e+00 recv_ffn_max_abs=0.000000e+00 recv_ffn_zero=0
+SUCCEED (one forward pass done)"
+80,0,baseline_no_svd,returncode_-6,,0,,,,1.003225564956665,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x00007edc48b107d7 in __GI___wait4 (pid=2202169, stat_loc=0x7fffd421b8d4, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x00007edc48b107d7 in __GI___wait4 (pid=2202169, stat_loc=0x7fffd421b8d4, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x00007edc491e7bab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x00007edc491f9b5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x00007edc4942da85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x00007edc4942e8bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x00005d5cd4865b01 in main ()
+[Inferior 1 (process 2202143) detached]"
+80,0,model_schedule,returncode_-6,local,14,,,,0.999269962310791,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x00007bc51a1107d7 in __GI___wait4 (pid=2202210, stat_loc=0x7ffc168dc6b4, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x00007bc51a1107d7 in __GI___wait4 (pid=2202210, stat_loc=0x7ffc168dc6b4, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x00007bc51a890bab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x00007bc51a8a2b5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x00007bc51aad6a85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x00007bc51aad78bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x000058994838bb01 in main ()
+[Inferior 1 (process 2202186) detached]"
+80,1,baseline_no_svd,returncode_-6,,0,,,,1.0524466037750244,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x00007765159107d7 in __GI___wait4 (pid=2202317, stat_loc=0x7ffd3fde55b4, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x00007765159107d7 in __GI___wait4 (pid=2202317, stat_loc=0x7ffd3fde55b4, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x0000776516003bab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x0000776516015b5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x0000776516249a85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x000077651624a8bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x00005e9f57c47b01 in main ()
+[Inferior 1 (process 2202292) detached]"
+80,1,model_schedule,returncode_-6,local,14,,,,0.9856011867523193,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x000079e88b3107d7 in __GI___wait4 (pid=2202363, stat_loc=0x7ffc9211d994, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x000079e88b3107d7 in __GI___wait4 (pid=2202363, stat_loc=0x7ffc9211d994, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x000079e88ba8cbab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x000079e88ba9eb5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x000079e88bcd2a85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x000079e88bcd38bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x00005ee632a6db01 in main ()
+[Inferior 1 (process 2202344) detached]"
+100,0,baseline_no_svd,returncode_-6,,0,,,,1.0110986232757568,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x0000772e9db107d7 in __GI___wait4 (pid=2202491, stat_loc=0x7ffe44c330b4, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x0000772e9db107d7 in __GI___wait4 (pid=2202491, stat_loc=0x7ffe44c330b4, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x0000772e9e0e3bab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x0000772e9e0f5b5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x0000772e9e329a85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x0000772e9e32a8bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x00005561f0f04b01 in main ()
+[Inferior 1 (process 2202466) detached]"
+100,0,model_schedule,returncode_-6,local,14,,,,0.9784679412841797,False,,,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+/home/tianruiming/CE_ADA_LLAMA/src/llama.cpp/3dparty/llamacpp/ggml/src/ggml-backend.cpp:264: GGML_ASSERT(buf != NULL && ""tensor buffer not set"") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library ""/lib/x86_64-linux-gnu/libthread_db.so.1"".
+0x000074f8ba5107d7 in __GI___wait4 (pid=2202540, stat_loc=0x7ffd0be88a64, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x000074f8ba5107d7 in __GI___wait4 (pid=2202540, stat_loc=0x7ffd0be88a64, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x000074f8bab4abab in ggml_abort () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#2  0x000074f8bab5cb5a in ggml_backend_tensor_set () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libggml-base.so
+#3  0x000074f8bad90a85 in llama_context::decode(llama_batch&) () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#4  0x000074f8bad918bf in llama_decode () from /home/tianruiming/CE_ADA_LLAMA/build-release-current/bin/libllama.so
+#5  0x000056b421e00b01 in main ()
+[Inferior 1 (process 2202517) detached]"
+100,1,baseline_no_svd,ok_returncode_-11,,0,19.2018,52.0784,1842.1,2.7269961833953857,True,11,",","llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+Top-5 next-token candidates:
+  id=11 logit=20.2053 piece="",""
+  id=304 logit=18.9277 piece="" in""
+  id=3837 logit=18.7558 piece=""，""
+  id=1052 logit=18.5616 piece="" there""
+  id=358 logit=17.8374 piece="" I""
+Autoregressive generation:
+Generated text: ,
+Decode-only throughput: 19.2018 tokens/s (1 tokens in 0.0520784 s of llama_decode)
+End-to-end throughput: 19.078 tokens/s (1 tokens in 0.0524164 s)
+[decode-stage-profile] model_load=411.748 ms context_create=61.1194 ms tokenize=0.490558 ms prefill_decode=1842.1 ms generation_decode=52.0784 ms generation_total=52.4164 ms program_total=2385.04 ms
+[svd-local-op-profile] up_ops=56 gate_ops=56 down_ops=56 up_total=115.486 ms gate_total=109.807 ms down_total=109.259 ms up_v=39.859 ms gate_v=33.267 ms down_v=44.625 ms up_u=75.624 ms gate_u=76.535 ms down_u=64.631 ms
+[svd-local-stage-profile] attention_total=329.335 ms ffn_total=459.091 ms ffn_svd_total=334.552 ms ffn_svd_v=117.751 ms ffn_svd_u=216.790 ms
+[svd-offload-zero-profile] up_finish=0 up_cache=0 up_no_request=27 gate_finish=0 gate_cache=0 gate_no_request=27 down_finish=0 down_cache=0 down_no_request=27 other_finish=0 other_cache=0 other_no_request=0
+[svd-local-timeout-profile] up_keep=0 up_drop=0 up_wait=0.000 ms gate_keep=0 gate_drop=0 gate_wait=0.000 ms down_keep=0 down_drop=0 down_wait=0.000 ms other_keep=0 other_drop=0 other_wait=0.000 ms
+[svd-offload-client] up_gate_req=0 down_req=0 other_mat_req=0 ffn_req=0 gate_cache_hits=0 gate_cache_checks=0 miss_invalid=0 miss_layer=0 miss_rank=0 miss_hash=0 miss_output=0 miss_data=0 send_up_gate=0.000 ms send_down=0.000 ms send_other=0.000 ms send_ffn=0.000 ms wait_up_gate=0.000 ms wait_down=0.000 ms wait_other=0.000 ms wait_ffn=0.000 ms
+[svd-offload-client-stage-profile] rpc_send_total=0.000 ms rpc_wait_total=0.000 ms
+[svd-offload-client-debug] finish_fail_up_gate=0 finish_fail_down=0 finish_fail_other=0 finish_fail_ffn=0 cache_take_fail_up=0 cache_take_fail_gate=0 recv_up_sum_abs=0.000000e+00 recv_up_max_abs=0.000000e+00 recv_up_zero=0 recv_gate_sum_abs=0.000000e+00 recv_gate_max_abs=0.000000e+00 recv_gate_zero=0 recv_down_sum_abs=0.000000e+00 recv_down_max_abs=0.000000e+00 recv_down_zero=0 recv_other_sum_abs=0.000000e+00 recv_other_max_abs=0.000000e+00 recv_other_zero=0 recv_ffn_sum_abs=0.000000e+00 recv_ffn_max_abs=0.000000e+00 recv_ffn_zero=0
+SUCCEED (one forward pass done)"
+100,1,model_schedule,ok_returncode_-11,local,14,20.5862,48.5763,1657.84,2.5587165355682373,True,3,$,"llama_context: graph splits = 1
+attach_threadpool: call
+threads: decode=8 batch=8
+prompt tokens: 4
+running one forward pass (llama_decode) ...
+Top-5 next-token candidates:
+  id=3 logit=0 piece=""$""
+  id=4 logit=0 piece=""%""
+  id=1 logit=0 piece=""""""
+  id=0 logit=0 piece=""!""
+  id=2 logit=0 piece=""#""
+Autoregressive generation:
+Generated text: !
+Decode-only throughput: 20.5862 tokens/s (1 tokens in 0.0485763 s of llama_decode)
+End-to-end throughput: 20.4431 tokens/s (1 tokens in 0.0489163 s)
+[decode-stage-profile] model_load=422.801 ms context_create=63.1235 ms tokenize=0.515243 ms prefill_decode=1657.84 ms generation_decode=48.5763 ms generation_total=48.9163 ms program_total=2210.64 ms
+[svd-local-op-profile] up_ops=56 gate_ops=56 down_ops=56 up_total=110.902 ms gate_total=112.125 ms down_total=89.916 ms up_v=36.384 ms gate_v=35.539 ms down_v=42.419 ms up_u=74.504 ms gate_u=76.570 ms down_u=47.482 ms
+[svd-local-stage-profile] attention_total=252.520 ms ffn_total=432.469 ms ffn_svd_total=312.943 ms ffn_svd_v=114.342 ms ffn_svd_u=198.556 ms
+[svd-offload-zero-profile] up_finish=0 up_cache=0 up_no_request=27 gate_finish=0 gate_cache=0 gate_no_request=27 down_finish=0 down_cache=0 down_no_request=27 other_finish=0 other_cache=0 other_no_request=0
+[svd-local-timeout-profile] up_keep=7 up_drop=0 up_wait=0.628 ms gate_keep=7 gate_drop=0 gate_wait=0.608 ms down_keep=7 down_drop=0 down_wait=3.247 ms other_keep=0 other_drop=0 other_wait=0.000 ms
+[svd-offload-client] up_gate_req=0 down_req=0 other_mat_req=0 ffn_req=0 gate_cache_hits=0 gate_cache_checks=0 miss_invalid=0 miss_layer=0 miss_rank=0 miss_hash=0 miss_output=0 miss_data=0 send_up_gate=0.000 ms send_down=0.000 ms send_other=0.000 ms send_ffn=0.000 ms wait_up_gate=0.000 ms wait_down=0.000 ms wait_other=0.000 ms wait_ffn=0.000 ms
+[svd-offload-client-stage-profile] rpc_send_total=0.000 ms rpc_wait_total=0.000 ms
+[svd-offload-client-debug] finish_fail_up_gate=0 finish_fail_down=0 finish_fail_other=0 finish_fail_ffn=0 cache_take_fail_up=0 cache_take_fail_gate=0 recv_up_sum_abs=0.000000e+00 recv_up_max_abs=0.000000e+00 recv_up_zero=0 recv_gate_sum_abs=0.000000e+00 recv_gate_max_abs=0.000000e+00 recv_gate_zero=0 recv_down_sum_abs=0.000000e+00 recv_down_max_abs=0.000000e+00 recv_down_zero=0 recv_other_sum_abs=0.000000e+00 recv_other_max_abs=0.000000e+00 recv_other_zero=0 recv_ffn_sum_abs=0.000000e+00 recv_ffn_max_abs=0.000000e+00 recv_ffn_zero=0
+SUCCEED (one forward pass done)"
